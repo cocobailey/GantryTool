@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- CS1 runs Unity 5.6 / old Mono: mod DLLs must target .NET Framework 3.5 -->
+    <TargetFramework>net35</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>GantryTool</AssemblyName>
+    <RootNamespace>GantryTool</RootNamespace>
+    <Version>1.0.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>portable</DebugType>
+    <!-- reference\ holds decompiled game code for reading only -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);reference\**</DefaultItemExcludes>
+
+    <!-- Adjust this if the game ever moves -->
+    <ManagedDLLPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed</ManagedDLLPath>
+    <!-- TM:PE workshop folder, for the optional TMPE.API reference -->
+    <TmpeDLLPath>D:\SteamLibrary\steamapps\workshop\content\255710\1637663252</TmpeDLLPath>
+    <!-- Local mods folder the game scans on startup -->
+    <ModDeployDir>$(LOCALAPPDATA)\Colossal Order\Cities_Skylines\Addons\Mods\GantryTool</ModDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Provides .NET 3.5 reference assemblies so we don't need legacy targeting packs installed -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- Standard Harmony bootstrapper for CS1 mods; its DLL ships alongside ours -->
+    <PackageReference Include="CitiesHarmony.API" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedDLLPath)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ColossalManaged">
+      <HintPath>$(ManagedDLLPath)\ColossalManaged.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ICities">
+      <HintPath>$(ManagedDLLPath)\ICities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedDLLPath)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(ManagedDLLPath)\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Optional TM:PE integration: TMPE.API ships with TM:PE and is only touched when TM:PE is enabled
+         (see src/Integration/TmpeBridge.cs). Never copied into our mod folder. -->
+    <!-- Unified UI helper (2.2.12, copied from TM:PE's folder into lib\). Ships with our mod, like other
+         UUI-aware mods do; see src/Integration/Uui.cs. -->
+    <Reference Include="UnifiedUILib">
+      <HintPath>$(ProjectDir)lib\UnifiedUILib.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="TMPE.API">
+      <HintPath>$(TmpeDLLPath)\TMPE.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Unified UI toolbar icon, loaded from the DLL at runtime -->
+    <EmbeddedResource Include="Resources\uui_icon.png" LogicalName="GantryTool.uui_icon.png" />
+  </ItemGroup>
+
+  <!-- Copy the mod DLL + CitiesHarmony.API into the game's local mods folder after every build -->
+  <Target Name="DeployMod" AfterTargets="Build">
+    <ItemGroup>
+      <DeployFiles Include="$(TargetDir)$(AssemblyName).dll" />
+      <DeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <DeployFiles Include="$(TargetDir)CitiesHarmony.API.dll" />
+      <!-- Unified UI helper library, shipped by every UUI-aware mod; only active when the UUI mod is enabled -->
+      <DeployFiles Include="$(TargetDir)UnifiedUILib.dll" />
+      <!-- Workshop thumbnail: the game uploads PreviewImage.png from the mod folder when sharing -->
+      <DeployFiles Include="$(ProjectDir)PreviewImage.png" Condition="Exists('$(ProjectDir)PreviewImage.png')" />
+    </ItemGroup>
+    <MakeDir Directories="$(ModDeployDir)" />
+    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(ModDeployDir)" />
+    <Message Text="GantryTool deployed to $(ModDeployDir)" Importance="high" />
+  </Target>
+
+</Project>

@@ -1,0 +1,11 @@
+# Decompiled game / third-party code used for reading only. Copyrighted by others: never commit.
+reference/
+
+# Build output
+bin/
+obj/
+*.user
+.vs/
+
+# Workshop upload helpers
+workshop_preview.png
