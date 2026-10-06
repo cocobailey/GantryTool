@@ -38,6 +38,9 @@ namespace GantryTool.Tool
         private Vector3 _hitPos;
         private volatile bool _hitValid;
 
+        // True when the hit is on a road surface (bridge deck, elevated road, street) rather than terrain.
+        private volatile bool _hitOnRoad;
+
         private bool _hasStart;
         private Vector3 _start;
 
@@ -177,13 +180,20 @@ namespace GantryTool.Tool
                     return;
                 }
 
-                // Default RaycastInput has every service set to None and all object flags ignored,
-                // so this hits terrain only (ToolBase.cs:147-176).
-                var input = new RaycastInput(_mouseRay, _mouseRayLength);
+                // Terrain plus road surfaces. Including roads means a click on a bridge deck lands on the deck
+                // instead of passing through to the riverbed below (ToolBase.RayCast only tests nets when the
+                // ignore flags aren't All; the nearer of terrain/road wins).
+                var input = new RaycastInput(_mouseRay, _mouseRayLength)
+                {
+                    m_netService = new RaycastService(ItemClass.Service.Road, ItemClass.SubService.None, ItemClass.Layer.Default),
+                    m_ignoreSegmentFlags = NetSegment.Flags.None,
+                    m_ignoreNodeFlags = NetNode.Flags.None
+                };
                 RaycastOutput output;
                 if (RayCast(input, out output))
                 {
                     _hitPos = output.m_hitPos;
+                    _hitOnRoad = output.m_netSegment != 0 || output.m_netNode != 0;
                     _hitValid = true;
                 }
                 else
@@ -244,7 +254,7 @@ namespace GantryTool.Tool
                 return;
             }
 
-            Vector3 pos = GroundPoint(_hitPos);
+            Vector3 pos = GroundPoint(_hitPos, _hitOnRoad);
             if (!_hasStart)
             {
                 _start = pos;
@@ -317,7 +327,7 @@ namespace GantryTool.Tool
                     return;
                 }
 
-                Vector3 end = GroundPoint(_hitPos);
+                Vector3 end = GroundPoint(_hitPos, _hitOnRoad);
                 float span = FlatDistance(_start, end);
                 if (span < 1f)
                 {
@@ -413,9 +423,17 @@ namespace GantryTool.Tool
             }
         }
 
-        private static Vector3 GroundPoint(Vector3 pos)
+        /// <summary>
+        /// Where a post stands. Clicked on a road (e.g. a bridge deck): on the road surface, so the gantry sits on
+        /// the bridge. Clicked on the ground: on the terrain, and the beam rises to clear any raised road it spans.
+        /// </summary>
+        private static Vector3 GroundPoint(Vector3 pos, bool onRoad)
         {
-            pos.y = Singleton<TerrainManager>.instance.SampleRawHeightSmooth(pos);
+            if (!onRoad)
+            {
+                pos.y = Singleton<TerrainManager>.instance.SampleRawHeightSmooth(pos);
+            }
+
             return pos;
         }
 
