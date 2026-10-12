@@ -36,6 +36,7 @@ namespace GantryTool.UI
         private UILabel _applyLabel;
         private UIButton _applySide;
         private UIButton _applyAll;
+        private UIPanel _layoutBox;
         private UIButton _reset;
         private UIButton _remove;
         private UILabel _hint;
@@ -108,6 +109,12 @@ namespace GantryTool.UI
             _applyLabel = UIUtils.CreateLabel(this, "Apply this sign to:", 0.75f);
             _applySide = CreateButton("All lanes on this side", 150f, () => Apply(false));
             _applyAll = CreateButton("Whole gantry", 110f, () => Apply(true));
+            _layoutBox = AddUIComponent<UIPanel>();
+            _layoutBox.width = PanelWidth - 2f * Margin;
+            _layoutBox.autoLayout = true;
+            _layoutBox.autoLayoutDirection = LayoutDirection.Vertical;
+            _layoutBox.autoLayoutPadding = new RectOffset(0, 0, 0, 2);
+
             _reset = CreateButton("Reset both to Auto", 160f, ResetToAuto);
             _remove = CreateButton("Remove signal head", 180f, ToggleRemoved);
 
@@ -244,6 +251,9 @@ namespace GantryTool.UI
             _applySide.relativePosition = new Vector3(Margin + 118f, y);
             _applyAll.relativePosition = new Vector3(Margin + 118f + 156f, y);
             y += 36f;
+            BuildLayoutSection(g, lane, hidden);
+            _layoutBox.relativePosition = new Vector3(Margin, y);
+            y += _layoutBox.height + 8f;
             _reset.relativePosition = new Vector3(Margin, y);
             _remove.relativePosition = new Vector3(PanelWidth - Margin - _remove.width, y);
             _remove.text = hidden ? "Restore signal head" : "Remove signal head";
@@ -319,6 +329,89 @@ namespace GantryTool.UI
 
             int rows = (items.Count + perRow - 1) / perRow;
             _grid.height = rows * CellHeight + (rows - 1) * CellGap;
+        }
+
+        /// <summary>Shift along the beam, box size and their reset (also editable with the head's handles).</summary>
+        private void BuildLayoutSection(Gantry g, int lane, bool hidden)
+        {
+            for (int i = _layoutBox.components.Count - 1; i >= 0; i--)
+            {
+                UnityEngine.Object.Destroy(_layoutBox.components[i].gameObject);
+            }
+
+            if (hidden)
+            {
+                _layoutBox.height = 0f;
+                return;
+            }
+
+            float nudge, size;
+            GantryManager.GetHeadLayout(g, lane, out nudge, out size);
+            bool ownSize = size > 0f;
+            float maxFace = g.BeamDepth - 0.1f - SignalMeshBuilder.Frame;
+
+            var header = _layoutBox.AddUIComponent<UILabel>();
+            header.text = "Position and size (or drag the selected head)";
+            header.textScale = 0.75f;
+
+            var helper = new UIHelper(_layoutBox);
+            UIUtils.StyledSlider(helper, _layoutBox.width, "Shift along beam", -3f, 3f, 0.05f, nudge, " m", "+0.00;-0.00;0.00", true, v =>
+            {
+                Gantry cur = CurrentGantry();
+                int l = cur != null ? CurrentLane(cur) : -1;
+                if (l >= 0)
+                {
+                    float n, sz;
+                    GantryManager.GetHeadLayout(cur, l, out n, out sz);
+                    GantryManager.SetHeadLayout(cur, l, v, sz, "signal position");
+                }
+            });
+            UIUtils.StyledSlider(helper, _layoutBox.width, "Box size", 0.4f, Mathf.Max(0.45f, maxFace), 0.05f,
+                ownSize ? size : g.SignalSize, " m", "0.00", ownSize, v =>
+                {
+                    Gantry cur = CurrentGantry();
+                    int l = cur != null ? CurrentLane(cur) : -1;
+                    if (l >= 0)
+                    {
+                        float n, sz;
+                        GantryManager.GetHeadLayout(cur, l, out n, out sz);
+                        GantryManager.SetHeadLayout(cur, l, n, v, "signal size");
+                    }
+                });
+            helper.AddCheckbox("Use the gantry's box size (" + g.SignalSize.ToString("0.00") + " m)", !ownSize, on =>
+            {
+                Gantry cur = CurrentGantry();
+                int l = cur != null ? CurrentLane(cur) : -1;
+                if (l >= 0)
+                {
+                    float n, sz;
+                    GantryManager.GetHeadLayout(cur, l, out n, out sz);
+                    GantryManager.SetHeadLayout(cur, l, n, on ? 0f : cur.SignalSize, "signal size");
+                    Refresh(cur);
+                }
+            });
+
+            var note = _layoutBox.AddUIComponent<UILabel>();
+            note.text = "Box size is limited by the truss depth (" + g.BeamDepth.ToString("0.0") + " m); deepen the truss in the gantry panel for bigger boxes.";
+            note.textScale = 0.65f;
+            note.textColor = new Color32(170, 170, 170, 255);
+            note.autoSize = false;
+            note.wordWrap = true;
+            note.width = _layoutBox.width;
+            note.autoHeight = true;
+
+            helper.AddButton("Reset position and size", () =>
+            {
+                Gantry cur = CurrentGantry();
+                int l = cur != null ? CurrentLane(cur) : -1;
+                if (l >= 0)
+                {
+                    GantryManager.SetHeadLayout(cur, l, 0f, 0f, "signal layout");
+                    Refresh(cur);
+                }
+            });
+
+            _layoutBox.FitChildrenVertically();
         }
 
         // ------------------------------------------------------------------------------ actions

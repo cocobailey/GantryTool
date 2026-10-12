@@ -32,6 +32,26 @@ namespace GantryTool.Render
         private static readonly List<int> Tris = new List<int>();
 
         /// <summary>Head edge length for a beam: the face size, shrunk if the truss is too shallow.</summary>
+        /// <summary>
+        /// Where a head sits along the beam (metres from the start post) and its box size: centred over its lane
+        /// plus any nudge, sized from its own override or the gantry's size, kept inside the span.
+        /// </summary>
+        public static void HeadLayout(List<GantryLane> lanes, int laneIndex, List<SignalOverride> overrides,
+            float gantrySignalSize, float beamDepth, float span, out float along, out float size)
+        {
+            float nudge = 0f, own = 0f;
+            int idx = SignalRules.FindOverride(lanes, laneIndex, overrides);
+            if (idx >= 0)
+            {
+                nudge = overrides[idx].Nudge;
+                own = overrides[idx].Size;
+            }
+
+            size = HeadSize(own > 0f ? own : gantrySignalSize, beamDepth);
+            float half = size * 0.5f;
+            along = span > size ? Mathf.Clamp(lanes[laneIndex].Offset + nudge, half, span - half) : span * 0.5f;
+        }
+
         public static float HeadSize(float signalSize, float beamDepth)
         {
             return Mathf.Min(signalSize + Frame, beamDepth - 0.1f);
@@ -86,7 +106,6 @@ namespace GantryTool.Render
             Vector3 dir = span > 0.01f ? flat / span : Vector3.right;
             Vector3 side = new Vector3(-dir.z, 0f, dir.x);
 
-            float size = HeadSize(signalSize, beamDepth);
             Rect housing = Inset(SignalTextures.TileRect(SignalTextures.HousingTile), 0.25f);
 
             for (int i = 0; i < lanes.Count; i++)
@@ -99,7 +118,9 @@ namespace GantryTool.Render
                     continue; // head removed by the player
                 }
 
-                Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, lane.Offset) - origin;
+                float along, size;
+                HeadLayout(lanes, i, overrides, signalSize, beamDepth, span, out along, out size);
+                Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along) - origin;
                 Vector3 r = dir * (size * 0.5f);
                 Vector3 u = Vector3.up * (size * 0.5f);
                 Vector3 s = side * (HeadDepth * 0.5f);

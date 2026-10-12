@@ -21,6 +21,9 @@ namespace GantryTool.Data
     ///   of each version in order:
     ///   v1: float clearanceOverride (NaN = default), float signalSizeOverride (NaN = default), byte style
     ///   v2: float heightAboveRoad (NaN = not converted yet)
+    ///   v3: int layoutCount, then per head: float offset, sbyte sign (identify the legacy override), float nudge,
+    ///       float size. Matched to the legacy block's overrides by exact offset and sign; unmatched entries are
+    ///       dropped.
     ///   The positions guard against stale data: if a player saved in 1.0 (which rewrites only the legacy
     ///   block), ids may have been reused, so an entry is only applied when id AND both posts still match.
     ///   New fields are only ever appended in a new extVersion. Unknown newer versions are skipped
@@ -31,7 +34,7 @@ namespace GantryTool.Data
         public const string LegacyKey = "GantryTool";
         public const string ExtKey = "GantryTool.Ext";
         public const int LegacyVersion = 3;
-        public const int ExtVersion = 2;
+        public const int ExtVersion = 3;
 
         // ----------------------------------------------------------------- legacy block (1.0 format)
 
@@ -138,6 +141,11 @@ namespace GantryTool.Data
 
         public static byte[] WriteExt(List<Gantry> gantries)
         {
+            return WriteExt(gantries, new object());
+        }
+
+        public static byte[] WriteExt(List<Gantry> gantries, object overridesLock)
+        {
             using (var ms = new MemoryStream())
             using (var w = new BinaryWriter(ms))
             {
@@ -153,6 +161,27 @@ namespace GantryTool.Data
                     w.Write(g.SignalSizeOverride);
                     w.Write(g.Style);
                     w.Write(g.HeightAboveRoad);
+
+                    var layouts = new List<SignalOverride>();
+                    lock (overridesLock)
+                    {
+                        for (int k = 0; k < g.Overrides.Count; k++)
+                        {
+                            if (g.Overrides[k].HasLayout)
+                            {
+                                layouts.Add(g.Overrides[k]);
+                            }
+                        }
+                    }
+
+                    w.Write(layouts.Count);
+                    for (int k = 0; k < layouts.Count; k++)
+                    {
+                        w.Write(layouts[k].Offset);
+                        w.Write(layouts[k].Sign);
+                        w.Write(layouts[k].Nudge);
+                        w.Write(layouts[k].Size);
+                    }
                 }
 
                 w.Flush();
@@ -211,6 +240,22 @@ namespace GantryTool.Data
                             g.HeightAboveRoad = Sane(height, 0.5f, 60f);
                             applied++;
                         }
+
+                        if (version >= 3)
+                        {
+                            int layoutCount = r.ReadInt32();
+                            for (int k = 0; k < layoutCount; k++)
+                            {
+                                float offset = r.ReadSingle();
+                                sbyte sign = r.ReadSByte();
+                                float nudge = r.ReadSingle();
+                                float size = r.ReadSingle();
+                                if (g != null && Same(g.Start, start) && Same(g.End, end))
+                                {
+                                    ApplyLayout(g, offset, sign, nudge, size);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -223,6 +268,32 @@ namespace GantryTool.Data
         }
 
         // ----------------------------------------------------------------- helpers
+
+        /// <summary>Puts a saved head layout on the matching legacy override (same offset and direction).</summary>
+        private static void ApplyLayout(Gantry g, float offset, sbyte sign, float nudge, float size)
+        {
+            if (float.IsNaN(nudge) || Mathf.Abs(nudge) > 20f)
+            {
+                nudge = 0f;
+            }
+
+            if (float.IsNaN(size) || size < 0.2f || size > 5f)
+            {
+                size = 0f;
+            }
+
+            for (int i = 0; i < g.Overrides.Count; i++)
+            {
+                SignalOverride o = g.Overrides[i];
+                if (Mathf.Abs(o.Offset - offset) < 0.001f && o.Sign == sign)
+                {
+                    o.Nudge = nudge;
+                    o.Size = size;
+                    g.Overrides[i] = o;
+                    return;
+                }
+            }
+        }
 
         private static bool Same(Vector3 a, Vector3 b)
         {

@@ -97,6 +97,28 @@ namespace GantryTool.Tool
         private bool _dragEndOnDeck;
         private bool _dragInvalid;
 
+        // Selected signal head (gets its own handles) and dragging it
+        private enum HeadDrag
+        {
+            None,
+            Move,
+            Resize
+        }
+
+        private const float ResizeHandleRadius = 0.5f;
+        private int _selHeadGantry;
+        private int _selHeadLane = -1;
+        private bool _hoverHeadResize;
+        private HeadDrag _headDrag;
+        private bool _headDragStarted;
+        private bool _headDragLimited;
+        private Vector3 _headPressMouse;
+        private float _headPressAlong;
+        private float _headOrigAlong;
+        private float _headOrigNudge;
+        private float _headOrigSize;
+        private float _headLaneOffset;
+
         // Vertical probes for posts standing on a road deck while moving/rotating: requested on the main thread,
         // answered on the simulation thread (where raycasts belong). [0] = start post, [1] = end post.
         private readonly Vector3[] _probeFrom = new Vector3[2];
@@ -188,7 +210,18 @@ namespace GantryTool.Tool
             base.OnToolUpdate();
             try
             {
-                if (_dragHandle != Handle.None)
+                if (_headDrag != HeadDrag.None)
+                {
+                    if (!Input.GetMouseButton(0))
+                    {
+                        EndHeadDrag();
+                    }
+                    else
+                    {
+                        UpdateHeadDrag();
+                    }
+                }
+                else if (_dragHandle != Handle.None)
                 {
                     if (!Input.GetMouseButton(0))
                     {
@@ -216,6 +249,7 @@ namespace GantryTool.Tool
         private void UpdateHover()
         {
             _hoverHandle = Handle.None;
+            _hoverHeadResize = false;
             if (_hasStart || !_mouseRayValid)
             {
                 SetHovered(0);
@@ -224,6 +258,35 @@ namespace GantryTool.Tool
                 return;
             }
 
+            // 1. The selected head's resize handle (its top-right corner, which pokes out of the head a little).
+            if (_selHeadLane >= 0)
+            {
+                Gantry hg = GantryManager.Find(_selHeadGantry);
+                float along, size, midY, pa, py;
+                if (hg != null && HeadGeom(hg, _selHeadLane, out along, out size, out midY) && BeamPlanePoint(hg, out pa, out py))
+                {
+                    float dx = pa - (along + size * 0.5f), dy = py - (midY + size * 0.5f);
+                    if (dx * dx + dy * dy <= ResizeHandleRadius * ResizeHandleRadius)
+                    {
+                        _hoverHeadResize = true;
+                        _headGantryId = _selHeadGantry;
+                        _headLane = _selHeadLane;
+                        SetHovered(0);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Signal heads: they're what's visibly under the cursor, so they beat the ground handles behind them.
+            if (GantryPicker.PickHead(_mouseRay, _mouseRayLength, out _headGantryId, out _headLane))
+            {
+                SetHovered(_headGantryId);
+                return;
+            }
+
+            _headLane = -1;
+
+            // 3. Handles of the selected gantry (on the ground).
             Gantry selected = SelectedGantry();
             if (selected != null && _hitValid)
             {
@@ -234,15 +297,11 @@ namespace GantryTool.Tool
             {
                 SetHovered(0);
                 _headGantryId = 0;
-                _headLane = -1;
                 return;
             }
 
+            // 4. Any gantry.
             SetHovered(GantryPicker.Pick(_mouseRay, _mouseRayLength));
-            if (!GantryPicker.PickHead(_mouseRay, _mouseRayLength, out _headGantryId, out _headLane))
-            {
-                _headLane = -1;
-            }
         }
 
         private void SetHovered(int id)
@@ -379,18 +438,23 @@ namespace GantryTool.Tool
                 return;
             }
 
-            // Click a signal head: select its gantry and open the signal editor.
+            // Click a signal head: select it (handles), open the signal editor, and let a drag shift/resize it.
             if (_headGantryId != 0 && _headLane >= 0)
             {
                 Gantry edited = GantryManager.Find(_headGantryId);
                 if (edited != null)
                 {
+                    bool sameHead = edited.Id == _selHeadGantry && _headLane == _selHeadLane;
                     Select(edited, openPanel: false);
+                    _selHeadGantry = edited.Id;
+                    _selHeadLane = _headLane;
                     if (Panel != null)
                     {
                         Log.Debug("Editing signal: gantry #" + edited.Id + " lane " + _headLane);
                         Panel.ShowFor(edited, _headLane);
                     }
+
+                    BeginHeadPress(edited, _headLane, sameHead && _hoverHeadResize ? HeadDrag.Resize : HeadDrag.Move);
                 }
 
                 return;
@@ -455,6 +519,12 @@ namespace GantryTool.Tool
 
         private void OnRightClick()
         {
+            if (_headDrag != HeadDrag.None)
+            {
+                CancelHeadDrag();
+                return;
+            }
+
             if (_dragHandle != Handle.None)
             {
                 CancelDrag();
@@ -473,7 +543,11 @@ namespace GantryTool.Tool
         /// <summary>Esc / right-click: cancel the drag, the first post or the selection, else leave the tool.</summary>
         public void CancelOrExit()
         {
-            if (_dragHandle != Handle.None)
+            if (_headDrag != HeadDrag.None)
+            {
+                CancelHeadDrag();
+            }
+            else if (_dragHandle != Handle.None)
             {
                 CancelDrag();
             }
@@ -482,6 +556,11 @@ namespace GantryTool.Tool
                 _hasStart = false;
                 _previewBuilt = false;
                 Log.Info("First point cancelled");
+            }
+            else if (_selHeadLane >= 0)
+            {
+                _selHeadGantry = 0;
+                _selHeadLane = -1;
             }
             else if (_selectedId != 0)
             {
@@ -502,6 +581,12 @@ namespace GantryTool.Tool
 
         private void Select(Gantry g, bool openPanel)
         {
+            if (g.Id != _selHeadGantry)
+            {
+                _selHeadGantry = 0;
+                _selHeadLane = -1;
+            }
+
             _selectedId = g.Id;
             GantryRenderer.SelectedId = g.Id;
             if (Panel != null && Panel.isVisible && !Panel.IsShowing(g.Id))
@@ -517,6 +602,8 @@ namespace GantryTool.Tool
 
         public void Deselect()
         {
+            _selHeadGantry = 0;
+            _selHeadLane = -1;
             _selectedId = 0;
             GantryRenderer.SelectedId = 0;
             _hoverHandle = Handle.None;
@@ -770,6 +857,164 @@ namespace GantryTool.Tool
             return new Vector3(centre.x + x * c - z * s, p.y, centre.z + x * s + z * c);
         }
 
+        // ------------------------------------------------------------------------------ signal heads
+
+        /// <summary>Where a head sits along the beam, its box size and the height of its centre.</summary>
+        private static bool HeadGeom(Gantry g, int lane, out float along, out float size, out float midY)
+        {
+            along = size = midY = 0f;
+            if (lane < 0 || lane >= g.Lanes.Count)
+            {
+                return false;
+            }
+
+            lock (GantryManager.Lock)
+            {
+                SignalMeshBuilder.HeadLayout(g.Lanes, lane, g.Overrides, g.SignalSize, g.BeamDepth, g.Span, out along, out size);
+            }
+
+            midY = g.BeamBottomY + g.BeamDepth * 0.5f;
+            return true;
+        }
+
+        /// <summary>Where the mouse ray meets the gantry's vertical plane: distance along the beam and height.</summary>
+        private bool BeamPlanePoint(Gantry g, out float along, out float y)
+        {
+            along = y = 0f;
+            Vector3 d = g.End - g.Start;
+            d.y = 0f;
+            if (d.sqrMagnitude < 1e-4f)
+            {
+                return false;
+            }
+
+            Vector3 dir = d.normalized;
+            Vector3 n = new Vector3(-dir.z, 0f, dir.x);
+            float denom = Vector3.Dot(_mouseRay.direction, n);
+            if (Mathf.Abs(denom) < 1e-4f)
+            {
+                return false;
+            }
+
+            float t = Vector3.Dot(g.Start - _mouseRay.origin, n) / denom;
+            if (t < 0f)
+            {
+                return false;
+            }
+
+            Vector3 p = _mouseRay.origin + _mouseRay.direction * t;
+            Vector3 rel = p - g.Start;
+            rel.y = 0f;
+            along = Vector3.Dot(rel, dir);
+            y = p.y;
+            return true;
+        }
+
+        /// <summary>Mouse pressed on a head: a drag starts once the mouse moves a few pixels.</summary>
+        private void BeginHeadPress(Gantry g, int lane, HeadDrag kind)
+        {
+            float along, size, midY, pa, py;
+            if (!HeadGeom(g, lane, out along, out size, out midY) || !BeamPlanePoint(g, out pa, out py))
+            {
+                return;
+            }
+
+            GantryManager.GetHeadLayout(g, lane, out _headOrigNudge, out _headOrigSize);
+            _headDrag = kind;
+            _headDragStarted = false;
+            _headDragLimited = false;
+            _headPressMouse = Input.mousePosition;
+            _headPressAlong = pa;
+            _headOrigAlong = along;
+            _headLaneOffset = g.Lanes[lane].Offset;
+        }
+
+        private void UpdateHeadDrag()
+        {
+            Gantry g = GantryManager.Find(_selHeadGantry);
+            if (g == null || _selHeadLane < 0 || _selHeadLane >= g.Lanes.Count)
+            {
+                _headDrag = HeadDrag.None;
+                return;
+            }
+
+            if (!_headDragStarted)
+            {
+                if ((Input.mousePosition - _headPressMouse).magnitude < 5f)
+                {
+                    return;
+                }
+
+                UndoStack.PushModified(g, _headDrag == HeadDrag.Move ? "signal position" : "signal size", coalesce: false);
+                _headDragStarted = true;
+            }
+
+            float along, size, midY, pa, py;
+            if (!HeadGeom(g, _selHeadLane, out along, out size, out midY) || !BeamPlanePoint(g, out pa, out py))
+            {
+                return;
+            }
+
+            if (_headDrag == HeadDrag.Move)
+            {
+                float half = size * 0.5f;
+                float target = _headOrigAlong + (pa - _headPressAlong);
+                target = g.Span > size ? Mathf.Clamp(target, half, g.Span - half) : g.Span * 0.5f;
+                GantryManager.SetHeadLayout(g, _selHeadLane, target - _headLaneOffset, _headOrigSize, null);
+            }
+            else
+            {
+                // Box edge follows the mouse: half the box is the larger of the distances from the centre.
+                float box = 2f * Mathf.Max(Mathf.Abs(pa - along), Mathf.Abs(py - midY));
+                float maxFace = g.BeamDepth - 0.1f - SignalMeshBuilder.Frame;
+                float face = box - SignalMeshBuilder.Frame;
+                _headDragLimited = face > maxFace;
+                face = Mathf.Clamp(face, 0.4f, Mathf.Max(0.4f, maxFace));
+                GantryManager.SetHeadLayout(g, _selHeadLane, _headOrigNudge, face, null);
+            }
+        }
+
+        private void EndHeadDrag()
+        {
+            bool started = _headDragStarted;
+            _headDrag = HeadDrag.None;
+            _headDragStarted = false;
+            if (!started)
+            {
+                return; // a plain click: the signal panel is already open
+            }
+
+            Gantry g = GantryManager.Find(_selHeadGantry);
+            if (g == null)
+            {
+                return;
+            }
+
+            UndoStack.DiscardIfUnchanged(g);
+            float nudge, size;
+            GantryManager.GetHeadLayout(g, _selHeadLane, out nudge, out size);
+            Log.Info("Signal head on gantry #" + g.Id + " lane " + (_selHeadLane + 1) + ": shift " + nudge.ToString("0.00") +
+                     " m, size " + (size > 0f ? size.ToString("0.00") + " m" : "gantry default"));
+            if (Panel != null && Panel.IsShowing(g.Id))
+            {
+                Panel.ShowFor(g, _selHeadLane);
+            }
+        }
+
+        private void CancelHeadDrag()
+        {
+            bool started = _headDragStarted;
+            _headDrag = HeadDrag.None;
+            _headDragStarted = false;
+            Gantry g = GantryManager.Find(_selHeadGantry);
+            if (started && g != null)
+            {
+                GantryManager.SetHeadLayout(g, _selHeadLane, _headOrigNudge, _headOrigSize, null);
+                UndoStack.DiscardIfUnchanged(g);
+                Log.Debug("Signal drag cancelled");
+            }
+        }
+
         // ------------------------------------------------------------------------------ cursor info
 
         private void UpdateCursorInfo()
@@ -777,7 +1022,16 @@ namespace GantryTool.Tool
             string text = null;
             Gantry selected = SelectedGantry();
 
-            if (_dragHandle != Handle.None && selected != null)
+            Gantry headGantry = _selHeadLane >= 0 ? GantryManager.Find(_selHeadGantry) : null;
+            if (_headDrag != HeadDrag.None && _headDragStarted && headGantry != null)
+            {
+                float along, size, midY;
+                HeadGeom(headGantry, _selHeadLane, out along, out size, out midY);
+                text = _headDrag == HeadDrag.Move
+                    ? "Shift " + (along - _headLaneOffset).ToString("+0.00;-0.00;0.00") + " m"
+                    : "Box size " + size.ToString("0.00") + " m" + (_headDragLimited ? "\nLimited by the truss depth" : "");
+            }
+            else if (_dragHandle != Handle.None && selected != null)
             {
                 text = "Span " + selected.Span.ToString("F1") + " m" + (_dragInvalid ? "\nSpan must be 6–80 m" : "");
             }
@@ -798,9 +1052,13 @@ namespace GantryTool.Tool
             {
                 text = "Drag to rotate";
             }
+            else if (_headGantryId != 0 && _headLane >= 0 && _headGantryId == _selHeadGantry && _headLane == _selHeadLane)
+            {
+                text = _hoverHeadResize ? "Drag to resize this signal" : "Drag to shift this signal";
+            }
             else if (_headGantryId != 0 && _headLane >= 0)
             {
-                text = "Click to change this signal";
+                text = "Click to edit this signal";
             }
             else if (_hoveredId != 0)
             {
@@ -887,8 +1145,16 @@ namespace GantryTool.Tool
                     DrawHandles(cameraInfo, rm, selected);
                 }
 
+                // Selected signal head: outline plus its resize handle at the top-right corner.
+                if (!_hasStart && _selHeadLane >= 0)
+                {
+                    DrawHeadHandles(cameraInfo, rm);
+                }
+
                 // Highlight the hovered signal head: overlays project onto any surface inside [minY, maxY].
-                if (!_hasStart && _dragHandle == Handle.None && _headGantryId != 0 && _headLane >= 0)
+                bool hoveringSelected = _headGantryId == _selHeadGantry && _headLane == _selHeadLane;
+                if (!_hasStart && _dragHandle == Handle.None && _headDrag == HeadDrag.None && !hoveringSelected &&
+                    _headGantryId != 0 && _headLane >= 0)
                 {
                     Gantry hg = GantryManager.Find(_headGantryId);
                     if (hg != null && _headLane < hg.Lanes.Count)
@@ -961,6 +1227,29 @@ namespace GantryTool.Tool
                                    mid + along * h + across * h, mid - along * h + across * h);
             rm.OverlayEffect.DrawQuad(cam, HandleCol(Handle.Middle, hot), square, -1f, 1280f, false, true);
             rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.Rotate, hot), rot, RotateHandleRadius * 2f, -1f, 1280f, false, true);
+        }
+
+        private void DrawHeadHandles(RenderManager.CameraInfo cameraInfo, RenderManager rm)
+        {
+            Gantry g = GantryManager.Find(_selHeadGantry);
+            float along, size, midY;
+            if (g == null || !HeadGeom(g, _selHeadLane, out along, out size, out midY))
+            {
+                return;
+            }
+
+            float half = size * 0.5f;
+            Vector3 c = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along);
+            bool moving = _headDrag == HeadDrag.Move && _headDragStarted;
+            bool resizing = _headDrag == HeadDrag.Resize && _headDragStarted;
+            rm.OverlayEffect.DrawCircle(cameraInfo, moving ? HandleHotColor : HandleColor, c, size * 1.3f,
+                c.y - half - 0.05f, c.y + half + 0.05f, false, true);
+
+            Vector3 corner = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + half);
+            corner.y = c.y + half;
+            Color cornerColor = resizing && _headDragLimited ? InvalidColor : resizing || _hoverHeadResize ? HandleHotColor : HandleColor;
+            rm.OverlayEffect.DrawCircle(cameraInfo, cornerColor, corner, ResizeHandleRadius * 2f,
+                corner.y - 0.4f, corner.y + 0.4f, false, true);
         }
 
         private Color HandleCol(Handle h, Handle hot)

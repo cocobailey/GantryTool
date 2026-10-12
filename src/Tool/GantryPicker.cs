@@ -67,13 +67,18 @@ namespace GantryTool.Tool
 
                 Vector3 dir = flat / span;
                 Vector3 side = new Vector3(-dir.z, 0f, dir.x);
-                float half = SignalMeshBuilder.HeadSize(g.SignalSize, g.BeamDepth) * 0.5f + 0.1f;
                 float halfDepth = SignalMeshBuilder.HeadDepth * 0.5f + 0.1f;
                 float midY = g.BeamBottomY + g.BeamDepth * 0.5f;
 
                 for (int k = 0; k < g.Lanes.Count; k++)
                 {
-                    float off = g.Lanes[k].Offset;
+                    float off, size;
+                    lock (GantryManager.Lock)
+                    {
+                        SignalMeshBuilder.HeadLayout(g.Lanes, k, g.Overrides, g.SignalSize, g.BeamDepth, span, out off, out size);
+                    }
+
+                    float half = size * 0.5f + 0.1f;
                     float t;
                     if (RayBox(ray, g.Start, dir, side, off - half, off + half, midY - half, midY + half, halfDepth, out t) &&
                         t < bestT)

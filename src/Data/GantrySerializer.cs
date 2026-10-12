@@ -22,7 +22,7 @@ namespace GantryTool.Data
                 GantryManager.GetAll(gantries);
 
                 byte[] legacy = GantryData.WriteLegacy(gantries, GantryManager.Lock);
-                byte[] ext = GantryData.WriteExt(gantries);
+                byte[] ext = GantryData.WriteExt(gantries, GantryManager.Lock);
                 serializableDataManager.SaveData(GantryData.LegacyKey, legacy);
                 serializableDataManager.SaveData(GantryData.ExtKey, ext);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +

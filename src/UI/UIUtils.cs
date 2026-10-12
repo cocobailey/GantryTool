@@ -1,3 +1,4 @@
+using System;
 using ColossalFramework.UI;
 using UnityEngine;
 
@@ -59,6 +60,57 @@ namespace GantryTool.UI
             };
 
             return dropDown;
+        }
+
+        /// <summary>
+        /// A slider from the options-page template (UIHelper), sized to <paramref name="rowWidth"/>, with its value in
+        /// the label and colours that read clearly on a MenuPanel2 background. <paramref name="format"/> null =
+        /// decimals chosen from the step.
+        /// </summary>
+        public static UISlider StyledSlider(UIHelper helper, float rowWidth, string text, float min, float max, float step,
+            float value, string unit, string format, bool enabled, Action<float> onChange)
+        {
+            UILabel label = null;
+            string fmt = format ?? (step >= 1f ? "0" : step >= 0.1f ? "0.0" : "0.00");
+            var slider = (UISlider)helper.AddSlider(text, min, max, step, Mathf.Clamp(value, min, max), v =>
+            {
+                if (label != null)
+                {
+                    label.text = text + ": " + v.ToString(fmt) + unit;
+                }
+
+                onChange(v);
+            });
+
+            // UIHelper's slider template: a panel holding a UILabel "Label" and the slider (UIHelper.cs:49-51).
+            UIComponent row = slider.parent;
+            row.width = rowWidth;
+            slider.width = rowWidth - 16f;
+            label = row.Find<UILabel>("Label");
+            if (label != null)
+            {
+                label.wordWrap = false;
+                label.autoSize = true;
+                label.text = text + ": " + value.ToString(fmt) + unit;
+            }
+
+            // The options-page template is dark on a MenuPanel2 background and reads as disabled. Tint it lighter
+            // with a bright handle, and keep the dark look for genuinely disabled ("Use default") sliders.
+            slider.color = new Color32(170, 182, 196, 255);
+            slider.disabledColor = new Color32(55, 58, 62, 255);
+            if (slider.thumbObject != null)
+            {
+                slider.thumbObject.color = new Color32(255, 255, 255, 255);
+                slider.thumbObject.disabledColor = new Color32(95, 98, 102, 255);
+            }
+
+            slider.isEnabled = enabled;
+            if (label != null && !enabled)
+            {
+                label.textColor = new Color32(150, 150, 150, 255);
+            }
+
+            return slider;
         }
 
         public static UILabel CreateLabel(UIComponent parent, string text, float textScale)

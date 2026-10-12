@@ -203,43 +203,95 @@ namespace GantryTool.Data
 
         private static void SetOverrideCore(Gantry g, int laneIndex, SignalSymbol minus, SignalSymbol plus, bool log)
         {
+            float offset = UpdateEntry(g, laneIndex, o =>
+            {
+                o.Minus = minus;
+                o.Plus = plus;
+                return o;
+            });
+
+            if (log)
+            {
+                Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + minus +
+                         ", +side face=" + plus + " (" + g.Overrides.Count + " overrides on this gantry)");
+            }
+        }
+
+        /// <summary>
+        /// Sets a head's position along the beam (metres from its lane centre) and box size (0 = the gantry's size),
+        /// keeping its signs. <paramref name="undoKey"/> null = no undo step (the caller records one, e.g. a drag).
+        /// </summary>
+        public static void SetHeadLayout(Gantry g, int laneIndex, float nudge, float size, string undoKey)
+        {
+            if (laneIndex < 0 || laneIndex >= g.Lanes.Count)
+            {
+                return;
+            }
+
+            if (undoKey != null)
+            {
+                UndoStack.PushModified(g, undoKey);
+            }
+
+            UpdateEntry(g, laneIndex, o =>
+            {
+                o.Nudge = Mathf.Abs(nudge) < 0.005f ? 0f : nudge;
+                o.Size = size;
+                return o;
+            });
+        }
+
+        /// <summary>
+        /// Creates or updates the override entry of a lane (keeping whatever <paramref name="change"/> doesn't touch),
+        /// re-keys it to the lane's current position and direction, and drops it once it carries nothing.
+        /// Returns the lane offset.
+        /// </summary>
+        private static float UpdateEntry(Gantry g, int laneIndex, Func<SignalOverride, SignalOverride> change)
+        {
             float offset = g.Lanes[laneIndex].Offset;
             lock (Lock)
             {
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
-                if (minus == SignalSymbol.Auto && plus == SignalSymbol.Auto)
+                SignalOverride o = idx >= 0 ? g.Overrides[idx] : new SignalOverride();
+                o = change(o);
+                o.Offset = offset;
+                o.Sign = (sbyte)g.Lanes[laneIndex].TravelSign;
+
+                if (o.IsEmpty)
                 {
                     if (idx >= 0)
                     {
                         g.Overrides.RemoveAt(idx);
                     }
                 }
+                else if (idx >= 0)
+                {
+                    g.Overrides[idx] = o;
+                }
                 else
                 {
-                    var o = new SignalOverride
-                    {
-                        Offset = offset,
-                        Minus = minus,
-                        Plus = plus,
-                        Sign = (sbyte)g.Lanes[laneIndex].TravelSign
-                    };
-                    if (idx >= 0)
-                    {
-                        g.Overrides[idx] = o;
-                    }
-                    else
-                    {
-                        g.Overrides.Add(o);
-                    }
+                    g.Overrides.Add(o);
                 }
 
                 g.SignalsDirty = true;
             }
 
-            if (log)
+            return offset;
+        }
+
+        /// <summary>A head's current layout: nudge along the beam and size override (0 = gantry size).</summary>
+        public static void GetHeadLayout(Gantry g, int laneIndex, out float nudge, out float size)
+        {
+            nudge = 0f;
+            size = 0f;
+            lock (Lock)
             {
-                Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + minus +
-                         ", +side face=" + plus + " (" + g.Overrides.Count + " overrides on this gantry)");
+                int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
+                if (idx >= 0)
+                {
+                    nudge = g.Overrides[idx].Nudge;
+                    size = g.Overrides[idx].Size;
+                }
             }
         }
 

@@ -31,6 +31,15 @@ namespace GantryTool.Data
 
         /// <summary>TravelSign of the lane when the override was set; breaks ties between nearby lanes.</summary>
         public sbyte Sign;
+
+        // Per-head layout (extension block only; 1.0 ignores them). 0 = default for both.
+        public float Nudge;   // metres along the beam from the lane centre
+        public float Size;    // box size in metres; 0 = the gantry's size
+
+        public bool HasLayout => Nudge != 0f || Size > 0f;
+
+        /// <summary>True when the entry carries nothing (Auto faces, default layout) and can be dropped.</summary>
+        public bool IsEmpty => Minus == SignalSymbol.Auto && Plus == SignalSymbol.Auto && !HasLayout;
     }
 
     public static class SignalRules

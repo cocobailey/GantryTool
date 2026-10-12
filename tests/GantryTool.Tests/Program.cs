@@ -36,6 +36,10 @@ namespace GantryTool.Tests
             Run("converting a 1.0 gantry never moves its beam", ConversionKeepsBeam);
             Run("posts never shorter than the minimum", MinimumPost);
             Run("equivalent post height redraws the same beam in 1.0", EquivalentPostHeightMatches10);
+            Run("head position and size round-trip (extension v3)", HeadLayoutRoundTrip);
+            Run("1.0 reads heads with only a position/size (Auto signs)", Loader10ReadsLayoutOnlyHeads);
+            Run("head layout without a matching sign entry is dropped", UnmatchedLayoutDropped);
+            Run("out-of-range head layout falls back to default", InsaneLayoutIgnored);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -305,6 +309,63 @@ namespace GantryTool.Tests
             float post = GantryHeight.EquivalentPostHeight(g, bottom);
             float in10 = GantryHeight.LegacyBeamBottom(g, post, road, 5.5f);
             Check(Mathf.Abs(in10 - Mathf.Max(bottom, road + 5.5f)) < 0.001f, "1.0 draws the same beam (or its own clearance minimum)");
+        }
+
+        private static void HeadLayoutRoundTrip()
+        {
+            List<Gantry> gantries = Sample();
+            SignalOverride o = gantries[0].Overrides[0];
+            o.Nudge = 0.75f;
+            o.Size = 1.6f;
+            gantries[0].Overrides[0] = o;
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Auto, Plus = SignalSymbol.Auto, Sign = 1, Nudge = -1.25f });
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[0].Overrides[0].Nudge == 0.75f && loaded[0].Overrides[0].Size == 1.6f, "gantry 1 head");
+            Check(loaded[0].Overrides[1].Nudge == 0f && loaded[0].Overrides[1].Size == 0f, "untouched head stays default");
+            Check(loaded[1].Overrides.Count == 1 && loaded[1].Overrides[0].Nudge == -1.25f, "layout-only head kept");
+        }
+
+        private static void Loader10ReadsLayoutOnlyHeads()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Auto, Plus = SignalSymbol.Auto, Sign = 1, Nudge = 2f, Size = 1f });
+            byte[] legacy = GantryData.WriteLegacy(gantries, new object());
+            string err;
+            List<Gantry> by10 = Old10.Read(legacy, out err);
+            Check(err == null, "1.0 reads it: " + err);
+            Check(by10[1].Overrides.Count == 1 && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Auto,
+                  "1.0 sees a harmless Auto/Auto entry");
+        }
+
+        private static void UnmatchedLayoutDropped()
+        {
+            List<Gantry> gantries = Sample();
+            SignalOverride o = gantries[0].Overrides[0];
+            o.Nudge = 1f;
+            gantries[0].Overrides[0] = o;
+            byte[] ext = GantryData.WriteExt(gantries);
+
+            // Same gantry, but its sign entry is gone (e.g. reset in 1.0 before saving).
+            List<Gantry> target = Sample();
+            target[0].Overrides.RemoveAt(0);
+            string err;
+            GantryData.ApplyExt(ext, target, out err);
+            Check(err == null, "no error: " + err);
+            foreach (SignalOverride x in target[0].Overrides)
+            {
+                Check(x.Nudge == 0f && x.Size == 0f, "no layout attached to another head");
+            }
+        }
+
+        private static void InsaneLayoutIgnored()
+        {
+            List<Gantry> gantries = Sample();
+            SignalOverride o = gantries[0].Overrides[0];
+            o.Nudge = 500f;
+            o.Size = 99f;
+            gantries[0].Overrides[0] = o;
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[0].Overrides[0].Nudge == 0f && loaded[0].Overrides[0].Size == 0f, "fell back to default");
         }
 
         // ------------------------------------------------------------------------------ helpers

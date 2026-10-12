@@ -65,7 +65,8 @@ namespace GantryTool.Data
             for (int i = 0; i < Overrides.Count; i++)
             {
                 SignalOverride a = Overrides[i], b = g.Overrides[i];
-                if (a.Offset != b.Offset || a.Minus != b.Minus || a.Plus != b.Plus || a.Sign != b.Sign)
+                if (a.Offset != b.Offset || a.Minus != b.Minus || a.Plus != b.Plus || a.Sign != b.Sign ||
+                    a.Nudge != b.Nudge || a.Size != b.Size)
                 {
                     return false;
                 }
