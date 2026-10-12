@@ -14,6 +14,7 @@ namespace GantryTool
         private GantryPlaceTool _tool;
         private ToolButton _button;
         private SignalPanel _panel;
+        private GantryPanel _gantryPanel;
         private HotkeyListener _hotkey;
 
         public override void OnLevelLoaded(LoadMode mode)
@@ -44,6 +45,10 @@ namespace GantryTool
 
                 _panel = SignalPanel.Create();
                 _tool.Panel = _panel;
+
+                _gantryPanel = GantryPanel.Create();
+                _gantryPanel.Tool = _tool;
+                _tool.GantryPanel = _gantryPanel;
 
                 _hotkey = HotkeyListener.Create(_tool);
 
@@ -89,6 +94,12 @@ namespace GantryTool
                     _panel = null;
                 }
 
+                if (_gantryPanel != null)
+                {
+                    UnityEngine.Object.Destroy(_gantryPanel.gameObject);
+                    _gantryPanel = null;
+                }
+
                 if (_button != null)
                 {
                     UnityEngine.Object.Destroy(_button.gameObject);
@@ -104,6 +115,7 @@ namespace GantryTool
                 }
 
                 GantryManager.Clear();
+                UndoStack.Clear();
                 GantryMaterials.Release();
                 Log.Info("Level unloading; tool removed, gantries cleared");
             }

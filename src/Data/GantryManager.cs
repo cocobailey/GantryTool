@@ -61,6 +61,42 @@ namespace GantryTool.Data
             return gantry;
         }
 
+        /// <summary>Re-creates a gantry from a saved state under its original id (undo of a delete).</summary>
+        public static Gantry Restore(GantryState state)
+        {
+            var gantry = new Gantry { Id = state.Id };
+            lock (Lock)
+            {
+                for (int i = 0; i < _gantries.Count; i++)
+                {
+                    if (_gantries[i].Id == state.Id)
+                    {
+                        return _gantries[i];
+                    }
+                }
+
+                state.ApplyTo(gantry);
+                _gantries.Add(gantry);
+                if (_nextId <= state.Id)
+                {
+                    _nextId = state.Id + 1;
+                }
+            }
+
+            return gantry;
+        }
+
+        /// <summary>Moves a gantry's posts. Main thread; locked because the save thread reads positions.</summary>
+        public static void SetEnds(Gantry g, Vector3 start, Vector3 end)
+        {
+            lock (Lock)
+            {
+                g.Start = start;
+                g.End = end;
+                g.MeshDirty = true;
+            }
+        }
+
         public static Gantry Find(int id)
         {
             lock (Lock)
@@ -89,6 +125,7 @@ namespace GantryTool.Data
             }
 
             float offset = g.Lanes[laneIndex].Offset;
+            UndoStack.PushModified(g, "sign", coalesce: false);
             lock (Lock)
             {
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);

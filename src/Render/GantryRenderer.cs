@@ -24,7 +24,14 @@ namespace GantryTool.Render
         /// <summary>Gantry under the cursor while the tool is in delete mode (0 = none); drawn red.</summary>
         public static volatile int HoveredId;
 
-        private static readonly Color HoverTint = new Color(1f, 0.3f, 0.25f, 1f);
+        private static readonly Color HoverTint = new Color(0.75f, 0.92f, 1f, 1f);
+        private static readonly Color SelectedTint = new Color(0.45f, 0.8f, 1f, 1f);
+
+        /// <summary>Gantry selected in the tool (0 = none); drawn tinted blue.</summary>
+        public static volatile int SelectedId;
+
+        /// <summary>Gantry being dragged (0 = none): its rebuilds log at debug level only.</summary>
+        public static volatile int QuietId;
 
         private readonly List<Gantry> _scratch = new List<Gantry>();
         private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
@@ -91,7 +98,7 @@ namespace GantryTool.Render
                         continue;
                     }
 
-                    DrawStructure(g.Mesh, g.Origin, g.Id == HoveredId ? HoverTint : Color.white);
+                    DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : Color.white);
                     DrawSignals(g.SignalMesh, g.Origin);
                     if (blinkOn)
                     {
@@ -156,7 +163,7 @@ namespace GantryTool.Render
                 {
                     // Option sliders rebuild everything on each tick, so only real lane changes go to the normal log.
                     string msg = "Gantry #" + g.Id + " recomputed: " + g.Lanes.Count + " -> " + scan.Lanes.Count + " lanes";
-                    if (g.Lanes.Count != scan.Lanes.Count)
+                    if (g.Lanes.Count != scan.Lanes.Count && g.Id != QuietId)
                     {
                         Log.Info(msg);
                     }
@@ -169,7 +176,7 @@ namespace GantryTool.Render
                 g.Lanes.Clear();
                 g.Lanes.AddRange(scan.Lanes);
                 g.RoadTopY = scan.RoadTopY;
-                g.BeamBottomY = GantryMeshBuilder.BeamBottomY(g.Start, g.End, g.PostHeight, scan.RoadTopY);
+                g.BeamBottomY = GantryMeshBuilder.BeamBottomY(g.Start, g.End, g.PostHeight, scan.RoadTopY, g.Clearance);
                 if (Settings.Current.DebugLogging)
                 {
                     Log.Debug(LaneScanner.Describe(g.Id, scan, g.BeamBottomY, SideOf(g)));
@@ -203,9 +210,9 @@ namespace GantryTool.Render
                 {
                     g.SignalsDirty = false;
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, SignalMeshBuilder.DefaultSignalSize, g.SignalMesh);
+                        g.Lanes, g.Overrides, g.SignalSize, g.SignalMesh);
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, SignalMeshBuilder.DefaultSignalSize, g.BlinkMesh, blinkLayer: true);
+                        g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, blinkLayer: true);
                 }
 
                 if (Settings.Current.DebugLogging)

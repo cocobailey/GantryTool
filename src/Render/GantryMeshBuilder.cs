@@ -31,11 +31,17 @@ namespace GantryTool.Render
         /// </summary>
         public static float BeamBottomY(Vector3 start, Vector3 end, float postHeight, float roadTopY)
         {
+            return BeamBottomY(start, end, postHeight, roadTopY, RoadClearance);
+        }
+
+        /// <summary>As above, with an explicit clearance (per-gantry setting).</summary>
+        public static float BeamBottomY(Vector3 start, Vector3 end, float postHeight, float roadTopY, float clearance)
+        {
             float y = Mathf.Max(start.y, end.y) + postHeight;
             if (!float.IsNaN(roadTopY))
             {
                 // Heads are mounted inside the truss, so the beam underside is the lowest point.
-                y = Mathf.Max(y, roadTopY + RoadClearance);
+                y = Mathf.Max(y, roadTopY + clearance);
             }
 
             return y;

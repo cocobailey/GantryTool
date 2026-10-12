@@ -67,7 +67,7 @@ namespace GantryTool.Tool
 
                 Vector3 dir = flat / span;
                 Vector3 side = new Vector3(-dir.z, 0f, dir.x);
-                float half = SignalMeshBuilder.HeadSize(SignalMeshBuilder.DefaultSignalSize, g.BeamDepth) * 0.5f + 0.1f;
+                float half = SignalMeshBuilder.HeadSize(g.SignalSize, g.BeamDepth) * 0.5f + 0.1f;
                 float halfDepth = SignalMeshBuilder.HeadDepth * 0.5f + 0.1f;
                 float midY = g.BeamBottomY + g.BeamDepth * 0.5f;
 
