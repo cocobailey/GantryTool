@@ -156,9 +156,6 @@ namespace GantryTool.UI
             _applyAll.tooltip = "Put this sign on both sides of every lane";
             _layoutBox = AddUIComponent<UIPanel>();
             _layoutBox.width = PanelWidth - 2f * Margin;
-            _layoutBox.autoLayout = true;
-            _layoutBox.autoLayoutDirection = LayoutDirection.Vertical;
-            _layoutBox.autoLayoutPadding = new RectOffset(0, 0, 0, 2);
 
             _reset = CreateButton("Reset signs", ThirdWidth, ResetToAuto);
             _reset.tooltip = "Set both faces back to Auto";
@@ -456,9 +453,13 @@ namespace GantryTool.UI
         /// <summary>Shift along the beam, box size and their reset (also editable with the head's handles).</summary>
         private void BuildLayoutSection(Gantry g, int lane, bool hidden)
         {
+            // Detach before destroying: Destroy only happens at the end of the frame, and a second refresh in the same
+            // frame would otherwise measure the old controls too (a big empty gap under the section).
             for (int i = _layoutBox.components.Count - 1; i >= 0; i--)
             {
-                UnityEngine.Object.Destroy(_layoutBox.components[i].gameObject);
+                UIComponent old = _layoutBox.components[i];
+                _layoutBox.RemoveUIComponent(old);
+                UnityEngine.Object.Destroy(old.gameObject);
             }
 
             if (hidden)
@@ -513,16 +514,24 @@ namespace GantryTool.UI
             });
 
             var note = _layoutBox.AddUIComponent<UILabel>();
-            note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
             note.textScale = 0.65f;
             note.textColor = new Color32(170, 170, 170, 255);
             note.autoSize = false;
             note.wordWrap = true;
             note.width = _layoutBox.width;
             note.autoHeight = true;
+            note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
 
+            // Stack the controls ourselves so the height never depends on when auto layout runs.
+            float y = 0f;
+            for (int i = 0; i < _layoutBox.components.Count; i++)
+            {
+                UIComponent c = _layoutBox.components[i];
+                c.relativePosition = new Vector3(0f, y);
+                y += c.height + 2f;
+            }
 
-            _layoutBox.FitChildrenVertically();
+            _layoutBox.height = y;
         }
 
         // ------------------------------------------------------------------------------ actions
