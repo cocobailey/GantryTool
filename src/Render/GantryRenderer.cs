@@ -176,7 +176,21 @@ namespace GantryTool.Render
                 g.Lanes.Clear();
                 g.Lanes.AddRange(scan.Lanes);
                 g.RoadTopY = scan.RoadTopY;
-                g.BeamBottomY = GantryMeshBuilder.BeamBottomY(g.Start, g.End, g.PostHeight, scan.RoadTopY, g.Clearance);
+                float groundMax = Mathf.Max(g.Start.y, g.End.y);
+                lock (GantryManager.Lock)
+                {
+                    if (float.IsNaN(g.HeightAboveRoad))
+                    {
+                        // A gantry from 1.0: keep its beam exactly where 1.0 put it.
+                        g.HeightAboveRoad = GantryHeight.Convert(groundMax, g.PostHeight, scan.RoadTopY, g.Clearance);
+                        Log.Debug("Gantry #" + g.Id + " converted to height above road " + g.HeightAboveRoad.ToString("F2") + " m");
+                    }
+
+                    g.BeamBottomY = GantryHeight.BeamBottom(groundMax, scan.RoadTopY, g.HeightAboveRoad);
+
+                    // Kept in step so the 1.0-format save block draws the same beam if opened in 1.0.
+                    g.PostHeight = GantryHeight.EquivalentPostHeight(groundMax, g.BeamBottomY);
+                }
                 if (Settings.Current.DebugLogging)
                 {
                     Log.Debug(LaneScanner.Describe(g.Id, scan, g.BeamBottomY, SideOf(g)));

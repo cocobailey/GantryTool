@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.1.0-dev2";
+        public const string Version = "1.1.0-dev3";
 
         public string Name => "Gantry Tool";
 
@@ -41,22 +41,19 @@ namespace GantryTool
                 Settings s = Settings.Current;
 
                 UIHelperBase newGroup = helper.AddGroup("New gantries");
-                AddSlider(newGroup, "Post height", 4f, 15f, 0.5f, s.PostHeight, " m",
-                    "Beam underside above the higher post base, for gantries placed from now on.",
+                AddSlider(newGroup, "Height above road", 2f, 15f, 0.1f, s.PostHeight, " m",
+                    "Beam underside above the highest road it crosses (above the ground if there's no road), for gantries placed from now on.",
                     v => s.PostHeight = v, false);
                 AddSlider(newGroup, "Truss depth", 1f, 2.5f, 0.1f, s.BeamDepth, " m",
                     "Height of the truss beam, for gantries placed from now on.",
                     v => s.BeamDepth = v, false);
-                newGroup.AddButton("Apply to all existing gantries", () =>
+                newGroup.AddButton("Apply height and depth to all existing gantries", () =>
                 {
                     int n = GantryRenderer.Active ? GantryManager.ApplyDefaultsToAll() : 0;
                     Log.Info("Applied defaults to " + n + " gantries");
                 });
 
                 UIHelperBase allGroup = helper.AddGroup("All gantries");
-                AddSlider(allGroup, "Road clearance", 4f, 9f, 0.1f, s.RoadClearance, " m",
-                    "Minimum gap between the highest road crossed and the beam underside.",
-                    v => s.RoadClearance = v, true);
                 AddSlider(allGroup, "Signal size", 0.6f, 2f, 0.05f, s.SignalSize, " m",
                     "Edge length of the LED face. Shrunk automatically if the truss is too shallow.",
                     v => s.SignalSize = v, true);

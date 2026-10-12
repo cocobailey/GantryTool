@@ -10,8 +10,8 @@ namespace GantryTool.UI
     /// Per-gantry settings, opened by clicking a gantry's truss or posts with the tool. Built with the game's own
     /// option controls (UIHelper templates) so it looks like the options page. Every change is undoable.
     ///
-    /// Post height and truss depth are stored per gantry (as in 1.0). Clearance and signal size follow the
-    /// global options unless "Use default" is unticked.
+    /// Height above road and truss depth are per gantry. Signal size follows the global option unless
+    /// "Use default" is unticked.
     /// </summary>
     public sealed class GantryPanel : UIPanel
     {
@@ -107,17 +107,10 @@ namespace GantryTool.UI
                 var helper = new UIHelper(_content);
                 Settings s = Settings.Current;
 
-                Slider(helper, "Post height", 4f, 15f, 0.5f, g.PostHeight, " m", true, v => Change(g, "post height", () => g.PostHeight = v));
+                string heightLabel = float.IsNaN(g.RoadTopY) ? "Height above ground" : "Height above road";
+                float height = float.IsNaN(g.HeightAboveRoad) ? s.PostHeight : g.HeightAboveRoad;
+                Slider(helper, heightLabel, 2f, 15f, 0.1f, height, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
                 Slider(helper, "Truss depth", 1f, 2.5f, 0.1f, g.BeamDepth, " m", true, v => Change(g, "truss depth", () => g.BeamDepth = v));
-
-                bool clrDefault = float.IsNaN(g.ClearanceOverride);
-                Slider(helper, "Road clearance", 4f, 9f, 0.1f, g.Clearance, " m", !clrDefault,
-                    v => Change(g, "road clearance", () => g.ClearanceOverride = v));
-                Checkbox(helper, "Use default road clearance (" + s.RoadClearance.ToString("0.#") + " m)", clrDefault, on =>
-                {
-                    Change(g, "road clearance", () => g.ClearanceOverride = on ? float.NaN : s.RoadClearance);
-                    Rebuild();
-                });
 
                 bool sizeDefault = float.IsNaN(g.SignalSizeOverride);
                 Slider(helper, "Signal box size", 0.6f, 2f, 0.05f, g.SignalSize, " m", !sizeDefault,
@@ -133,7 +126,7 @@ namespace GantryTool.UI
                 {
                     Change(g, "height and depth", () =>
                     {
-                        g.PostHeight = s.PostHeight;
+                        g.HeightAboveRoad = s.PostHeight;
                         g.BeamDepth = s.BeamDepth;
                     });
                     Rebuild();

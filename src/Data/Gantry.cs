@@ -18,7 +18,13 @@ namespace GantryTool.Data
 
         // Per-gantry overrides (saved in the extension block). NaN / 0 = follow the global option, which is how
         // every gantry from 1.0 loads, so their look doesn't change.
-        public float ClearanceOverride = float.NaN;
+        public float ClearanceOverride = float.NaN;   // 1.1 dev builds only; now only used to convert old gantries
+
+        /// <summary>
+        /// Beam underside above the highest road crossed (or above the posts with no road). NaN = a gantry from 1.0
+        /// that hasn't been converted yet; the renderer converts it on first build so its beam doesn't move.
+        /// </summary>
+        public float HeightAboveRoad = float.NaN;
         public float SignalSizeOverride = float.NaN;
         public byte Style;
 

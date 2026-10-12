@@ -442,6 +442,11 @@ namespace GantryTool.Tool
             }
 
             Gantry g = GantryManager.Add(_start, pos, GantryManager.DefaultPostHeight, GantryManager.DefaultBeamDepth);
+            lock (GantryManager.Lock)
+            {
+                g.HeightAboveRoad = GantryManager.DefaultPostHeight;
+            }
+
             UndoStack.PushAdded(g);
             Log.Info("Placed gantry " + g);
             _hasStart = false;
@@ -848,7 +853,7 @@ namespace GantryTool.Tool
                         _previewLaneSigns.Add(scan.Lanes[i].TravelSign);
                     }
 
-                    float bottom = GantryMeshBuilder.BeamBottomY(_start, end, GantryManager.DefaultPostHeight, scan.RoadTopY);
+                    float bottom = GantryHeight.BeamBottom(Mathf.Max(_start.y, end.y), scan.RoadTopY, GantryManager.DefaultPostHeight);
                     _previewMesh = GantryMeshBuilder.Build(_start, end, bottom,
                         GantryManager.DefaultBeamDepth, _previewMesh, out _previewOrigin);
                     _previewSignals = SignalMeshBuilder.Build(_start, end, _previewOrigin, bottom,

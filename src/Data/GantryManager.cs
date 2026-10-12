@@ -10,7 +10,7 @@ namespace GantryTool.Data
     /// </summary>
     public static class GantryManager
     {
-        /// <summary>Defaults for new gantries, from the options panel.</summary>
+        /// <summary>Defaults for new gantries, from the options panel. "Post height" is the height above the road.</summary>
         public static float DefaultPostHeight => Settings.Current.PostHeight;
         public static float DefaultBeamDepth => Settings.Current.BeamDepth;
         public const float MinSpan = 6f;
@@ -181,7 +181,7 @@ namespace GantryTool.Data
             {
                 for (int i = 0; i < _gantries.Count; i++)
                 {
-                    _gantries[i].PostHeight = DefaultPostHeight;
+                    _gantries[i].HeightAboveRoad = DefaultPostHeight;
                     _gantries[i].BeamDepth = DefaultBeamDepth;
                     _gantries[i].MeshDirty = true;
                 }

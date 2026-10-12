@@ -20,6 +20,7 @@ namespace GantryTool.Data
     ///   int extVersion, int count, then per gantry: int id, float startX/Y/Z, float endX/Y/Z, then the fields
     ///   of each version in order:
     ///   v1: float clearanceOverride (NaN = default), float signalSizeOverride (NaN = default), byte style
+    ///   v2: float heightAboveRoad (NaN = not converted yet)
     ///   The positions guard against stale data: if a player saved in 1.0 (which rewrites only the legacy
     ///   block), ids may have been reused, so an entry is only applied when id AND both posts still match.
     ///   New fields are only ever appended in a new extVersion. Unknown newer versions are skipped
@@ -30,7 +31,7 @@ namespace GantryTool.Data
         public const string LegacyKey = "GantryTool";
         public const string ExtKey = "GantryTool.Ext";
         public const int LegacyVersion = 3;
-        public const int ExtVersion = 1;
+        public const int ExtVersion = 2;
 
         // ----------------------------------------------------------------- legacy block (1.0 format)
 
@@ -151,6 +152,7 @@ namespace GantryTool.Data
                     w.Write(g.ClearanceOverride);
                     w.Write(g.SignalSizeOverride);
                     w.Write(g.Style);
+                    w.Write(g.HeightAboveRoad);
                 }
 
                 w.Flush();
@@ -198,6 +200,7 @@ namespace GantryTool.Data
                         float clearance = r.ReadSingle();
                         float signalSize = r.ReadSingle();
                         byte style = r.ReadByte();
+                        float height = version >= 2 ? r.ReadSingle() : float.NaN;
 
                         Gantry g;
                         if (byId.TryGetValue(id, out g) && Same(g.Start, start) && Same(g.End, end))
@@ -205,6 +208,7 @@ namespace GantryTool.Data
                             g.ClearanceOverride = Sane(clearance, 1f, 30f);
                             g.SignalSizeOverride = Sane(signalSize, 0.2f, 5f);
                             g.Style = style;
+                            g.HeightAboveRoad = Sane(height, 0.5f, 60f);
                             applied++;
                         }
                     }

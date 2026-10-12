@@ -31,6 +31,11 @@ namespace GantryTool.Tests
             Run("unknown future extension version is ignored", FutureExtIgnored);
             Run("corrupt / truncated data never throws and keeps what was read", CorruptDataIsSafe);
             Run("out-of-range extension values fall back to defaults", InsaneExtValuesIgnored);
+            Run("height above road round-trips (extension v2)", HeightRoundTrip);
+            Run("extension v1 (1.1 dev builds) still loads", ExtV1Loads);
+            Run("converting a 1.0 gantry never moves its beam", ConversionKeepsBeam);
+            Run("posts never shorter than the minimum", MinimumPost);
+            Run("equivalent post height redraws the same beam in 1.0", EquivalentPostHeightMatches10);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -226,6 +231,80 @@ namespace GantryTool.Tests
             gantries[1].SignalSizeOverride = -2f;
             List<Gantry> loaded = SaveAndLoad(gantries, true);
             Check(float.IsNaN(loaded[0].ClearanceOverride) && float.IsNaN(loaded[1].SignalSizeOverride), "fall back to default");
+        }
+
+        private static void HeightRoundTrip()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[0].HeightAboveRoad = 6.25f;
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[0].HeightAboveRoad == 6.25f, "height kept");
+            Check(float.IsNaN(loaded[1].HeightAboveRoad), "unset stays NaN (converted on load)");
+        }
+
+        private static void ExtV1Loads()
+        {
+            List<Gantry> gantries = Sample();
+            byte[] ext = Bytes(w =>
+            {
+                w.Write(1);
+                w.Write(1);
+                Gantry g = gantries[1];
+                w.Write(g.Id);
+                w.Write(g.Start.x); w.Write(g.Start.y); w.Write(g.Start.z);
+                w.Write(g.End.x); w.Write(g.End.y); w.Write(g.End.z);
+                w.Write(7f);
+                w.Write(1.5f);
+                w.Write((byte)2);
+            });
+            string err;
+            int applied = GantryData.ApplyExt(ext, gantries, out err);
+            Check(err == null && applied == 1, "applied: " + err);
+            Check(gantries[1].ClearanceOverride == 7f && gantries[1].SignalSizeOverride == 1.5f && gantries[1].Style == 2, "v1 fields");
+            Check(float.IsNaN(gantries[1].HeightAboveRoad), "height not set by v1 (converted later)");
+        }
+
+        private static void ConversionKeepsBeam()
+        {
+            float[] grounds = { 0f, 60f, 117.6f, -3f };
+            float[] posts = { 4f, 7.5f, 9f, 15f };
+            float[] clearances = { 4f, 5.5f, 9f };
+            // Road below, level with, slightly above and far above the posts (elevated), plus no road at all.
+            float[] roadOffsets = { float.NaN, -12f, -0.3f, 0f, 1.5f, 7f, 20f };
+            int cases = 0;
+            foreach (float g in grounds)
+            foreach (float post in posts)
+            foreach (float clr in clearances)
+            foreach (float off in roadOffsets)
+            {
+                float road = float.IsNaN(off) ? float.NaN : g + off;
+                float legacy = GantryHeight.LegacyBeamBottom(g, post, road, clr);
+                float h = GantryHeight.Convert(g, post, road, clr);
+                float now = GantryHeight.BeamBottom(g, road, h);
+                cases++;
+                if (Mathf.Abs(now - legacy) > 0.001f)
+                {
+                    Check(false, "beam moved: ground " + g + " post " + post + " clr " + clr + " road " + road + ": " + legacy + " -> " + now);
+                    return;
+                }
+            }
+
+            Check(cases > 0, cases + " cases");
+        }
+
+        private static void MinimumPost()
+        {
+            float bottom = GantryHeight.BeamBottom(100f, 80f, 7.5f); // road in a deep cutting
+            Check(bottom >= 100f + GantryHeight.MinPost, "floor applied: " + bottom);
+        }
+
+        private static void EquivalentPostHeightMatches10()
+        {
+            float g = 117.6f, road = 130f, h = 5f;
+            float bottom = GantryHeight.BeamBottom(g, road, h);
+            float post = GantryHeight.EquivalentPostHeight(g, bottom);
+            float in10 = GantryHeight.LegacyBeamBottom(g, post, road, 5.5f);
+            Check(Mathf.Abs(in10 - Mathf.Max(bottom, road + 5.5f)) < 0.001f, "1.0 draws the same beam (or its own clearance minimum)");
         }
 
         // ------------------------------------------------------------------------------ helpers

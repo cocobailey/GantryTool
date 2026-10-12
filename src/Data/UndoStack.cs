@@ -14,6 +14,7 @@ namespace GantryTool.Data
         public float BeamDepth;
         public float ClearanceOverride;
         public float SignalSizeOverride;
+        public float HeightAboveRoad;
         public byte Style;
         public readonly List<SignalOverride> Overrides = new List<SignalOverride>();
 
@@ -29,6 +30,7 @@ namespace GantryTool.Data
                 BeamDepth = g.BeamDepth,
                 ClearanceOverride = g.ClearanceOverride,
                 SignalSizeOverride = g.SignalSizeOverride,
+                HeightAboveRoad = g.HeightAboveRoad,
                 Style = g.Style
             };
             s.Overrides.AddRange(g.Overrides);
@@ -44,6 +46,7 @@ namespace GantryTool.Data
             g.BeamDepth = BeamDepth;
             g.ClearanceOverride = ClearanceOverride;
             g.SignalSizeOverride = SignalSizeOverride;
+            g.HeightAboveRoad = HeightAboveRoad;
             g.Style = Style;
             g.Overrides.Clear();
             g.Overrides.AddRange(Overrides);
@@ -52,8 +55,8 @@ namespace GantryTool.Data
 
         public bool SameAs(Gantry g)
         {
-            if (g.Start != Start || g.End != End || g.PostHeight != PostHeight || g.BeamDepth != BeamDepth ||
-                !SameFloat(g.ClearanceOverride, ClearanceOverride) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
+            if (g.Start != Start || g.End != End || g.BeamDepth != BeamDepth ||
+                !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
                 g.Style != Style || g.Overrides.Count != Overrides.Count)
             {
                 return false;
