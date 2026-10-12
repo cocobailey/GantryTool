@@ -123,24 +123,28 @@ namespace GantryTool.UI
                     Rebuild();
                 });
 
-                Button(helper, "Reset height and depth to defaults (" + s.HeightAboveRoad.ToString("0.0") + " m / " +
-                               s.BeamDepth.ToString("0.#") + " m)", () =>
-                {
-                    Change(g, "height and depth", () =>
+                // One row of equal buttons, like the signal panel.
+                var row = _content.AddUIComponent<UIPanel>();
+                row.size = new Vector2(_content.width, 34f);
+                float third = (_content.width - 12f) / 3f;
+                RowButton(row, 0, third, "Reset to defaults",
+                    "Height above road " + s.HeightAboveRoad.ToString("0.0") + " m and truss depth " + s.BeamDepth.ToString("0.0") + " m", () =>
                     {
-                        g.HeightAboveRoad = s.HeightAboveRoad;
-                        g.BeamDepth = s.BeamDepth;
+                        Change(g, "height and depth", () =>
+                        {
+                            g.HeightAboveRoad = s.HeightAboveRoad;
+                            g.BeamDepth = s.BeamDepth;
+                        });
+                        Rebuild();
                     });
-                    Rebuild();
-                });
-                Button(helper, "Undo (Ctrl+Z)", () =>
+                RowButton(row, 1, third, "Undo", "Undo the last change (Ctrl+Z)", () =>
                 {
                     if (Tool != null)
                     {
                         Tool.UndoLast();
                     }
                 });
-                Button(helper, "Delete gantry", () =>
+                RowButton(row, 2, third, "Delete gantry", "Delete this gantry (Ctrl+Z brings it back)", () =>
                 {
                     if (Tool != null)
                     {
@@ -148,8 +152,15 @@ namespace GantryTool.UI
                     }
                 });
 
-                _content.FitChildrenVertically();
-                height = _content.relativePosition.y + _content.height + 10f;
+                // Size the panel to its last row (FitChildrenVertically can leave a gap with template controls).
+                float bottom = 0f;
+                foreach (UIComponent child in _content.components)
+                {
+                    bottom = Mathf.Max(bottom, child.relativePosition.y + child.height);
+                }
+
+                _content.height = bottom;
+                height = _content.relativePosition.y + bottom + 12f;
                 Show();
                 BringToFront();
             }
@@ -247,10 +258,18 @@ namespace GantryTool.UI
             helper.AddCheckbox(text, value, v => onChange(v));
         }
 
-        private static void Button(UIHelper helper, string text, Action onClick)
+        private static void RowButton(UIPanel row, int index, float w, string text, string tooltip, Action onClick)
         {
-            var button = (UIButton)helper.AddButton(text, () => onClick());
-            button.textScale = 0.8f;
+            var b = row.AddUIComponent<UIButton>();
+            b.text = text;
+            b.tooltip = tooltip;
+            b.textScale = 0.75f;
+            b.normalBgSprite = "ButtonMenu";
+            b.hoveredBgSprite = "ButtonMenuHovered";
+            b.pressedBgSprite = "ButtonMenuPressed";
+            b.size = new Vector2(w, 28f);
+            b.relativePosition = new Vector3(index * (w + 6f), 4f);
+            b.eventClick += (c, p) => onClick();
         }
     }
 }

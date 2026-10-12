@@ -96,6 +96,7 @@ namespace GantryTool.Tool
         private bool _dragStartOnDeck;
         private bool _dragEndOnDeck;
         private bool _dragInvalid;
+        private bool _dragClamped;
 
         // Selected signal head (gets its own handles) and dragging it
         private enum HeadDrag
@@ -723,6 +724,7 @@ namespace GantryTool.Tool
             _dragStartOnDeck = OnDeck(g.Start);
             _dragEndOnDeck = OnDeck(g.End);
             _dragInvalid = false;
+            _dragClamped = false;
             _probeY[0] = g.Start.y;
             _probeY[1] = g.End.y;
             GantryRenderer.QuietId = g.Id;
@@ -748,12 +750,12 @@ namespace GantryTool.Tool
             switch (_dragHandle)
             {
                 case Handle.StartPost:
-                    newStart = GroundPoint(_hitPos, _hitOnRoad);
+                    newStart = ClampToSpan(g.End, GroundPoint(_hitPos, _hitOnRoad));
                     newEnd = g.End;
                     break;
                 case Handle.EndPost:
                     newStart = g.Start;
-                    newEnd = GroundPoint(_hitPos, _hitOnRoad);
+                    newEnd = ClampToSpan(g.Start, GroundPoint(_hitPos, _hitOnRoad));
                     break;
                 case Handle.Middle:
                 {
@@ -786,6 +788,29 @@ namespace GantryTool.Tool
             {
                 GantryManager.SetEnds(g, newStart, newEnd);
             }
+        }
+
+        /// <summary>
+        /// A dragged post past the 6-80 m limit stops exactly at the limit, in the direction of the mouse (instead of
+        /// staying wherever the last valid frame left it). <see cref="_dragClamped"/> tells the cursor hint.
+        /// </summary>
+        private Vector3 ClampToSpan(Vector3 fixedPost, Vector3 wanted)
+        {
+            Vector3 d = wanted - fixedPost;
+            d.y = 0f;
+            float span = d.magnitude;
+            _dragClamped = false;
+            if (span < 1e-3f || SpanValid(span))
+            {
+                return wanted;
+            }
+
+            _dragClamped = true;
+            float limit = span > GantryManager.MaxSpan ? GantryManager.MaxSpan : GantryManager.MinSpan;
+            Vector3 p = fixedPost + d / span * limit;
+            // The clamped spot isn't where the mouse is, so it gets the ground there (a deck post keeps its height).
+            p.y = _hitOnRoad ? wanted.y : Singleton<TerrainManager>.instance.SampleRawHeightSmooth(p);
+            return p;
         }
 
         /// <summary>
@@ -1030,7 +1055,7 @@ namespace GantryTool.Tool
             }
             else if (_dragHandle != Handle.None && selected != null)
             {
-                text = "Span " + selected.Span.ToString("F1") + " m" + (_dragInvalid ? "\nSpan must be 6–80 m" : "");
+                text = "Span " + selected.Span.ToString("F1") + " m" + (_dragInvalid || _dragClamped ? "\nSpan must be 6–80 m" : "");
             }
             else if (_hasStart && _hitValid)
             {
