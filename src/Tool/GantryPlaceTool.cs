@@ -106,12 +106,12 @@ namespace GantryTool.Tool
         }
 
         private const float ResizeHandleRadius = 0.5f;
+        public const float MaxHeadFace = 4f;   // largest per-head LED face (m)
         private int _selHeadGantry;
         private int _selHeadLane = -1;
         private bool _hoverHeadResize;
         private HeadDrag _headDrag;
         private bool _headDragStarted;
-        private bool _headDragLimited;
         private Vector3 _headPressMouse;
         private float _headPressAlong;
         private float _headOrigAlong;
@@ -873,7 +873,7 @@ namespace GantryTool.Tool
                 SignalMeshBuilder.HeadLayout(g.Lanes, lane, g.Overrides, g.SignalSize, g.BeamDepth, g.Span, out along, out size);
             }
 
-            midY = g.BeamBottomY + g.BeamDepth * 0.5f;
+            midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size);
             return true;
         }
 
@@ -922,7 +922,6 @@ namespace GantryTool.Tool
             GantryManager.GetHeadLayout(g, lane, out _headOrigNudge, out _headOrigSize);
             _headDrag = kind;
             _headDragStarted = false;
-            _headDragLimited = false;
             _headPressMouse = Input.mousePosition;
             _headPressAlong = pa;
             _headOrigAlong = along;
@@ -964,12 +963,10 @@ namespace GantryTool.Tool
             }
             else
             {
-                // Box edge follows the mouse: half the box is the larger of the distances from the centre.
-                float box = 2f * Mathf.Max(Mathf.Abs(pa - along), Mathf.Abs(py - midY));
-                float maxFace = g.BeamDepth - 0.1f - SignalMeshBuilder.Frame;
-                float face = box - SignalMeshBuilder.Frame;
-                _headDragLimited = face > maxFace;
-                face = Mathf.Clamp(face, 0.4f, Mathf.Max(0.4f, maxFace));
+                // The box's side edge follows the mouse (sideways only: tall boxes move their centre up as they
+                // grow, so following the mouse vertically would chase itself).
+                float box = 2f * Mathf.Abs(pa - along);
+                float face = Mathf.Clamp(box - SignalMeshBuilder.Frame, 0.4f, MaxHeadFace);
                 GantryManager.SetHeadLayout(g, _selHeadLane, _headOrigNudge, face, null);
             }
         }
@@ -1029,7 +1026,7 @@ namespace GantryTool.Tool
                 HeadGeom(headGantry, _selHeadLane, out along, out size, out midY);
                 text = _headDrag == HeadDrag.Move
                     ? "Shift " + (along - _headLaneOffset).ToString("+0.00;-0.00;0.00") + " m"
-                    : "Box size " + size.ToString("0.00") + " m" + (_headDragLimited ? "\nLimited by the truss depth" : "");
+                    : "Box size " + size.ToString("0.00") + " m";
             }
             else if (_dragHandle != Handle.None && selected != null)
             {
@@ -1159,9 +1156,10 @@ namespace GantryTool.Tool
                     Gantry hg = GantryManager.Find(_headGantryId);
                     if (hg != null && _headLane < hg.Lanes.Count)
                     {
-                        Vector3 c = SignalMeshBuilder.HeadCentre(hg.Start, hg.End, hg.BeamBottomY, hg.BeamDepth,
-                            hg.Lanes[_headLane].Offset);
-                        float half = SignalMeshBuilder.HeadSize(hg.SignalSize, hg.BeamDepth) * 0.5f;
+                        float hAlong, hSize, hMid;
+                        HeadGeom(hg, _headLane, out hAlong, out hSize, out hMid);
+                        Vector3 c = SignalMeshBuilder.HeadCentre(hg.Start, hg.End, hg.BeamBottomY, hg.BeamDepth, hAlong, hSize);
+                        float half = hSize * 0.5f;
                         rm.OverlayEffect.DrawCircle(cameraInfo, HeadHoverColor, c, half * 2.6f,
                             c.y - half - 0.05f, c.y + half + 0.05f, false, true);
                     }
@@ -1239,15 +1237,15 @@ namespace GantryTool.Tool
             }
 
             float half = size * 0.5f;
-            Vector3 c = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along);
+            Vector3 c = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along, size);
             bool moving = _headDrag == HeadDrag.Move && _headDragStarted;
             bool resizing = _headDrag == HeadDrag.Resize && _headDragStarted;
             rm.OverlayEffect.DrawCircle(cameraInfo, moving ? HandleHotColor : HandleColor, c, size * 1.3f,
                 c.y - half - 0.05f, c.y + half + 0.05f, false, true);
 
-            Vector3 corner = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + half);
+            Vector3 corner = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + half, size);
             corner.y = c.y + half;
-            Color cornerColor = resizing && _headDragLimited ? InvalidColor : resizing || _hoverHeadResize ? HandleHotColor : HandleColor;
+            Color cornerColor = resizing || _hoverHeadResize ? HandleHotColor : HandleColor;
             rm.OverlayEffect.DrawCircle(cameraInfo, cornerColor, corner, ResizeHandleRadius * 2f,
                 corner.y - 0.4f, corner.y + 0.4f, false, true);
         }

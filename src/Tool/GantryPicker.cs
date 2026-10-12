@@ -68,7 +68,6 @@ namespace GantryTool.Tool
                 Vector3 dir = flat / span;
                 Vector3 side = new Vector3(-dir.z, 0f, dir.x);
                 float halfDepth = SignalMeshBuilder.HeadDepth * 0.5f + 0.1f;
-                float midY = g.BeamBottomY + g.BeamDepth * 0.5f;
 
                 for (int k = 0; k < g.Lanes.Count; k++)
                 {
@@ -79,6 +78,7 @@ namespace GantryTool.Tool
                     }
 
                     float half = size * 0.5f + 0.1f;
+                    float midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size);
                     float t;
                     if (RayBox(ray, g.Start, dir, side, off - half, off + half, midY - half, midY + half, halfDepth, out t) &&
                         t < bestT)

@@ -47,7 +47,9 @@ namespace GantryTool.Render
                 own = overrides[idx].Size;
             }
 
-            size = HeadSize(own > 0f ? own : gantrySignalSize, beamDepth);
+            // A head's own size is the player's call and may exceed the truss; the gantry-wide size keeps its
+            // truss limit so existing gantries look the same.
+            size = own > 0f ? Mathf.Max(0.3f, own + Frame) : HeadSize(gantrySignalSize, beamDepth);
             float half = size * 0.5f;
             along = span > size ? Mathf.Clamp(lanes[laneIndex].Offset + nudge, half, span - half) : span * 0.5f;
         }
@@ -58,6 +60,23 @@ namespace GantryTool.Render
         }
 
         public static float HeadDepth => GantryMeshBuilder.BeamWidth + 2f * Proud;
+
+        /// <summary>
+        /// Height of a head's centre. Boxes that fit are centred in the truss; taller ones stand on its bottom edge
+        /// and rise above it, so they never reduce the road clearance.
+        /// </summary>
+        public static float HeadCentreY(float beamBottomY, float beamDepth, float size)
+        {
+            return Mathf.Max(beamBottomY + beamDepth * 0.5f, beamBottomY + 0.05f + size * 0.5f);
+        }
+
+        /// <summary>World-space centre of a head of <paramref name="size"/> at <paramref name="offset"/> along the beam.</summary>
+        public static Vector3 HeadCentre(Vector3 start, Vector3 end, float beamBottomY, float beamDepth, float offset, float size)
+        {
+            Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, offset);
+            c.y = HeadCentreY(beamBottomY, beamDepth, size);
+            return c;
+        }
 
         /// <summary>World-space centre of the head over a lane (main thread).</summary>
         public static Vector3 HeadCentre(Vector3 start, Vector3 end, float beamBottomY, float beamDepth, float offset)
@@ -120,7 +139,7 @@ namespace GantryTool.Render
 
                 float along, size;
                 HeadLayout(lanes, i, overrides, signalSize, beamDepth, span, out along, out size);
-                Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along) - origin;
+                Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along, size) - origin;
                 Vector3 r = dir * (size * 0.5f);
                 Vector3 u = Vector3.up * (size * 0.5f);
                 Vector3 s = side * (HeadDepth * 0.5f);

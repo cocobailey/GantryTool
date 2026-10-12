@@ -199,11 +199,10 @@ namespace GantryTool.Render
                 }
 
                 g.Mesh = GantryMeshBuilder.Build(g.Start, g.End, g.BeamBottomY, g.BeamDepth, g.Mesh, out g.Origin);
-                RebuildSignals(g);
-
                 Bounds b = g.Mesh.bounds;
                 b.center += g.Origin;
                 g.Bounds = b;
+                RebuildSignals(g); // may grow the bounds for boxes that rise above the truss
                 g.MeshDirty = false;
                 if (Settings.Current.DebugLogging)
                 {
@@ -227,6 +226,14 @@ namespace GantryTool.Render
                     g.SignalsDirty = false;
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
                         g.Lanes, g.Overrides, g.SignalSize, g.SignalMesh);
+                    if (g.SignalMesh != null && g.SignalMesh.vertexCount > 0 && g.Mesh != null)
+                    {
+                        Bounds b = g.Mesh.bounds;
+                        b.Encapsulate(g.SignalMesh.bounds);
+                        b.center += g.Origin;
+                        g.Bounds = b;
+                    }
+
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
                         g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, blinkLayer: true);
                 }

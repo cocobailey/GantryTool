@@ -367,7 +367,6 @@ namespace GantryTool.UI
             float nudge, size;
             GantryManager.GetHeadLayout(g, lane, out nudge, out size);
             bool ownSize = size > 0f;
-            float maxFace = g.BeamDepth - 0.1f - SignalMeshBuilder.Frame;
 
             var header = _layoutBox.AddUIComponent<UILabel>();
             header.text = "Position and size (or drag the selected head)";
@@ -385,7 +384,7 @@ namespace GantryTool.UI
                     GantryManager.SetHeadLayout(cur, l, v, sz, "signal position");
                 }
             }, 0.8f);
-            UIUtils.StyledSlider(helper, _layoutBox.width, "Box size", 0.4f, Mathf.Max(0.45f, maxFace), 0.05f,
+            UIUtils.StyledSlider(helper, _layoutBox.width, "Box size", 0.4f, Tool.GantryPlaceTool.MaxHeadFace, 0.05f,
                 ownSize ? size : g.SignalSize, " m", "0.00", ownSize, v =>
                 {
                     Gantry cur = CurrentGantry();
@@ -411,7 +410,7 @@ namespace GantryTool.UI
             });
 
             var note = _layoutBox.AddUIComponent<UILabel>();
-            note.text = "Box size is limited by the truss depth (" + g.BeamDepth.ToString("0.0") + " m); deepen the truss in the gantry panel for bigger boxes.";
+            note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
             note.textScale = 0.65f;
             note.textColor = new Color32(170, 170, 170, 255);
             note.autoSize = false;
