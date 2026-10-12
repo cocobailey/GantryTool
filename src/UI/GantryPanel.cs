@@ -234,7 +234,22 @@ namespace GantryTool.UI
                 label.text = text + ": " + value.ToString("0.##") + unit;
             }
 
+            // The options-page template is dark on this panel's background and reads as disabled. Tint it lighter
+            // with a bright handle, and keep the dark look for genuinely disabled ("Use default") sliders.
+            slider.color = new Color32(170, 182, 196, 255);
+            slider.disabledColor = new Color32(55, 58, 62, 255);
+            if (slider.thumbObject != null)
+            {
+                slider.thumbObject.color = new Color32(255, 255, 255, 255);
+                slider.thumbObject.disabledColor = new Color32(95, 98, 102, 255);
+            }
+
             slider.isEnabled = enabled;
+            if (label != null && !enabled)
+            {
+                label.textColor = new Color32(150, 150, 150, 255);
+            }
+
             return slider;
         }
 

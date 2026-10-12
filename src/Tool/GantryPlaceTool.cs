@@ -774,8 +774,7 @@ namespace GantryTool.Tool
 
             if (_dragHandle != Handle.None && selected != null)
             {
-                text = "Span " + selected.Span.ToString("F1") + " m" + (_dragInvalid ? "\nSpan must be 6–80 m" : "") +
-                       "\nRight-click to cancel";
+                text = "Span " + selected.Span.ToString("F1") + " m" + (_dragInvalid ? "\nSpan must be 6–80 m" : "");
             }
             else if (_hasStart && _hitValid)
             {
