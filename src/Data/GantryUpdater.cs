@@ -235,6 +235,7 @@ namespace GantryTool.Data
                 GantryLane a = g.Lanes[i];
                 GantryLane b = scan.Lanes[i];
                 if (a.LaneId != b.LaneId || a.TravelSign != b.TravelSign || a.Restriction != b.Restriction ||
+                    Mathf.Abs(a.SpeedKmh - b.SpeedKmh) > 0.5f ||
                     Mathf.Abs(a.Offset - b.Offset) > 0.05f)
                 {
                     return false;

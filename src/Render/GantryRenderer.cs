@@ -221,11 +221,12 @@ namespace GantryTool.Render
         {
             try
             {
+                SignAtlas atlas = GantryMaterials.AtlasFor(SignStyles.Resolve(g.Style));
                 lock (GantryManager.Lock)
                 {
                     g.SignalsDirty = false;
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.SignalSize, g.SignalMesh);
+                        g.Lanes, g.Overrides, g.SignalSize, g.SignalMesh, atlas);
                     if (g.SignalMesh != null && g.SignalMesh.vertexCount > 0 && g.Mesh != null)
                     {
                         Bounds b = g.Mesh.bounds;
@@ -235,7 +236,7 @@ namespace GantryTool.Render
                     }
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, blinkLayer: true);
+                        g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, atlas, blinkLayer: true);
                 }
 
                 if (Settings.Current.DebugLogging)

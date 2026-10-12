@@ -24,6 +24,9 @@ namespace GantryTool.Data
     ///   v3: int layoutCount, then per head: float offset, sbyte sign (identify the legacy override), float nudge,
     ///       float size. Matched to the legacy block's overrides by exact offset and sign; unmatched entries are
     ///       dropped.
+    ///   v4: int faceCount, then per head with a 1.1 sign or a value: float offset, sbyte sign, ushort minusSymbol,
+    ///       ushort minusValue, ushort plusSymbol, ushort plusValue. The legacy block holds Auto for those faces; a
+    ///       face is only restored if it's still Auto there (so a change made in 1.0 in between wins).
     ///   The positions guard against stale data: if a player saved in 1.0 (which rewrites only the legacy
     ///   block), ids may have been reused, so an entry is only applied when id AND both posts still match.
     ///   New fields are only ever appended in a new extVersion. Unknown newer versions are skipped
@@ -34,7 +37,7 @@ namespace GantryTool.Data
         public const string LegacyKey = "GantryTool";
         public const string ExtKey = "GantryTool.Ext";
         public const int LegacyVersion = 3;
-        public const int ExtVersion = 3;
+        public const int ExtVersion = 4;
 
         // ----------------------------------------------------------------- legacy block (1.0 format)
 
@@ -182,6 +185,29 @@ namespace GantryTool.Data
                         w.Write(layouts[k].Nudge);
                         w.Write(layouts[k].Size);
                     }
+
+                    var faces = new List<SignalOverride>();
+                    lock (overridesLock)
+                    {
+                        for (int k = 0; k < g.Overrides.Count; k++)
+                        {
+                            if (NeedsExtFace(g.Overrides[k]))
+                            {
+                                faces.Add(g.Overrides[k]);
+                            }
+                        }
+                    }
+
+                    w.Write(faces.Count);
+                    for (int k = 0; k < faces.Count; k++)
+                    {
+                        w.Write(faces[k].Offset);
+                        w.Write(faces[k].Sign);
+                        w.Write((ushort)faces[k].Minus);
+                        w.Write(faces[k].MinusValue);
+                        w.Write((ushort)faces[k].Plus);
+                        w.Write(faces[k].PlusValue);
+                    }
                 }
 
                 w.Flush();
@@ -256,6 +282,24 @@ namespace GantryTool.Data
                                 }
                             }
                         }
+
+                        if (version >= 4)
+                        {
+                            int faceCount = r.ReadInt32();
+                            for (int k = 0; k < faceCount; k++)
+                            {
+                                float offset = r.ReadSingle();
+                                sbyte sign = r.ReadSByte();
+                                SignalSymbol minus = ExtSymbol(r.ReadUInt16());
+                                ushort minusValue = r.ReadUInt16();
+                                SignalSymbol plus = ExtSymbol(r.ReadUInt16());
+                                ushort plusValue = r.ReadUInt16();
+                                if (g != null && Same(g.Start, start) && Same(g.End, end))
+                                {
+                                    ApplyFaces(g, offset, sign, minus, minusValue, plus, plusValue);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -268,6 +312,49 @@ namespace GantryTool.Data
         }
 
         // ----------------------------------------------------------------- helpers
+
+        /// <summary>Signs only the extension block can hold: anything newer than 1.0's, or with a value.</summary>
+        private static bool NeedsExtFace(SignalOverride o)
+        {
+            return (ushort)o.Minus > (ushort)SignalSymbol.Hidden || (ushort)o.Plus > (ushort)SignalSymbol.Hidden ||
+                   o.MinusValue != 0 || o.PlusValue != 0;
+        }
+
+        /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
+        private static SignalSymbol ExtSymbol(ushort v)
+        {
+            return v <= (ushort)SignalSymbol.SpeedLimit ? (SignalSymbol)v : SignalSymbol.Auto;
+        }
+
+        /// <summary>
+        /// Restores 1.1 signs on the matching legacy override. Only signs the legacy block cannot hold are restored, and
+        /// only onto faces still Auto there, so a face changed (or reset) in 1.0 since keeps that change.
+        /// </summary>
+        private static void ApplyFaces(Gantry g, float offset, sbyte sign, SignalSymbol minus, ushort minusValue,
+            SignalSymbol plus, ushort plusValue)
+        {
+            for (int i = 0; i < g.Overrides.Count; i++)
+            {
+                SignalOverride o = g.Overrides[i];
+                if (Mathf.Abs(o.Offset - offset) < 0.001f && o.Sign == sign)
+                {
+                    if (o.Minus == SignalSymbol.Auto && (ushort)minus > (ushort)SignalSymbol.Hidden)
+                    {
+                        o.Minus = minus;
+                        o.MinusValue = minusValue;
+                    }
+
+                    if (o.Plus == SignalSymbol.Auto && (ushort)plus > (ushort)SignalSymbol.Hidden)
+                    {
+                        o.Plus = plus;
+                        o.PlusValue = plusValue;
+                    }
+
+                    g.Overrides[i] = o;
+                    return;
+                }
+            }
+        }
 
         /// <summary>Puts a saved head layout on the matching legacy override (same offset and direction).</summary>
         private static void ApplyLayout(Gantry g, float offset, sbyte sign, float nudge, float size)
@@ -309,13 +396,13 @@ namespace GantryTool.Data
         /// <summary>The legacy block only knows symbols 1.0 knows (0-7); anything newer is written as Auto.</summary>
         private static SignalSymbol LegacySymbol(SignalSymbol s)
         {
-            return (byte)s <= (byte)SignalSymbol.Hidden ? s : SignalSymbol.Auto;
+            return (ushort)s <= (ushort)SignalSymbol.Hidden ? s : SignalSymbol.Auto;
         }
 
         private static SignalSymbol ReadSymbol(BinaryReader r)
         {
             byte b = r.ReadByte();
-            return b <= (byte)SignalSymbol.Hidden ? (SignalSymbol)b : SignalSymbol.Auto;
+            return b <= (ushort)SignalSymbol.Hidden ? (SignalSymbol)b : SignalSymbol.Auto;
         }
 
         private static void WriteVector(BinaryWriter w, Vector3 v)

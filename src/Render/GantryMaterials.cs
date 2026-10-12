@@ -30,10 +30,11 @@ namespace GantryTool.Render
         /// <summary>Sign textures, material and picker previews of one style; built when first used.</summary>
         private sealed class StyleAssets
         {
+            public SignAtlas Atlas;
             public Material Signal;
             public Texture2D Main;
             public Texture2D Aci;
-            public readonly Dictionary<SignalSymbol, Texture2D> Previews = new Dictionary<SignalSymbol, Texture2D>();
+            public readonly Dictionary<int, Texture2D> Previews = new Dictionary<int, Texture2D>();
         }
 
         private static readonly Dictionary<SignStyle, StyleAssets> Styles = new Dictionary<SignStyle, StyleAssets>();
@@ -112,12 +113,24 @@ namespace GantryTool.Render
             return a != null ? a.Signal : Signal;
         }
 
-        /// <summary>Picker preview of a sign in a style, or null.</summary>
-        public static Texture2D Preview(SignStyle style, SignalSymbol symbol)
+        /// <summary>The atlas layout of a style (always available, even before materials are ready).</summary>
+        public static SignAtlas AtlasFor(SignStyle style)
+        {
+            StyleAssets a = Assets(style);
+            return a != null ? a.Atlas : SignAtlas.For(style);
+        }
+
+        /// <summary>Picker preview of a resolved sign in a style, or null.</summary>
+        public static Texture2D Preview(SignStyle style, FaceSign sign)
         {
             StyleAssets a = Assets(style);
             Texture2D tex;
-            return a != null && a.Previews.TryGetValue(symbol, out tex) ? tex : null;
+            return a != null && a.Previews.TryGetValue(a.Atlas.TileOf(sign), out tex) ? tex : null;
+        }
+
+        public static Texture2D Preview(SignStyle style, SignalSymbol symbol)
+        {
+            return Preview(style, new FaceSign(symbol, 0));
         }
 
         private static StyleAssets Assets(SignStyle style)
@@ -147,8 +160,8 @@ namespace GantryTool.Render
 
         private static StyleAssets BuildStyle(SignStyle style)
         {
-            var a = new StyleAssets();
-            SignalTextures.Build(style, out a.Main, out a.Aci, a.Previews);
+            var a = new StyleAssets { Atlas = SignAtlas.For(style) };
+            SignalTextures.Build(a.Atlas, out a.Main, out a.Aci, a.Previews);
             a.Signal = new Material(_shader) { name = "GantrySignal" + style };
             a.Signal.SetTexture("_MainTex", a.Main);
             a.Signal.SetTexture("_XYSMap", _xysTex);

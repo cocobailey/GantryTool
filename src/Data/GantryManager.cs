@@ -131,90 +131,111 @@ namespace GantryTool.Data
         /// <summary>The manual symbols of a lane's two faces (Auto when none are set).</summary>
         public static void GetFaces(Gantry g, int laneIndex, out SignalSymbol minus, out SignalSymbol plus)
         {
-            minus = SignalSymbol.Auto;
-            plus = SignalSymbol.Auto;
+            FaceSign m, p;
+            GetFaces(g, laneIndex, out m, out p);
+            minus = m.Symbol;
+            plus = p.Symbol;
+        }
+
+        /// <summary>The manual signs (with values) of a lane's two faces (Auto when none are set).</summary>
+        public static void GetFaces(Gantry g, int laneIndex, out FaceSign minus, out FaceSign plus)
+        {
+            minus = new FaceSign(SignalSymbol.Auto, 0);
+            plus = new FaceSign(SignalSymbol.Auto, 0);
             lock (Lock)
             {
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
                 if (idx >= 0)
                 {
-                    minus = g.Overrides[idx].Minus;
-                    plus = g.Overrides[idx].Plus;
+                    minus = g.Overrides[idx].MinusFace;
+                    plus = g.Overrides[idx].PlusFace;
                 }
             }
         }
 
         /// <summary>Sets one face of a lane, keeping the other face as it is.</summary>
-        public static void SetFace(Gantry g, int laneIndex, bool minusFace, SignalSymbol symbol)
+        public static void SetFace(Gantry g, int laneIndex, bool minusFace, FaceSign sign)
         {
             if (laneIndex < 0 || laneIndex >= g.Lanes.Count)
             {
                 return;
             }
 
-            SignalSymbol minus, plus;
+            FaceSign minus, plus;
             GetFaces(g, laneIndex, out minus, out plus);
-            if (SignalRules.IsHidden(minus, plus))
+            if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
             {
                 // Picking a sign on a removed head brings it back with the other face on Auto.
-                minus = SignalSymbol.Auto;
-                plus = SignalSymbol.Auto;
+                minus = plus = new FaceSign(SignalSymbol.Auto, 0);
             }
 
-            SetOverride(g, laneIndex, minusFace ? symbol : minus, minusFace ? plus : symbol);
+            UndoStack.PushModified(g, "sign", coalesce: false);
+            SetFacesCore(g, laneIndex, minusFace ? sign : minus, minusFace ? plus : sign, true);
         }
 
         /// <summary>
-        /// "Apply to": sets <paramref name="symbol"/> on the same physical face of every lane, or on both faces of
+        /// "Apply to": sets <paramref name="sign"/> on the same physical face of every lane, or on both faces of
         /// every lane, as one undo step. Lanes whose head was removed are left alone. Returns lanes changed.
         /// </summary>
-        public static int ApplyToAllLanes(Gantry g, bool minusFace, SignalSymbol symbol, bool bothFaces)
+        public static int ApplyToAllLanes(Gantry g, bool minusFace, FaceSign sign, bool bothFaces)
         {
             UndoStack.PushModified(g, "signs on all lanes", coalesce: false);
             int changed = 0;
             for (int i = 0; i < g.Lanes.Count; i++)
             {
-                SignalSymbol minus, plus;
+                FaceSign minus, plus;
                 GetFaces(g, i, out minus, out plus);
-                if (SignalRules.IsHidden(minus, plus))
+                if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue;
                 }
 
                 if (bothFaces || minusFace)
                 {
-                    minus = symbol;
+                    minus = sign;
                 }
 
                 if (bothFaces || !minusFace)
                 {
-                    plus = symbol;
+                    plus = sign;
                 }
 
-                SetOverrideCore(g, i, minus, plus, false);
+                SetFacesCore(g, i, minus, plus, false);
                 changed++;
             }
 
             UndoStack.DiscardIfUnchanged(g);
-            Log.Info("Applied " + symbol + " to " + (bothFaces ? "both faces" : "one face") + " of " + changed +
-                     " lanes on gantry #" + g.Id);
+            Log.Info("Applied " + sign.Symbol + (sign.Value != 0 ? " " + sign.Value : "") + " to " +
+                     (bothFaces ? "both faces" : "one face") + " of " + changed + " lanes on gantry #" + g.Id);
             return changed;
         }
 
         private static void SetOverrideCore(Gantry g, int laneIndex, SignalSymbol minus, SignalSymbol plus, bool log)
         {
+            SetFacesCore(g, laneIndex, new FaceSign(minus, 0), new FaceSign(plus, 0), log);
+        }
+
+        private static void SetFacesCore(Gantry g, int laneIndex, FaceSign minus, FaceSign plus, bool log)
+        {
             float offset = UpdateEntry(g, laneIndex, o =>
             {
-                o.Minus = minus;
-                o.Plus = plus;
+                o.Minus = minus.Symbol;
+                o.MinusValue = minus.Symbol == SignalSymbol.SpeedLimit ? minus.Value : (ushort)0;
+                o.Plus = plus.Symbol;
+                o.PlusValue = plus.Symbol == SignalSymbol.SpeedLimit ? plus.Value : (ushort)0;
                 return o;
             });
 
             if (log)
             {
-                Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + minus +
-                         ", +side face=" + plus + " (" + g.Overrides.Count + " overrides on this gantry)");
+                Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + Describe(minus) +
+                         ", +side face=" + Describe(plus) + " (" + g.Overrides.Count + " overrides on this gantry)");
             }
+        }
+
+        private static string Describe(FaceSign f)
+        {
+            return f.Symbol == SignalSymbol.SpeedLimit ? "Speed " + f.Value + " km/h" : f.Symbol.ToString();
         }
 
         /// <summary>

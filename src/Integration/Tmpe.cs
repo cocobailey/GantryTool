@@ -63,6 +63,34 @@ namespace GantryTool.Integration
             _active = false;
         }
 
+        /// <summary>
+        /// The lane's effective speed limit in km/h per TM:PE, or NaN when TM:PE isn't enabled (then the caller uses the
+        /// road's own limit). Independent of the restrictions option. Main thread.
+        /// </summary>
+        public static float GetSpeedKmh(uint laneId, NetInfo.Lane laneInfo)
+        {
+            if (!_active)
+            {
+                return float.NaN;
+            }
+
+            try
+            {
+                return TmpeImpl.GetSpeedLimit(laneId, laneInfo) * 50f;
+            }
+            catch (Exception e)
+            {
+                if (!_errorLogged)
+                {
+                    _errorLogged = true;
+                    Log.Error("TM:PE speed limit lookup failed; disabling TM:PE integration", e);
+                }
+
+                _active = false;
+                return float.NaN;
+            }
+        }
+
         /// <summary>Restriction of one lane per TM:PE (None when TM:PE is off). Main thread.</summary>
         public static LaneRestriction GetRestriction(ushort segmentId, NetInfo info, int laneIndex, NetInfo.Lane laneInfo)
         {

@@ -47,6 +47,13 @@ namespace GantryTool.Integration
             return LaneRestriction.None;
         }
 
+        /// <summary>Game speed units (1.0 = 50 km/h): the custom limit if one is set, else the lane's default.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static float GetSpeedLimit(uint laneId, NetInfo.Lane laneInfo)
+        {
+            return Implementations.ManagerFactory.SpeedLimitManager.GetGameSpeedLimit(laneId, laneInfo);
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void Subscribe(Action<ushort> onSegmentModified)
         {

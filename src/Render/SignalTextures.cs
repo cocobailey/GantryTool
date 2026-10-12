@@ -5,18 +5,17 @@ using UnityEngine;
 namespace GantryTool.Render
 {
     /// <summary>
-    /// Generates the signal atlas in code: 8 square tiles side by side, one per <see cref="SignalSymbol"/>
-    /// (tile = symbol - 1) plus a plain housing tile. Faces are dot-matrix: a grey frame, a black face and a
-    /// grid of round LEDs; symbol LEDs are lit (and flagged as illumination in the ACI map), the rest are
-    /// drawn as faint unlit dots.
+    /// Generates a style's sign atlas in code (layout in <see cref="SignAtlas"/>). Faces are dot-matrix: a grey frame,
+    /// a black face and a grid of round LEDs; lit LEDs are flagged as illumination in the ACI map, the rest are
+    /// drawn as faint unlit dots. Lane signs use an 18x18 grid (as in 1.0); speed limits a finer one so numbers
+    /// stay readable inside the ring.
     /// </summary>
     public static class SignalTextures
     {
-        public const int Tile = 256;
-        public const int Tiles = 8;
-        public const int HousingTile = 6;
+        private const int Tile = SignAtlas.Tile;
 
-        private const int Dots = 18;             // LED grid is Dots x Dots
+        private const int LaneDots = 18;         // 1.0 grid, unchanged
+        private const int SpeedDots = 40;
         private const float FaceMin = 0.08f;     // LED area inside the frame, tile-normalised
         private const float FaceMax = 0.92f;
         private const float FrameWidth = 0.035f; // grey frame around the black face
@@ -36,154 +35,251 @@ namespace GantryTool.Render
         private static readonly Color Red = new Color(1f, 0.15f, 0.1f, 1f);
         private static readonly Color Yellow = new Color(1f, 0.82f, 0.1f, 1f);
         private static readonly Color White = new Color(1f, 1f, 1f, 1f);
-
-        /// <summary>Atlas tile for a face symbol (Auto falls back to Blank; never drawn in practice).</summary>
-        public static int TileFor(SignalSymbol symbol)
-        {
-            int s = (int)symbol;
-            return s >= 1 && s <= 6 ? s - 1 : (int)SignalSymbol.Blank - 1;
-        }
-
-        /// <summary>UV rect of a tile (x, y, width, height).</summary>
-        public static Rect TileRect(int tile)
-        {
-            float w = 1f / Tiles;
-            return new Rect(tile * w, 0f, w, 1f);
-        }
-
-        /// <summary>
-        /// Builds the atlas for a style, plus a small preview texture per pickable sign for the signal panel.
-        /// Every style draws the European signs for now; other looks come with their styles.
-        /// </summary>
-        public static void Build(SignStyle style, out Texture2D main, out Texture2D aci, Dictionary<SignalSymbol, Texture2D> previews)
-        {
-            Build(out main, out aci);
-            if (previews != null)
-            {
-                BuildPreviews(main, previews);
-            }
-        }
+        private static readonly Color Clear = new Color(0f, 0f, 0f, 0f); // "not lit" marker in LED colour grids
 
         private const int PreviewMip = 2; // 256 px tiles -> 64 px previews
 
-        /// <summary>Cuts each sign's tile out of a small mip level (same bright mips the game sees at a distance).</summary>
-        private static void BuildPreviews(Texture2D main, Dictionary<SignalSymbol, Texture2D> previews)
+        /// <summary>
+        /// Builds a style's atlas, plus a 64 px preview per face tile (keyed by tile index) for the signal panel.
+        /// </summary>
+        public static void Build(SignAtlas atlas, out Texture2D main, out Texture2D aci, Dictionary<int, Texture2D> previews)
+        {
+            int width = atlas.Width;
+            int height = atlas.Height;
+            var mainPx = new Color[width * height];
+            var aciPx = new Color[width * height];
+            for (int i = 0; i < mainPx.Length; i++)
+            {
+                mainPx[i] = FaceColor;
+                aciPx[i] = new Color(0f, 0f, 0f, 1f);
+            }
+
+            for (int t = 0; t < atlas.Tiles.Count; t++)
+            {
+                PaintTile(atlas.Tiles[t], mainPx, aciPx, width, (t % SignAtlas.Columns) * Tile, (t / SignAtlas.Columns) * Tile);
+            }
+
+            main = new Texture2D(width, height, TextureFormat.ARGB32, true, false) { name = "GantrySignalMain" + atlas.Style };
+            main.wrapMode = TextureWrapMode.Clamp;
+            main.filterMode = FilterMode.Trilinear;
+            main.anisoLevel = 4;
+            SetBrightMips(main, mainPx, width, height);
+
+            aci = new Texture2D(width, height, TextureFormat.ARGB32, true, true) { name = "GantrySignalACI" + atlas.Style };
+            aci.wrapMode = TextureWrapMode.Clamp;
+            aci.filterMode = FilterMode.Trilinear;
+            SetBrightMips(aci, aciPx, width, height);
+
+            if (previews != null)
+            {
+                BuildPreviews(atlas, main, previews);
+            }
+        }
+
+        // ------------------------------------------------------------------------------ painting
+
+        /// <summary>Paints one tile with its bottom-left corner at pixel (x0, y0).</summary>
+        private static void PaintTile(TileSpec spec, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        {
+            if (spec.Kind == TileKind.Housing || spec.Kind == TileKind.Empty)
+            {
+                Color fill = spec.Kind == TileKind.Housing ? HousingColor : FaceColor;
+                for (int y = 0; y < Tile; y++)
+                {
+                    for (int x = 0; x < Tile; x++)
+                    {
+                        mainPx[(y0 + y) * width + x0 + x] = fill;
+                    }
+                }
+
+                return;
+            }
+
+            // Decide once per LED which ones are lit and in what colour.
+            int dots = spec.Kind == TileKind.Speed ? SpeedDots : LaneDots;
+            var led = new Color[dots, dots];
+            for (int dy = 0; dy < dots; dy++)
+            {
+                for (int dx = 0; dx < dots; dx++)
+                {
+                    led[dx, dy] = LedColor(spec, (dx + 0.5f) / dots, (dy + 0.5f) / dots, dots);
+                }
+            }
+
+            float texelsPerDot = (float)Tile * (FaceMax - FaceMin) / dots;
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    float u = (x + 0.5f) / Tile;
+                    float v = (y + 0.5f) / Tile;
+                    Color c;
+                    float glow = 0f;
+
+                    if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
+                    {
+                        c = FrameColor;
+                    }
+                    else
+                    {
+                        c = FaceColor;
+                        float gu = (u - FaceMin) / (FaceMax - FaceMin) * dots;
+                        float gv = (v - FaceMin) / (FaceMax - FaceMin) * dots;
+                        int dx = Mathf.FloorToInt(gu);
+                        int dy = Mathf.FloorToInt(gv);
+                        if (dx >= 0 && dx < dots && dy >= 0 && dy < dots)
+                        {
+                            float fx = gu - dx - 0.5f;
+                            float fy = gv - dy - 0.5f;
+                            float dist = Mathf.Sqrt(fx * fx + fy * fy);
+                            // Soft circular edge about one texel wide.
+                            float cover = Mathf.Clamp01((DotRadius - dist) * texelsPerDot + 0.5f);
+                            if (cover > 0f)
+                            {
+                                bool on = led[dx, dy].a > 0f;
+                                Color dot = on ? led[dx, dy] : UnlitDot;
+                                c = Color.Lerp(FaceColor, dot, cover);
+                                if (on)
+                                {
+                                    glow = cover;
+                                }
+                            }
+                        }
+                    }
+
+                    int i = (y0 + y) * width + x0 + x;
+                    mainPx[i] = c;
+                    // ACI: R = 1 - alpha (opaque), G = 1 - colour mask (tintable), B = illumination.
+                    aciPx[i] = new Color(0f, 0f, glow, 1f);
+                }
+            }
+        }
+
+        /// <summary>Colour of the LED at grid-normalised (u, v) (v = 0 is the bottom row), or Clear when unlit.</summary>
+        private static Color LedColor(TileSpec spec, float u, float v, int dots)
+        {
+            if (spec.Kind == TileKind.Lane)
+            {
+                return Shape(spec.Symbol, u, v) ? SymbolColor(spec.Symbol) : Clear;
+            }
+
+            if (spec.Kind == TileKind.Speed)
+            {
+                return SpeedRing(spec.Shown, u, v, 1f / dots);
+            }
+
+            return Clear;
+        }
+
+        // ------------------------------------------------------------------------------ speed limits
+
+        /// <summary>European-style speed limit: red ring, white digits.</summary>
+        private static Color SpeedRing(int value, float u, float v, float pitch)
+        {
+            float du = u - 0.5f, dv = v - 0.5f;
+            float r = Mathf.Sqrt(du * du + dv * dv);
+            if (Mathf.Abs(r - 0.445f) <= 0.035f)
+            {
+                return Red;
+            }
+
+            return Digits(value.ToString(), u, v, 0.5f, 0.5f, 0.6f, 0.42f, pitch) ? White : Clear;
+        }
+
+        // Block digits on a 4 x 6 grid, as polylines (x, y pairs; a NaN pair starts a new stroke).
+        private static readonly float[][] DigitStrokes =
+        {
+            new float[] { 0, 0, 4, 0, 4, 6, 0, 6, 0, 0 },                                  // 0
+            new float[] { 2, 0, 2, 6, float.NaN, float.NaN, 0.8f, 4.8f, 2, 6 },            // 1
+            new float[] { 0, 6, 4, 6, 4, 3, 0, 3, 0, 0, 4, 0 },                            // 2
+            new float[] { 0, 6, 4, 6, 4, 0, 0, 0, float.NaN, float.NaN, 1, 3, 4, 3 },      // 3
+            new float[] { 0, 6, 0, 2.5f, 4, 2.5f, float.NaN, float.NaN, 3, 4.5f, 3, 0 },   // 4
+            new float[] { 4, 6, 0, 6, 0, 3, 4, 3, 4, 0, 0, 0 },                            // 5
+            new float[] { 4, 6, 0, 6, 0, 0, 4, 0, 4, 3, 0, 3 },                            // 6
+            new float[] { 0, 6, 4, 6, 1.6f, 0 },                                           // 7
+            new float[] { 0, 0, 4, 0, 4, 6, 0, 6, 0, 0, float.NaN, float.NaN, 0, 3, 4, 3 }, // 8
+            new float[] { 4, 3, 0, 3, 0, 6, 4, 6, 4, 0, 0, 0 }                             // 9
+        };
+
+        /// <summary>
+        /// Whether (u, v) lies on <paramref name="text"/> drawn in block digits centred at (cx, cy) and fitting
+        /// maxW x maxH. Strokes are at least about one LED wide so small numbers don't break up.
+        /// </summary>
+        private static bool Digits(string text, float u, float v, float cx, float cy, float maxW, float maxH, float pitch)
+        {
+            // Three-digit numbers use narrower digits so "100"/"130" fit the ring like on real signs.
+            bool narrow = text.Length >= 3;
+            float digitW = narrow ? 3.2f : 4f, gap = narrow ? 1.2f : 1.6f;
+            const float digitH = 6f;
+            float squeeze = digitW / 4f;   // glyphs are drawn on a 4-unit-wide grid
+            float totalW = text.Length * digitW + (text.Length - 1) * gap;
+            float scale = Mathf.Min(maxW / totalW, maxH / digitH);
+            float half = Mathf.Max(0.34f * scale, 0.55f * pitch);
+            float left = cx - totalW * scale * 0.5f;
+            float bottom = cy - digitH * scale * 0.5f;
+
+            for (int c = 0; c < text.Length; c++)
+            {
+                int d = text[c] - '0';
+                if (d < 0 || d > 9)
+                {
+                    continue;
+                }
+
+                float ox = left + c * (digitW + gap) * scale;
+                float[] pts = DigitStrokes[d];
+                for (int k = 0; k + 3 < pts.Length; k += 2)
+                {
+                    if (float.IsNaN(pts[k]) || float.IsNaN(pts[k + 2]))
+                    {
+                        continue;
+                    }
+
+                    if (Segment(u, v, ox + pts[k] * squeeze * scale, bottom + pts[k + 1] * scale,
+                            ox + pts[k + 2] * squeeze * scale, bottom + pts[k + 3] * scale, half))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // ------------------------------------------------------------------------------ previews and mips
+
+        /// <summary>Cuts each face tile out of a small mip level (same bright mips the game sees at a distance).</summary>
+        private static void BuildPreviews(SignAtlas atlas, Texture2D main, Dictionary<int, Texture2D> previews)
         {
             Color[] level = main.GetPixels(PreviewMip);
             int w = Mathf.Max(1, main.width >> PreviewMip);
             int tile = Mathf.Max(1, Tile >> PreviewMip);
-            for (int s = (int)SignalSymbol.Arrow; s <= (int)SignalSymbol.Blank; s++)
+            for (int t = 0; t < atlas.Tiles.Count; t++)
             {
-                var symbol = (SignalSymbol)s;
-                int x0 = TileFor(symbol) * tile;
+                TileKind kind = atlas.Tiles[t].Kind;
+                if (kind == TileKind.Housing || kind == TileKind.Empty)
+                {
+                    continue;
+                }
+
+                int x0 = (t % SignAtlas.Columns) * tile;
+                int y0 = (t / SignAtlas.Columns) * tile;
                 var px = new Color[tile * tile];
                 for (int y = 0; y < tile; y++)
                 {
                     for (int x = 0; x < tile; x++)
                     {
-                        px[y * tile + x] = level[y * w + x0 + x];
+                        px[y * tile + x] = level[(y0 + y) * w + x0 + x];
                     }
                 }
 
-                var tex = new Texture2D(tile, tile, TextureFormat.ARGB32, false, false) { name = "GantrySignPreview" + s };
+                var tex = new Texture2D(tile, tile, TextureFormat.ARGB32, false, false) { name = "GantrySignPreview" + t };
                 tex.wrapMode = TextureWrapMode.Clamp;
                 tex.filterMode = FilterMode.Bilinear;
                 tex.SetPixels(px);
                 tex.Apply(false);
-                previews[symbol] = tex;
+                previews[t] = tex;
             }
-        }
-
-        public static void Build(out Texture2D main, out Texture2D aci)
-        {
-            int width = Tile * Tiles;
-            var mainPx = new Color[width * Tile];
-            var aciPx = new Color[width * Tile];
-
-            for (int tile = 0; tile < Tiles; tile++)
-            {
-                SignalSymbol symbol = (SignalSymbol)(tile + 1);
-                bool isFace = tile < HousingTile;
-                Color lit = SymbolColor(symbol);
-
-                // Decide once per LED which ones are lit.
-                var on = new bool[Dots, Dots];
-                if (isFace)
-                {
-                    for (int dy = 0; dy < Dots; dy++)
-                    {
-                        for (int dx = 0; dx < Dots; dx++)
-                        {
-                            on[dx, dy] = Shape(symbol, (dx + 0.5f) / Dots, (dy + 0.5f) / Dots);
-                        }
-                    }
-                }
-
-                for (int y = 0; y < Tile; y++)
-                {
-                    for (int x = 0; x < Tile; x++)
-                    {
-                        int i = y * width + tile * Tile + x;
-                        if (!isFace)
-                        {
-                            mainPx[i] = tile == HousingTile ? HousingColor : FaceColor;
-                            aciPx[i] = new Color(0f, 0f, 0f, 1f);
-                            continue;
-                        }
-
-                        float u = (x + 0.5f) / Tile;
-                        float v = (y + 0.5f) / Tile;
-                        Color c;
-                        float glow = 0f;
-
-                        if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
-                        {
-                            c = FrameColor;
-                        }
-                        else
-                        {
-                            c = FaceColor;
-                            float gu = (u - FaceMin) / (FaceMax - FaceMin) * Dots;
-                            float gv = (v - FaceMin) / (FaceMax - FaceMin) * Dots;
-                            int dx = Mathf.FloorToInt(gu);
-                            int dy = Mathf.FloorToInt(gv);
-                            if (dx >= 0 && dx < Dots && dy >= 0 && dy < Dots)
-                            {
-                                float fx = gu - dx - 0.5f;
-                                float fy = gv - dy - 0.5f;
-                                float dist = Mathf.Sqrt(fx * fx + fy * fy);
-                                // Soft circular edge about one texel wide.
-                                float texelsPerDot = (float)Tile * (FaceMax - FaceMin) / Dots;
-                                float cover = Mathf.Clamp01((DotRadius - dist) * texelsPerDot + 0.5f);
-                                if (cover > 0f)
-                                {
-                                    Color dot = on[dx, dy] ? lit : UnlitDot;
-                                    c = Color.Lerp(FaceColor, dot, cover);
-                                    if (on[dx, dy])
-                                    {
-                                        glow = cover;
-                                    }
-                                }
-                            }
-                        }
-
-                        mainPx[i] = c;
-                        // ACI: R = 1 - alpha (opaque), G = 1 - colour mask (tintable), B = illumination.
-                        aciPx[i] = new Color(0f, 0f, glow, 1f);
-                    }
-                }
-            }
-
-            main = new Texture2D(width, Tile, TextureFormat.ARGB32, true, false) { name = "GantrySignalMain" };
-            main.wrapMode = TextureWrapMode.Clamp;
-            main.filterMode = FilterMode.Trilinear;
-            main.anisoLevel = 4;
-            SetBrightMips(main, mainPx, width, Tile);
-
-            aci = new Texture2D(width, Tile, TextureFormat.ARGB32, true, true) { name = "GantrySignalACI" };
-            aci.wrapMode = TextureWrapMode.Clamp;
-            aci.filterMode = FilterMode.Trilinear;
-            SetBrightMips(aci, aciPx, width, Tile);
         }
 
         /// <summary>Fills every mip level, each texel a blend of its 2x2 parent block's average and brightest texel.</summary>
@@ -222,6 +318,8 @@ namespace GantryTool.Render
         {
             return a.r + a.g + a.b >= b.r + b.g + b.b ? a : b;
         }
+
+        // ------------------------------------------------------------------------------ 1.0 lane signs (unchanged)
 
         private static Color SymbolColor(SignalSymbol s)
         {
@@ -290,12 +388,19 @@ namespace GantryTool.Render
         /// <summary>True if (u, v) lies within <see cref="Stroke"/> of the line segment a-b.</summary>
         private static bool Stroke1(float u, float v, float ax, float ay, float bx, float by)
         {
+            return Segment(u, v, ax, ay, bx, by, Stroke);
+        }
+
+        /// <summary>True if (u, v) lies within <paramref name="half"/> of the line segment a-b.</summary>
+        private static bool Segment(float u, float v, float ax, float ay, float bx, float by, float half)
+        {
             float dx = bx - ax;
             float dy = by - ay;
-            float t = Mathf.Clamp01(((u - ax) * dx + (v - ay) * dy) / (dx * dx + dy * dy));
+            float len2 = dx * dx + dy * dy;
+            float t = len2 > 0f ? Mathf.Clamp01(((u - ax) * dx + (v - ay) * dy) / len2) : 0f;
             float px = ax + t * dx - u;
             float py = ay + t * dy - v;
-            return px * px + py * py <= Stroke * Stroke;
+            return px * px + py * py <= half * half;
         }
     }
 }

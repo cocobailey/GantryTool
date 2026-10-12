@@ -1,10 +1,14 @@
 using System.Collections.Generic;
 using GantryTool.Detect;
+using UnityEngine;
 
 namespace GantryTool.Data
 {
-    /// <summary>What one face of a signal head shows. Values are saved — append only, never renumber.</summary>
-    public enum SignalSymbol : byte
+    /// <summary>
+    /// What one face of a signal head shows. Values are saved — append only, never renumber. 0-7 are the 1.0 signs
+    /// (the only ones the 1.0-format save block can hold); everything after lives in the extension block.
+    /// </summary>
+    public enum SignalSymbol : ushort
     {
         Auto = 0,        // overrides only: use the detected direction
         Arrow = 1,       // green down arrow: lane open
@@ -13,7 +17,29 @@ namespace GantryTool.Data
         MergeRight = 4,  // yellow arrow down-right
         Reserved = 5,    // white diamond: reserved lane
         Blank = 6,       // all LEDs off
-        Hidden = 7       // overrides only, set on both faces: no signal head at all (removed by the player)
+        Hidden = 7,      // overrides only, set on both faces: no signal head at all (removed by the player)
+
+        // Added in 1.1 (extension block only)
+        SpeedAuto = 8,   // overrides only: the speed limit of the lane underneath (TM:PE-aware)
+        SpeedLimit = 9   // speed limit; value = km/h
+    }
+
+    /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
+    public struct FaceSign
+    {
+        public SignalSymbol Symbol;
+        public ushort Value;
+
+        public FaceSign(SignalSymbol symbol, ushort value)
+        {
+            Symbol = symbol;
+            Value = value;
+        }
+
+        public bool Equals(FaceSign o)
+        {
+            return o.Symbol == Symbol && o.Value == Value;
+        }
     }
 
     /// <summary>
@@ -31,6 +57,13 @@ namespace GantryTool.Data
 
         /// <summary>TravelSign of the lane when the override was set; breaks ties between nearby lanes.</summary>
         public sbyte Sign;
+
+        // Values of the faces' signs (km/h for SpeedLimit); extension block only.
+        public ushort MinusValue;
+        public ushort PlusValue;
+
+        public FaceSign MinusFace => new FaceSign(Minus, MinusValue);
+        public FaceSign PlusFace => new FaceSign(Plus, PlusValue);
 
         // Per-head layout (extension block only; 1.0 ignores them). 0 = default for both.
         public float Nudge;   // metres along the beam from the lane centre
@@ -58,6 +91,8 @@ namespace GantryTool.Data
                 case SignalSymbol.Reserved: return "D";
                 case SignalSymbol.Blank: return "-";
                 case SignalSymbol.Hidden: return "x";
+                case SignalSymbol.SpeedAuto: return "SA";
+                case SignalSymbol.SpeedLimit: return "S";
                 default: return "?";
             }
         }
@@ -74,6 +109,8 @@ namespace GantryTool.Data
                 case SignalSymbol.Reserved: return "Diamond";
                 case SignalSymbol.Blank: return "Blank";
                 case SignalSymbol.Hidden: return "Removed";
+                case SignalSymbol.SpeedAuto: return "Speed limit (road)";
+                case SignalSymbol.SpeedLimit: return "Speed limit";
                 default: return "Auto";
             }
         }
@@ -204,6 +241,63 @@ namespace GantryTool.Data
         public static bool IsHidden(SignalSymbol minus, SignalSymbol plus)
         {
             return minus == SignalSymbol.Hidden && plus == SignalSymbol.Hidden;
+        }
+
+        /// <summary>
+        /// Final signs (with values) for a lane: auto, with any override applied per face. Auto speed becomes the
+        /// lane's actual speed limit.
+        /// </summary>
+        public static void ResolveFaces(List<GantryLane> lanes, int laneIndex, List<SignalOverride> overrides,
+            out FaceSign minus, out FaceSign plus)
+        {
+            GantryLane lane = lanes[laneIndex];
+            SignalSymbol am, ap;
+            Auto(lane.TravelSign, lane.Restriction, out am, out ap);
+            minus = new FaceSign(am, 0);
+            plus = new FaceSign(ap, 0);
+            int idx = FindOverride(lanes, laneIndex, overrides);
+            if (idx >= 0)
+            {
+                if (overrides[idx].Minus != SignalSymbol.Auto)
+                {
+                    minus = overrides[idx].MinusFace;
+                }
+
+                if (overrides[idx].Plus != SignalSymbol.Auto)
+                {
+                    plus = overrides[idx].PlusFace;
+                }
+            }
+
+            minus = ResolveSpeed(minus, lane);
+            plus = ResolveSpeed(plus, lane);
+        }
+
+        private static FaceSign ResolveSpeed(FaceSign f, GantryLane lane)
+        {
+            if (f.Symbol != SignalSymbol.SpeedAuto)
+            {
+                return f;
+            }
+
+            int kmh = Mathf.RoundToInt(lane.SpeedKmh);
+            return new FaceSign(SignalSymbol.SpeedLimit, (ushort)Mathf.Clamp(kmh, 0, 999));
+        }
+
+        /// <summary>Short name with value, e.g. "Speed 80 km/h".</summary>
+        public static string PlainName(FaceSign f, bool mph)
+        {
+            if (f.Symbol == SignalSymbol.SpeedLimit)
+            {
+                return "Speed " + SpeedUnits.Display(f.Value, mph) + (mph ? " mph" : " km/h");
+            }
+
+            if (f.Symbol == SignalSymbol.SpeedAuto)
+            {
+                return "Road speed";
+            }
+
+            return PlainName(f.Symbol);
         }
 
         /// <summary>Final symbols for a lane: auto, with any override applied per face.</summary>

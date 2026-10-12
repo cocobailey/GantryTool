@@ -44,6 +44,9 @@ namespace GantryTool.Detect
 
         /// <summary>TM:PE restriction of the lane this crossing belongs to (None without TM:PE).</summary>
         public LaneRestriction Restriction;
+
+        /// <summary>Speed limit of the lane in km/h (TM:PE's if it's enabled, else the road's own).</summary>
+        public float SpeedKmh;
     }
 
     /// <summary>
@@ -244,6 +247,13 @@ namespace GantryTool.Detect
             }
         }
 
+        /// <summary>The lane's speed limit in km/h: TM:PE's effective limit when TM:PE is enabled, else the road's.</summary>
+        private static float LaneSpeedKmh(uint laneId, NetInfo.Lane laneInfo)
+        {
+            float tmpe = Integration.Tmpe.GetSpeedKmh(laneId, laneInfo);
+            return float.IsNaN(tmpe) ? laneInfo.m_speedLimit * 50f : tmpe;
+        }
+
         /// <summary>Vehicle or transport lane that carries cars.</summary>
         public static bool IsCarLane(NetInfo.Lane lane)
         {
@@ -374,7 +384,8 @@ namespace GantryTool.Detect
                 TravelSign = TravelSign(laneInfo, invert, tan, gSide),
                 Width = laneInfo.m_width,
                 Extension = extension,
-                Restriction = restriction
+                Restriction = restriction,
+                SpeedKmh = LaneSpeedKmh(laneId, laneInfo)
             });
         }
 

@@ -40,6 +40,11 @@ namespace GantryTool.Tests
             Run("1.0 reads heads with only a position/size (Auto signs)", Loader10ReadsLayoutOnlyHeads);
             Run("head layout without a matching sign entry is dropped", UnmatchedLayoutDropped);
             Run("out-of-range head layout falls back to default", InsaneLayoutIgnored);
+            Run("speed limit faces round-trip (extension v4)", SpeedFacesRoundTrip);
+            Run("1.0 reads speed limit faces as Auto", Loader10ReadsSpeedAsAuto);
+            Run("a face changed in 1.0 keeps that change", FaceChangedIn10Wins);
+            Run("a plain face reset in 1.0 is not undone", PlainFaceResetIn10Kept);
+            Run("unknown future signs load as Auto", UnknownExtSymbolIsAuto);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -366,6 +371,87 @@ namespace GantryTool.Tests
             gantries[0].Overrides[0] = o;
             List<Gantry> loaded = SaveAndLoad(gantries, true);
             Check(loaded[0].Overrides[0].Nudge == 0f && loaded[0].Overrides[0].Size == 0f, "fell back to default");
+        }
+
+        private static List<Gantry> SpeedSample()
+        {
+            List<Gantry> gantries = Sample();
+            SignalOverride o = gantries[0].Overrides[0];
+            o.Minus = SignalSymbol.SpeedLimit;
+            o.MinusValue = 80;
+            o.Plus = SignalSymbol.Cross;
+            gantries[0].Overrides[0] = o;
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Arrow, Plus = SignalSymbol.SpeedAuto, Sign = 1 });
+            return gantries;
+        }
+
+        private static void SpeedFacesRoundTrip()
+        {
+            List<Gantry> loaded = SaveAndLoad(SpeedSample(), true);
+            SignalOverride a = loaded[0].Overrides[0], b = loaded[1].Overrides[0];
+            Check(a.Minus == SignalSymbol.SpeedLimit && a.MinusValue == 80 && a.Plus == SignalSymbol.Cross, "speed limit 80 + Cross");
+            Check(b.Minus == SignalSymbol.Arrow && b.Plus == SignalSymbol.SpeedAuto, "road speed face");
+            Check(loaded[0].Overrides[1].Minus == SignalSymbol.Hidden, "other heads untouched");
+        }
+
+        private static void Loader10ReadsSpeedAsAuto()
+        {
+            byte[] legacy = GantryData.WriteLegacy(SpeedSample(), new object());
+            string err;
+            List<Gantry> by10 = Old10.Read(legacy, out err);
+            Check(err == null, "1.0 reads it: " + err);
+            Check(by10[0].Overrides[0].Minus == SignalSymbol.Auto && by10[0].Overrides[0].Plus == SignalSymbol.Cross, "speed face is Auto, Cross kept");
+            Check(by10[1].Overrides[0].Minus == SignalSymbol.Arrow && by10[1].Overrides[0].Plus == SignalSymbol.Auto, "road speed is Auto");
+        }
+
+        private static List<Gantry> ReloadAfter10(List<Gantry> saved, Action<List<Gantry>> changeIn10)
+        {
+            byte[] ext = GantryData.WriteExt(saved);
+            int v;
+            string err;
+            List<Gantry> in10 = GantryData.ReadLegacy(GantryData.WriteLegacy(saved, new object()), out v, out err);
+            changeIn10(in10);
+            // 1.0 keeps the extension key untouched; the next 1.1 load sees 1.0's legacy block plus the old ext block.
+            List<Gantry> loaded = GantryData.ReadLegacy(GantryData.WriteLegacy(in10, new object()), out v, out err);
+            GantryData.ApplyExt(ext, loaded, out err);
+            Check(err == null, "ext read ok: " + err);
+            return loaded;
+        }
+
+        private static void FaceChangedIn10Wins()
+        {
+            List<Gantry> loaded = ReloadAfter10(SpeedSample(), g =>
+            {
+                SignalOverride o = g[0].Overrides[0];
+                o.Minus = SignalSymbol.MergeLeft;
+                g[0].Overrides[0] = o;
+            });
+            Check(loaded[0].Overrides[0].Minus == SignalSymbol.MergeLeft && loaded[0].Overrides[0].MinusValue == 0, "1.0's MergeLeft kept");
+            Check(loaded[1].Overrides[0].Plus == SignalSymbol.SpeedAuto, "untouched speed face restored");
+        }
+
+        private static void PlainFaceResetIn10Kept()
+        {
+            List<Gantry> loaded = ReloadAfter10(SpeedSample(), g =>
+            {
+                SignalOverride o = g[0].Overrides[0];
+                o.Plus = SignalSymbol.Auto;
+                g[0].Overrides[0] = o;
+            });
+            Check(loaded[0].Overrides[0].Plus == SignalSymbol.Auto, "Cross reset to Auto in 1.0 stays Auto");
+            Check(loaded[0].Overrides[0].Minus == SignalSymbol.SpeedLimit && loaded[0].Overrides[0].MinusValue == 80, "speed face restored");
+        }
+
+        private static void UnknownExtSymbolIsAuto()
+        {
+            List<Gantry> gantries = Sample();
+            SignalOverride o = gantries[0].Overrides[0];
+            o.Plus = (SignalSymbol)300;
+            o.PlusValue = 5;
+            gantries[0].Overrides[0] = o;
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[0].Overrides[0].Plus == SignalSymbol.Auto, "future sign shows Auto");
+            Check(loaded[0].Overrides[0].Minus == SignalSymbol.MergeRight, "known face kept");
         }
 
         // ------------------------------------------------------------------------------ helpers

@@ -36,6 +36,9 @@ namespace GantryTool.UI
         private FaceCard _minusCard;
         private FaceCard _plusCard;
         private UILabel _categoryLabel;
+        private UIDropDown _categoryDrop;
+        private SignCategory _category = SignCategory.Lane;
+        private bool _suppressCategory;
         private UIPanel _grid;
         private UILabel _applyLabel;
         private UIButton _applySide;
@@ -63,7 +66,15 @@ namespace GantryTool.UI
         private sealed class GridCell
         {
             public UIPanel Panel;
-            public SignalSymbol Symbol;
+        }
+
+        /// <summary>One sign in the picker grid.</summary>
+        private struct PickItem
+        {
+            public FaceSign Sign;      // what gets stored on the face
+            public FaceSign Preview;   // what the preview shows (Auto items show what they resolve to now)
+            public string Label;
+            public string Tooltip;
         }
 
         public static SignalPanel Create()
@@ -103,11 +114,38 @@ namespace GantryTool.UI
             _minusCard = CreateCard(new Vector3(Margin, 70f), () => SelectFace(true));
             _plusCard = CreateCard(new Vector3(PanelWidth - Margin - CardWidth, 70f), () => SelectFace(false));
 
-            _categoryLabel = UIUtils.CreateLabel(this, "", 0.8f);
-            _categoryLabel.relativePosition = new Vector3(Margin, 146f);
+            _categoryDrop = UIUtils.CreateDropDown(this, 200f);
+            _categoryDrop.relativePosition = new Vector3(Margin, 142f);
+            var names = new string[SignCatalog.Categories.Length];
+            for (int i = 0; i < names.Length; i++)
+            {
+                names[i] = SignCatalog.CategoryName(SignCatalog.Categories[i]);
+            }
+
+            _categoryDrop.items = names;
+            _categoryDrop.selectedIndex = 0;
+            _categoryDrop.eventSelectedIndexChanged += (c, i) =>
+            {
+                if (_suppressCategory || i < 0 || i >= SignCatalog.Categories.Length)
+                {
+                    return;
+                }
+
+                _category = SignCatalog.Categories[i];
+                Gantry g = CurrentGantry();
+                if (g != null)
+                {
+                    Refresh(g);
+                }
+            };
+            DropdownToggle.Attach(_categoryDrop);
+
+            _categoryLabel = UIUtils.CreateLabel(this, "", 0.7f);
+            _categoryLabel.textColor = new Color32(185, 185, 185, 255);
+            _categoryLabel.relativePosition = new Vector3(Margin + 210f, 150f);
 
             _grid = AddUIComponent<UIPanel>();
-            _grid.relativePosition = new Vector3(Margin, 168f);
+            _grid.relativePosition = new Vector3(Margin, 182f);
             _grid.width = PanelWidth - 2f * Margin;
             _grid.height = CellHeight;
 
@@ -161,6 +199,9 @@ namespace GantryTool.UI
                 if (newHead)
                 {
                     _minusSelected = CameraSeesMinusFace(g);
+                    FaceSign m, p;
+                    GantryManager.GetFaces(g, laneIndex, out m, out p);
+                    SetCategory(SignCatalog.CategoryOf((_minusSelected ? m : p).Symbol));
                 }
 
                 Refresh(g);
@@ -237,23 +278,30 @@ namespace GantryTool.UI
             string traffic = info.TravelSign == 0 ? "two-way" : "traffic heading " + LaneScanner.Compass(side * info.TravelSign);
             _info.text = "Gantry #" + g.Id + ", lane " + (lane + 1) + " of " + g.Lanes.Count + ", " + traffic;
 
-            SignalSymbol minus, plus, autoMinus, autoPlus;
+            FaceSign minus, plus, shownMinus, shownPlus;
+            SignalSymbol autoMinus, autoPlus;
             GantryManager.GetFaces(g, lane, out minus, out plus);
+            lock (GantryManager.Lock)
+            {
+                SignalRules.ResolveFaces(g.Lanes, lane, g.Overrides, out shownMinus, out shownPlus);
+            }
+
             SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus);
-            bool hidden = SignalRules.IsHidden(minus, plus);
+            bool hidden = SignalRules.IsHidden(minus.Symbol, plus.Symbol);
+            bool mph = SignStyles.UsesMph(style);
             string note = info.Restriction == LaneRestriction.Banned ? " (TM:PE ban)"
                 : info.Restriction == LaneRestriction.Reserved ? " (TM:PE bus lane)" : "";
 
             // Minus face has normal -side: it faces -side and is seen by traffic heading +side.
-            FillCard(_minusCard, style, "Faces " + LaneScanner.Compass(-side), LaneScanner.Compass(side),
-                minus, autoMinus, hidden, note, _minusSelected);
-            FillCard(_plusCard, style, "Faces " + LaneScanner.Compass(side), LaneScanner.Compass(-side),
-                plus, autoPlus, hidden, note, !_minusSelected);
+            FillCard(_minusCard, style, mph, "Faces " + LaneScanner.Compass(-side), LaneScanner.Compass(side),
+                minus, shownMinus, autoMinus, hidden, note, _minusSelected);
+            FillCard(_plusCard, style, mph, "Faces " + LaneScanner.Compass(side), LaneScanner.Compass(-side),
+                plus, shownPlus, autoPlus, hidden, note, !_minusSelected);
 
-            SignalSymbol current = _minusSelected ? minus : plus;
+            FaceSign current = _minusSelected ? minus : plus;
             SignalSymbol auto = _minusSelected ? autoMinus : autoPlus;
-            _categoryLabel.text = SignCatalog.CategoryName(SignCategory.Lane) + (hidden ? "  ·  pick a sign to restore this head" : "");
-            BuildGrid(style, current, auto, hidden);
+            _categoryLabel.text = hidden ? "Pick a sign to restore this head" : "";
+            BuildGrid(style, Items(style, mph, auto, info.SpeedKmh), current, hidden, mph);
 
             // Lay out what follows the grid: Apply row, position and size, then one row of actions.
             float y = _grid.relativePosition.y + _grid.height + 12f;
@@ -281,20 +329,77 @@ namespace GantryTool.UI
             height = y + Mathf.Max(_hint.height, 32f) + 12f;
         }
 
-        private static void FillCard(FaceCard card, SignStyle style, string toward, string seenBy, SignalSymbol symbol,
-            SignalSymbol auto, bool hidden, string note, bool selected)
+        private static void FillCard(FaceCard card, SignStyle style, bool mph, string toward, string seenBy, FaceSign sign,
+            FaceSign shown, SignalSymbol auto, bool hidden, string note, bool selected)
         {
-            SignalSymbol shown = hidden ? SignalSymbol.Blank : symbol == SignalSymbol.Auto ? auto : symbol;
-            card.Preview.texture = GantryMaterials.Preview(style, shown);
+            card.Preview.texture = GantryMaterials.Preview(style, hidden ? new FaceSign(SignalSymbol.Blank, 0) : shown);
             string status = hidden ? "Head removed"
-                : symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
-                : SignalRules.PlainName(symbol);
+                : sign.Symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
+                : sign.Symbol == SignalSymbol.SpeedAuto ? "Road speed: " + SignalRules.PlainName(shown, mph).Replace("Speed ", "")
+                : SignalRules.PlainName(sign, mph);
             card.Text.text = toward + "\n" + seenBy + "-bound traffic\n" + status;
             card.Panel.backgroundSprite = selected ? "ButtonMenuHovered" : "ButtonMenu";
             card.Panel.color = selected ? Selected : Normal;
         }
 
-        private void BuildGrid(SignStyle style, SignalSymbol current, SignalSymbol auto, bool hidden)
+        /// <summary>The picker's signs for the selected category.</summary>
+        private List<PickItem> Items(SignStyle style, bool mph, SignalSymbol autoLane, float laneKmh)
+        {
+            var items = new List<PickItem>();
+            string unit = mph ? " mph" : " km/h";
+            if (_category == SignCategory.Speed)
+            {
+                int road = SpeedUnits.Display(Mathf.RoundToInt(laneKmh), mph);
+                items.Add(new PickItem
+                {
+                    Sign = new FaceSign(SignalSymbol.SpeedAuto, 0),
+                    Preview = new FaceSign(SignalSymbol.SpeedLimit, (ushort)Mathf.RoundToInt(laneKmh)),
+                    Label = "Road (" + road + ")",
+                    Tooltip = "The speed limit of the road underneath (now " + road + unit + "); follows changes, including TM:PE"
+                });
+                foreach (int v in SpeedUnits.Values(mph))
+                {
+                    var sign = new FaceSign(SignalSymbol.SpeedLimit, SpeedUnits.ToKmh(v, mph));
+                    items.Add(new PickItem { Sign = sign, Preview = sign, Label = v.ToString(), Tooltip = "Speed limit " + v + unit });
+                }
+
+                return items;
+            }
+
+            items.Add(new PickItem
+            {
+                Sign = new FaceSign(SignalSymbol.Auto, 0),
+                Preview = new FaceSign(autoLane, 0),
+                Label = "Auto",
+                Tooltip = "Follow the lane's direction (now: " + SignalRules.PlainName(autoLane) + ")"
+            });
+            foreach (SignDef def in SignCatalog.InCategory(style, SignCategory.Lane))
+            {
+                items.Add(new PickItem
+                {
+                    Sign = new FaceSign(def.Symbol, 0),
+                    Preview = new FaceSign(def.Symbol, 0),
+                    Label = def.GridName,
+                    Tooltip = SignalRules.DisplayName(def.Symbol)
+                });
+            }
+
+            return items;
+        }
+
+        /// <summary>Whether a grid item is what the face shows now (speeds compare by the number on the sign).</summary>
+        private static bool IsCurrent(PickItem item, FaceSign current, bool mph)
+        {
+            if (item.Sign.Symbol != current.Symbol)
+            {
+                return false;
+            }
+
+            return item.Sign.Symbol != SignalSymbol.SpeedLimit ||
+                   SpeedUnits.Display(item.Sign.Value, mph) == SpeedUnits.Display(current.Value, mph);
+        }
+
+        private void BuildGrid(SignStyle style, List<PickItem> items, FaceSign current, bool hidden, bool mph)
         {
             for (int i = 0; i < _cells.Count; i++)
             {
@@ -303,38 +408,27 @@ namespace GantryTool.UI
 
             _cells.Clear();
 
-            var items = new List<KeyValuePair<SignalSymbol, string>>
-            {
-                new KeyValuePair<SignalSymbol, string>(SignalSymbol.Auto, "Auto")
-            };
-            foreach (SignDef def in SignCatalog.InCategory(style, SignCategory.Lane))
-            {
-                items.Add(new KeyValuePair<SignalSymbol, string>(def.Symbol, def.GridName));
-            }
-
             int perRow = Mathf.Max(1, (int)((_grid.width + CellGap) / (CellWidth + CellGap)));
             for (int i = 0; i < items.Count; i++)
             {
-                SignalSymbol symbol = items[i].Key;
-                var cell = new GridCell { Symbol = symbol, Panel = _grid.AddUIComponent<UIPanel>() };
-                bool isCurrent = !hidden && symbol == current;
+                PickItem item = items[i];
+                var cell = new GridCell { Panel = _grid.AddUIComponent<UIPanel>() };
+                bool isCurrent = !hidden && IsCurrent(item, current, mph);
                 cell.Panel.backgroundSprite = isCurrent ? "ButtonMenuHovered" : "ButtonMenu";
                 cell.Panel.color = isCurrent ? Selected : Normal;
                 cell.Panel.size = new Vector2(CellWidth, CellHeight);
                 cell.Panel.relativePosition = new Vector3((i % perRow) * (CellWidth + CellGap), (i / perRow) * (CellHeight + CellGap));
-                cell.Panel.tooltip = symbol == SignalSymbol.Auto
-                    ? "Follow the lane's direction (now: " + SignalRules.PlainName(auto) + ")"
-                    : SignalRules.DisplayName(symbol);
-                cell.Panel.eventClick += (c, p) => Pick(symbol);
+                cell.Panel.tooltip = item.Tooltip;
+                cell.Panel.eventClick += (c, p) => Pick(item.Sign);
 
                 var preview = cell.Panel.AddUIComponent<UITextureSprite>();
                 preview.size = new Vector2(52f, 52f);
                 preview.relativePosition = new Vector3(5f, 5f);
-                preview.texture = GantryMaterials.Preview(style, symbol == SignalSymbol.Auto ? auto : symbol);
+                preview.texture = GantryMaterials.Preview(style, item.Preview);
                 preview.isInteractive = false;
 
                 var label = cell.Panel.AddUIComponent<UILabel>();
-                label.text = items[i].Value;
+                label.text = item.Label;
                 label.textScale = 0.6f;
                 label.autoSize = false;
                 label.wordWrap = true;
@@ -348,6 +442,15 @@ namespace GantryTool.UI
 
             int rows = (items.Count + perRow - 1) / perRow;
             _grid.height = rows * CellHeight + (rows - 1) * CellGap;
+        }
+
+        private void SetCategory(SignCategory category)
+        {
+            _category = category;
+            int index = System.Array.IndexOf(SignCatalog.Categories, category);
+            _suppressCategory = true;
+            _categoryDrop.selectedIndex = index < 0 ? 0 : index;
+            _suppressCategory = false;
         }
 
         /// <summary>Shift along the beam, box size and their reset (also editable with the head's handles).</summary>
@@ -447,7 +550,7 @@ namespace GantryTool.UI
             Refresh(g);
         }
 
-        private void Pick(SignalSymbol symbol)
+        private void Pick(FaceSign sign)
         {
             try
             {
@@ -457,7 +560,7 @@ namespace GantryTool.UI
                     return;
                 }
 
-                GantryManager.SetFace(g, CurrentLane(g), _minusSelected, symbol);
+                GantryManager.SetFace(g, CurrentLane(g), _minusSelected, sign);
                 Refresh(g);
             }
             catch (Exception e)
@@ -476,9 +579,9 @@ namespace GantryTool.UI
                     return;
                 }
 
-                SignalSymbol minus, plus;
+                FaceSign minus, plus;
                 GantryManager.GetFaces(g, CurrentLane(g), out minus, out plus);
-                if (SignalRules.IsHidden(minus, plus))
+                if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     return;
                 }

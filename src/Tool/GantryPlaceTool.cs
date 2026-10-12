@@ -1138,7 +1138,7 @@ namespace GantryTool.Tool
                         GantryManager.DefaultBeamDepth, _previewMesh, out _previewOrigin);
                     _previewSignals = SignalMeshBuilder.Build(_start, end, _previewOrigin, bottom,
                         GantryManager.DefaultBeamDepth, scan.Lanes, NoOverrides, SignalMeshBuilder.DefaultSignalSize,
-                        _previewSignals);
+                        _previewSignals, GantryMaterials.AtlasFor(SignStyles.Resolve((byte)SignStyle.Default)));
                     _previewEnd = end;
                     _previewBuilt = true;
                 }

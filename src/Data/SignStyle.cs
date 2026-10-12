@@ -47,6 +47,12 @@ namespace GantryTool.Data
             return IsAvailable(s) ? s : SignStyle.Europe;
         }
 
+        /// <summary>Styles that show speeds in mph.</summary>
+        public static bool UsesMph(SignStyle s)
+        {
+            return s == SignStyle.UnitedKingdom || s == SignStyle.UnitedStates;
+        }
+
         public static string Name(SignStyle s)
         {
             switch (s)
@@ -65,7 +71,8 @@ namespace GantryTool.Data
     /// <summary>Groups of signs in the signal picker.</summary>
     public enum SignCategory
     {
-        Lane
+        Lane,
+        Speed
     }
 
     /// <summary>One pickable sign.</summary>
@@ -108,13 +115,23 @@ namespace GantryTool.Data
             return list;
         }
 
+        /// <summary>Categories shown in the picker's dropdown, in order.</summary>
+        public static readonly SignCategory[] Categories = { SignCategory.Lane, SignCategory.Speed };
+
         public static string CategoryName(SignCategory c)
         {
             switch (c)
             {
                 case SignCategory.Lane: return "Lane signals";
+                case SignCategory.Speed: return "Speed limits";
                 default: return c.ToString();
             }
+        }
+
+        /// <summary>Which category a face's sign belongs to (to open the picker on it).</summary>
+        public static SignCategory CategoryOf(SignalSymbol s)
+        {
+            return s == SignalSymbol.SpeedAuto || s == SignalSymbol.SpeedLimit ? SignCategory.Speed : SignCategory.Lane;
         }
     }
 }

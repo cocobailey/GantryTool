@@ -97,7 +97,8 @@ namespace GantryTool.Render
         /// With it true: only the blinking faces, lifted slightly in front, no housings.
         /// </summary>
         public static Mesh Build(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
-            List<GantryLane> lanes, List<SignalOverride> overrides, float signalSize, Mesh mesh, bool blinkLayer = false)
+            List<GantryLane> lanes, List<SignalOverride> overrides, float signalSize, Mesh mesh, SignAtlas atlas,
+            bool blinkLayer = false)
         {
             Verts.Clear();
             Normals.Clear();
@@ -125,14 +126,13 @@ namespace GantryTool.Render
             Vector3 dir = span > 0.01f ? flat / span : Vector3.right;
             Vector3 side = new Vector3(-dir.z, 0f, dir.x);
 
-            Rect housing = Inset(SignalTextures.TileRect(SignalTextures.HousingTile), 0.25f);
+            Rect housing = Inset(atlas.TileRect(SignAtlas.HousingTile), 0.25f);
 
             for (int i = 0; i < lanes.Count; i++)
             {
-                GantryLane lane = lanes[i];
-                SignalSymbol minus, plus;
-                SignalRules.Resolve(lanes, i, overrides, out minus, out plus);
-                if (SignalRules.IsHidden(minus, plus))
+                FaceSign minus, plus;
+                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus);
+                if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue; // head removed by the player
                 }
@@ -147,21 +147,22 @@ namespace GantryTool.Render
                 if (blinkLayer)
                 {
                     Vector3 lift = side * BlinkLift;
-                    if (Blinks(minus))
+                    if (Blinks(minus.Symbol))
                     {
-                        AddFace(c - s - lift, -side, r, u, SignalTextures.TileRect(SignalTextures.TileFor(minus)));
+                        AddFace(c - s - lift, -side, r, u, atlas.TileRect(atlas.TileOf(minus)));
                     }
 
-                    if (Blinks(plus))
+                    if (Blinks(plus.Symbol))
                     {
-                        AddFace(c + s + lift, side, r, u, SignalTextures.TileRect(SignalTextures.TileFor(plus)));
+                        AddFace(c + s + lift, side, r, u, atlas.TileRect(atlas.TileOf(plus)));
                     }
 
                     continue;
                 }
 
-                AddFace(c - s, -side, r, u, SignalTextures.TileRect(SignalTextures.TileFor(Blinks(minus) ? SignalSymbol.Blank : minus)));
-                AddFace(c + s, side, r, u, SignalTextures.TileRect(SignalTextures.TileFor(Blinks(plus) ? SignalSymbol.Blank : plus)));
+                FaceSign blank = new FaceSign(SignalSymbol.Blank, 0);
+                AddFace(c - s, -side, r, u, atlas.TileRect(atlas.TileOf(Blinks(minus.Symbol) ? blank : minus)));
+                AddFace(c + s, side, r, u, atlas.TileRect(atlas.TileOf(Blinks(plus.Symbol) ? blank : plus)));
 
                 // Housing: top, bottom, two ends.
                 AddFace(c + u, Vector3.up, r, s, housing);
