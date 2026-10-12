@@ -97,7 +97,7 @@ namespace GantryTool.UI
                 _building = true;
                 _gantryId = g.Id;
                 _title.text = "Gantry #" + g.Id;
-                _info.text = "Span " + g.Span.ToString("F1") + " m  ·  " + g.Lanes.Count + " lanes  ·  drag the handles to move";
+                _info.text = "Span " + g.Span.ToString("F1") + " m, " + g.Lanes.Count + " lanes. Drag the handles to move it.";
 
                 for (int i = _content.components.Count - 1; i >= 0; i--)
                 {
@@ -117,7 +117,7 @@ namespace GantryTool.UI
                 bool sizeDefault = float.IsNaN(g.SignalSizeOverride);
                 Slider(helper, "Signal box size", 0.6f, 2f, 0.05f, g.SignalSize, " m", !sizeDefault,
                     v => Change(g, "signal size", () => g.SignalSizeOverride = v));
-                Checkbox(helper, "Use default signal box size (" + s.SignalSize.ToString("0.##") + " m)", sizeDefault, on =>
+                Checkbox(helper, "Use default signal box size (" + s.SignalSize.ToString("0.00") + " m)", sizeDefault, on =>
                 {
                     Change(g, "signal size", () => g.SignalSizeOverride = on ? float.NaN : s.SignalSize);
                     Rebuild();
@@ -215,7 +215,7 @@ namespace GantryTool.UI
         {
             SignStyle[] styles = SignStyles.Available;
             var items = new string[styles.Length + 1];
-            items[0] = "Default (" + SignStyles.Name(SignStyles.Resolve((byte)SignStyle.Default)) + ")";
+            items[0] = "Default: " + SignStyles.Name(SignStyles.Resolve((byte)SignStyle.Default));
             int selected = 0;
             for (int i = 0; i < styles.Length; i++)
             {

@@ -24,6 +24,10 @@ namespace GantryTool.UI
         private const float CellWidth = 62f;
         private const float CellHeight = 84f;
         private const float CellGap = 6f;
+        private const float ButtonGap = 6f;
+        private const float ContentWidth = PanelWidth - 2f * Margin;
+        private const float HalfWidth = (ContentWidth - ButtonGap) / 2f;
+        private const float ThirdWidth = (ContentWidth - 2f * ButtonGap) / 3f;
 
         private static readonly Color32 Selected = new Color32(150, 205, 255, 255);
         private static readonly Color32 Normal = new Color32(255, 255, 255, 255);
@@ -37,6 +41,7 @@ namespace GantryTool.UI
         private UIButton _applySide;
         private UIButton _applyAll;
         private UIPanel _layoutBox;
+        private UIButton _resetLayout;
         private UIButton _reset;
         private UIButton _remove;
         private UILabel _hint;
@@ -107,16 +112,21 @@ namespace GantryTool.UI
             _grid.height = CellHeight;
 
             _applyLabel = UIUtils.CreateLabel(this, "Apply this sign to:", 0.75f);
-            _applySide = CreateButton("All lanes on this side", 150f, () => Apply(false));
-            _applyAll = CreateButton("Whole gantry", 110f, () => Apply(true));
+            _applySide = CreateButton("All lanes on this side", HalfWidth, () => Apply(false));
+            _applySide.tooltip = "Put this face's sign on the same side of every lane";
+            _applyAll = CreateButton("Whole gantry", HalfWidth, () => Apply(true));
+            _applyAll.tooltip = "Put this sign on both sides of every lane";
             _layoutBox = AddUIComponent<UIPanel>();
             _layoutBox.width = PanelWidth - 2f * Margin;
             _layoutBox.autoLayout = true;
             _layoutBox.autoLayoutDirection = LayoutDirection.Vertical;
             _layoutBox.autoLayoutPadding = new RectOffset(0, 0, 0, 2);
 
-            _reset = CreateButton("Reset both to Auto", 160f, ResetToAuto);
-            _remove = CreateButton("Remove signal head", 180f, ToggleRemoved);
+            _reset = CreateButton("Reset signs", ThirdWidth, ResetToAuto);
+            _reset.tooltip = "Set both faces back to Auto";
+            _resetLayout = CreateButton("Reset position", ThirdWidth, ResetHeadLayout);
+            _resetLayout.tooltip = "Centre this head over its lane at the gantry's box size";
+            _remove = CreateButton("Remove head", ThirdWidth, ToggleRemoved);
 
             _hint = UIUtils.CreateLabel(this, "Click another head to edit it. Removed heads still highlight on hover. Ctrl+Z undoes.", 0.7f);
             _hint.textColor = new Color32(170, 170, 170, 255);
@@ -225,7 +235,7 @@ namespace GantryTool.UI
             Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
             Vector2 side = new Vector2(-d.y, d.x);
             string traffic = info.TravelSign == 0 ? "two-way" : "traffic heading " + LaneScanner.Compass(side * info.TravelSign);
-            _info.text = "Gantry #" + g.Id + "  ·  lane " + (lane + 1) + " of " + g.Lanes.Count + "  ·  " + traffic;
+            _info.text = "Gantry #" + g.Id + ", lane " + (lane + 1) + " of " + g.Lanes.Count + ", " + traffic;
 
             SignalSymbol minus, plus, autoMinus, autoPlus;
             GantryManager.GetFaces(g, lane, out minus, out plus);
@@ -235,9 +245,9 @@ namespace GantryTool.UI
                 : info.Restriction == LaneRestriction.Reserved ? " (TM:PE bus lane)" : "";
 
             // Minus face has normal -side: it faces -side and is seen by traffic heading +side.
-            FillCard(_minusCard, style, "Face toward " + LaneScanner.Compass(-side), LaneScanner.Compass(side),
+            FillCard(_minusCard, style, "Faces " + LaneScanner.Compass(-side), LaneScanner.Compass(side),
                 minus, autoMinus, hidden, note, _minusSelected);
-            FillCard(_plusCard, style, "Face toward " + LaneScanner.Compass(side), LaneScanner.Compass(-side),
+            FillCard(_plusCard, style, "Faces " + LaneScanner.Compass(side), LaneScanner.Compass(-side),
                 plus, autoPlus, hidden, note, !_minusSelected);
 
             SignalSymbol current = _minusSelected ? minus : plus;
@@ -245,21 +255,30 @@ namespace GantryTool.UI
             _categoryLabel.text = SignCatalog.CategoryName(SignCategory.Lane) + (hidden ? "  ·  pick a sign to restore this head" : "");
             BuildGrid(style, current, auto, hidden);
 
-            // Lay out what follows the grid.
-            float y = _grid.relativePosition.y + _grid.height + 10f;
-            _applyLabel.relativePosition = new Vector3(Margin, y + 7f);
-            _applySide.relativePosition = new Vector3(Margin + 118f, y);
-            _applyAll.relativePosition = new Vector3(Margin + 118f + 156f, y);
-            y += 36f;
+            // Lay out what follows the grid: Apply row, position and size, then one row of actions.
+            float y = _grid.relativePosition.y + _grid.height + 12f;
+            _applyLabel.relativePosition = new Vector3(Margin, y);
+            y += 18f;
+            _applySide.relativePosition = new Vector3(Margin, y);
+            _applyAll.relativePosition = new Vector3(Margin + HalfWidth + ButtonGap, y);
+            _applySide.isEnabled = _applyAll.isEnabled = !hidden;
+            y += 40f;
+
             BuildLayoutSection(g, lane, hidden);
             _layoutBox.relativePosition = new Vector3(Margin, y);
-            y += _layoutBox.height + 8f;
+            y += _layoutBox.height + (hidden ? 0f : 10f);
+
             _reset.relativePosition = new Vector3(Margin, y);
-            _remove.relativePosition = new Vector3(PanelWidth - Margin - _remove.width, y);
-            _remove.text = hidden ? "Restore signal head" : "Remove signal head";
-            y += 38f;
+            _resetLayout.relativePosition = new Vector3(Margin + ThirdWidth + ButtonGap, y);
+            _remove.relativePosition = new Vector3(Margin + 2f * (ThirdWidth + ButtonGap), y);
+            _remove.text = hidden ? "Restore head" : "Remove head";
+            _remove.tooltip = hidden ? "Bring this head back (signs on Auto)" : "Remove this head from the gantry";
+            _resetLayout.isEnabled = !hidden;
+            y += 40f;
+
+            // The hint wraps to two lines; leave room for both (its height isn't final until it's laid out).
             _hint.relativePosition = new Vector3(Margin, y);
-            height = y + _hint.height + 10f;
+            height = y + Mathf.Max(_hint.height, 32f) + 12f;
         }
 
         private static void FillCard(FaceCard card, SignStyle style, string toward, string seenBy, SignalSymbol symbol,
@@ -270,7 +289,7 @@ namespace GantryTool.UI
             string status = hidden ? "Head removed"
                 : symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
                 : SignalRules.PlainName(symbol);
-            card.Text.text = toward + "\nSeen by " + seenBy + "-bound traffic\n" + status;
+            card.Text.text = toward + "\n" + seenBy + "-bound traffic\n" + status;
             card.Panel.backgroundSprite = selected ? "ButtonMenuHovered" : "ButtonMenu";
             card.Panel.color = selected ? Selected : Normal;
         }
@@ -365,7 +384,7 @@ namespace GantryTool.UI
                     GantryManager.GetHeadLayout(cur, l, out n, out sz);
                     GantryManager.SetHeadLayout(cur, l, v, sz, "signal position");
                 }
-            });
+            }, 0.8f);
             UIUtils.StyledSlider(helper, _layoutBox.width, "Box size", 0.4f, Mathf.Max(0.45f, maxFace), 0.05f,
                 ownSize ? size : g.SignalSize, " m", "0.00", ownSize, v =>
                 {
@@ -377,7 +396,7 @@ namespace GantryTool.UI
                         GantryManager.GetHeadLayout(cur, l, out n, out sz);
                         GantryManager.SetHeadLayout(cur, l, n, v, "signal size");
                     }
-                });
+                }, 0.8f);
             helper.AddCheckbox("Use the gantry's box size (" + g.SignalSize.ToString("0.00") + " m)", !ownSize, on =>
             {
                 Gantry cur = CurrentGantry();
@@ -400,16 +419,6 @@ namespace GantryTool.UI
             note.width = _layoutBox.width;
             note.autoHeight = true;
 
-            helper.AddButton("Reset position and size", () =>
-            {
-                Gantry cur = CurrentGantry();
-                int l = cur != null ? CurrentLane(cur) : -1;
-                if (l >= 0)
-                {
-                    GantryManager.SetHeadLayout(cur, l, 0f, 0f, "signal layout");
-                    Refresh(cur);
-                }
-            });
 
             _layoutBox.FitChildrenVertically();
         }
@@ -481,6 +490,17 @@ namespace GantryTool.UI
             catch (Exception e)
             {
                 Log.Error("SignalPanel apply failed", e);
+            }
+        }
+
+        private void ResetHeadLayout()
+        {
+            Gantry g = CurrentGantry();
+            int l = g != null ? CurrentLane(g) : -1;
+            if (l >= 0)
+            {
+                GantryManager.SetHeadLayout(g, l, 0f, 0f, "signal layout");
+                Refresh(g);
             }
         }
 

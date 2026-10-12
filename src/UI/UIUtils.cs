@@ -68,7 +68,7 @@ namespace GantryTool.UI
         /// decimals chosen from the step.
         /// </summary>
         public static UISlider StyledSlider(UIHelper helper, float rowWidth, string text, float min, float max, float step,
-            float value, string unit, string format, bool enabled, Action<float> onChange)
+            float value, string unit, string format, bool enabled, Action<float> onChange, float labelScale = 0f)
         {
             UILabel label = null;
             string fmt = format ?? (step >= 1f ? "0" : step >= 0.1f ? "0.0" : "0.00");
@@ -91,6 +91,11 @@ namespace GantryTool.UI
             {
                 label.wordWrap = false;
                 label.autoSize = true;
+                if (labelScale > 0f)
+                {
+                    label.textScale = labelScale;
+                }
+
                 label.text = text + ": " + value.ToString(fmt) + unit;
             }
 
