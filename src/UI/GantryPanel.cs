@@ -239,6 +239,7 @@ namespace GantryTool.UI
             UIComponent row = drop.parent;
             row.width = _content.width;
             drop.width = _content.width - 16f;
+            DropdownToggle.Attach(drop);
         }
 
         private static void Checkbox(UIHelper helper, string text, bool value, Action<bool> onChange)

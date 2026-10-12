@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.1.0-dev8";
+        public const string Version = "1.1.0-dev9";
 
         public string Name => "Gantry Tool";
 
@@ -78,6 +78,7 @@ namespace GantryTool
                         }
                     }
                 });
+                GantryTool.UI.DropdownToggle.Attach(styleDrop);
                 styleDrop.tooltip = "Used by every gantry whose style is \"Default\". Each gantry can pick its own in the gantry panel.";
 
                 UIHelperBase allGroup = helper.AddGroup("All gantries");
