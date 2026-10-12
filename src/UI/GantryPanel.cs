@@ -107,6 +107,8 @@ namespace GantryTool.UI
                 var helper = new UIHelper(_content);
                 Settings s = Settings.Current;
 
+                StyleDropdown(helper, g);
+
                 string heightLabel = float.IsNaN(g.RoadTopY) ? "Height above ground" : "Height above road";
                 float height = float.IsNaN(g.HeightAboveRoad) ? s.HeightAboveRoad : g.HeightAboveRoad;
                 Slider(helper, heightLabel, 2f, 15f, 0.1f, height, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
@@ -246,6 +248,37 @@ namespace GantryTool.UI
             }
 
             return slider;
+        }
+
+        /// <summary>"Default (Europe)" plus every available style; changing it is undoable.</summary>
+        private void StyleDropdown(UIHelper helper, Gantry g)
+        {
+            SignStyle[] styles = SignStyles.Available;
+            var items = new string[styles.Length + 1];
+            items[0] = "Default (" + SignStyles.Name(SignStyles.Resolve((byte)SignStyle.Default)) + ")";
+            int selected = 0;
+            for (int i = 0; i < styles.Length; i++)
+            {
+                items[i + 1] = SignStyles.Name(styles[i]);
+                if ((byte)styles[i] == g.Style)
+                {
+                    selected = i + 1;
+                }
+            }
+
+            var drop = (UIDropDown)helper.AddDropdown("Sign style", items, selected, index =>
+            {
+                byte style = index <= 0 || index > styles.Length ? (byte)SignStyle.Default : (byte)styles[index - 1];
+                Change(g, "sign style", () =>
+                {
+                    g.Style = style;
+                    g.SignalsDirty = true;
+                });
+                Log.Info("Gantry #" + g.Id + " sign style: " + SignStyles.Name((SignStyle)style));
+            });
+            UIComponent row = drop.parent;
+            row.width = _content.width;
+            drop.width = _content.width - 16f;
         }
 
         private static void Checkbox(UIHelper helper, string text, bool value, Action<bool> onChange)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GantryTool.Data;
 using UnityEngine;
 
@@ -48,6 +49,49 @@ namespace GantryTool.Render
         {
             float w = 1f / Tiles;
             return new Rect(tile * w, 0f, w, 1f);
+        }
+
+        /// <summary>
+        /// Builds the atlas for a style, plus a small preview texture per pickable sign for the signal panel.
+        /// Every style draws the European signs for now; other looks come with their styles.
+        /// </summary>
+        public static void Build(SignStyle style, out Texture2D main, out Texture2D aci, Dictionary<SignalSymbol, Texture2D> previews)
+        {
+            Build(out main, out aci);
+            if (previews != null)
+            {
+                BuildPreviews(main, previews);
+            }
+        }
+
+        private const int PreviewMip = 2; // 256 px tiles -> 64 px previews
+
+        /// <summary>Cuts each sign's tile out of a small mip level (same bright mips the game sees at a distance).</summary>
+        private static void BuildPreviews(Texture2D main, Dictionary<SignalSymbol, Texture2D> previews)
+        {
+            Color[] level = main.GetPixels(PreviewMip);
+            int w = Mathf.Max(1, main.width >> PreviewMip);
+            int tile = Mathf.Max(1, Tile >> PreviewMip);
+            for (int s = (int)SignalSymbol.Arrow; s <= (int)SignalSymbol.Blank; s++)
+            {
+                var symbol = (SignalSymbol)s;
+                int x0 = TileFor(symbol) * tile;
+                var px = new Color[tile * tile];
+                for (int y = 0; y < tile; y++)
+                {
+                    for (int x = 0; x < tile; x++)
+                    {
+                        px[y * tile + x] = level[y * w + x0 + x];
+                    }
+                }
+
+                var tex = new Texture2D(tile, tile, TextureFormat.ARGB32, false, false) { name = "GantrySignPreview" + s };
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.filterMode = FilterMode.Bilinear;
+                tex.SetPixels(px);
+                tex.Apply(false);
+                previews[symbol] = tex;
+            }
         }
 
         public static void Build(out Texture2D main, out Texture2D aci)

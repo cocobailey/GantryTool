@@ -864,7 +864,7 @@ namespace GantryTool.Tool
                 }
 
                 GantryRenderer.DrawStructure(_previewMesh, _previewOrigin, SpanValid(span) ? ValidTint : InvalidTint);
-                GantryRenderer.DrawSignals(_previewSignals, _previewOrigin);
+                GantryRenderer.DrawSignals(_previewSignals, _previewOrigin, SignStyles.Resolve((byte)SignStyle.Default));
             }
             catch (Exception e)
             {

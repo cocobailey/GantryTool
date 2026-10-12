@@ -22,6 +22,7 @@ namespace GantryTool
         public float GridPadding = 128f;       // road search padding (m) for long modded segments
         public bool DebugLogging;              // per-lane scan details in the log
         public bool UseTmpeRestrictions = true; // TM:PE: banned lanes -> red X, bus-only lanes -> diamond
+        public byte DefaultStyle = 1;          // SignStyle used by gantries set to "Default" (1 = Europe)
 
         private static Settings _current;
 

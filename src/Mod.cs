@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.1.0-dev5";
+        public const string Version = "1.1.0-dev6";
 
         public string Name => "Gantry Tool";
 
@@ -52,6 +52,33 @@ namespace GantryTool
                     int n = GantryRenderer.Active ? GantryManager.ApplyDefaultsToAll() : 0;
                     Log.Info("Applied defaults to " + n + " gantries");
                 });
+
+                UIHelperBase signGroup = helper.AddGroup("Signs");
+                SignStyle[] styles = SignStyles.Available;
+                var styleNames = new string[styles.Length];
+                int styleIndex = 0;
+                for (int i = 0; i < styles.Length; i++)
+                {
+                    styleNames[i] = SignStyles.Name(styles[i]);
+                    if ((byte)styles[i] == s.DefaultStyle)
+                    {
+                        styleIndex = i;
+                    }
+                }
+
+                var styleDrop = (UIDropDown)signGroup.AddDropdown("Default sign style", styleNames, styleIndex, index =>
+                {
+                    if (index >= 0 && index < styles.Length)
+                    {
+                        s.DefaultStyle = (byte)styles[index];
+                        Settings.Current.Save();
+                        if (GantryRenderer.Active)
+                        {
+                            GantryManager.MarkAllDirty();
+                        }
+                    }
+                });
+                styleDrop.tooltip = "Used by every gantry whose style is \"Default\". Each gantry can pick its own in the gantry panel.";
 
                 UIHelperBase allGroup = helper.AddGroup("All gantries");
                 AddSlider(allGroup, "Signal size", 0.6f, 2f, 0.05f, s.SignalSize, " m",

@@ -99,10 +99,11 @@ namespace GantryTool.Render
                     }
 
                     DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : Color.white);
-                    DrawSignals(g.SignalMesh, g.Origin);
+                    SignStyle style = SignStyles.Resolve(g.Style);
+                    DrawSignals(g.SignalMesh, g.Origin, style);
                     if (blinkOn)
                     {
-                        DrawSignals(g.BlinkMesh, g.Origin);
+                        DrawSignals(g.BlinkMesh, g.Origin, style);
                     }
                 }
             }
@@ -135,9 +136,10 @@ namespace GantryTool.Render
         }
 
         /// <summary>Draws a signal mesh with illumination forced on (objectIndex.z = 1, PropInstance.cs:337-360).</summary>
-        public static void DrawSignals(Mesh mesh, Vector3 origin)
+        public static void DrawSignals(Mesh mesh, Vector3 origin, SignStyle style)
         {
-            if (_instance == null || !GantryMaterials.Ready || GantryMaterials.Signal == null || mesh == null ||
+            Material material = GantryMaterials.Ready ? GantryMaterials.SignalFor(style) : null;
+            if (_instance == null || material == null || mesh == null ||
                 mesh.vertexCount == 0)
             {
                 return;
@@ -150,7 +152,7 @@ namespace GantryTool.Render
             index.z = 1f;
             block.SetVector(_instance._idObjectIndex, index);
             Graphics.DrawMesh(mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one),
-                GantryMaterials.Signal, GantryMaterials.Layer, null, 0, block);
+                material, GantryMaterials.Layer, null, 0, block);
             _instance._drawCallData.m_defaultCalls++;
         }
 

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using GantryTool.Data;
 using UnityEngine;
 
 namespace GantryTool.Render
@@ -23,8 +25,18 @@ namespace GantryTool.Render
         private static Texture2D _mainTex;
         private static Texture2D _xysTex;
         private static Texture2D _aciTex;
-        private static Texture2D _signalMain;
-        private static Texture2D _signalAci;
+        private static Shader _shader;
+
+        /// <summary>Sign textures, material and picker previews of one style; built when first used.</summary>
+        private sealed class StyleAssets
+        {
+            public Material Signal;
+            public Texture2D Main;
+            public Texture2D Aci;
+            public readonly Dictionary<SignalSymbol, Texture2D> Previews = new Dictionary<SignalSymbol, Texture2D>();
+        }
+
+        private static readonly Dictionary<SignStyle, StyleAssets> Styles = new Dictionary<SignStyle, StyleAssets>();
 
         public static void Init()
         {
@@ -81,12 +93,8 @@ namespace GantryTool.Render
                 Structure.SetTexture("_ACIMap", _aciTex);
                 Structure.SetColor("_Color", Color.white);
 
-                SignalTextures.Build(out _signalMain, out _signalAci);
-                Signal = new Material(shader) { name = "GantrySignal" };
-                Signal.SetTexture("_MainTex", _signalMain);
-                Signal.SetTexture("_XYSMap", _xysTex);
-                Signal.SetTexture("_ACIMap", _signalAci);
-                Signal.SetColor("_Color", Color.white);
+                _shader = shader;
+                Signal = BuildStyle(SignStyle.Europe).Signal;
 
                 Ready = true;
                 Log.Info("Materials ready: shader='" + shader.name + "' from " + source + ", layer=" + Layer);
@@ -95,6 +103,60 @@ namespace GantryTool.Render
             {
                 Log.Error("Material init failed", e);
             }
+        }
+
+        /// <summary>The sign material of a style (built on first use; Europe if that fails).</summary>
+        public static Material SignalFor(SignStyle style)
+        {
+            StyleAssets a = Assets(style);
+            return a != null ? a.Signal : Signal;
+        }
+
+        /// <summary>Picker preview of a sign in a style, or null.</summary>
+        public static Texture2D Preview(SignStyle style, SignalSymbol symbol)
+        {
+            StyleAssets a = Assets(style);
+            Texture2D tex;
+            return a != null && a.Previews.TryGetValue(symbol, out tex) ? tex : null;
+        }
+
+        private static StyleAssets Assets(SignStyle style)
+        {
+            if (!Ready)
+            {
+                return null;
+            }
+
+            StyleAssets a;
+            if (Styles.TryGetValue(style, out a))
+            {
+                return a;
+            }
+
+            try
+            {
+                return BuildStyle(style);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Building sign style " + style + " failed; using Europe", e);
+                Styles[style] = Styles[SignStyle.Europe];
+                return Styles[SignStyle.Europe];
+            }
+        }
+
+        private static StyleAssets BuildStyle(SignStyle style)
+        {
+            var a = new StyleAssets();
+            SignalTextures.Build(style, out a.Main, out a.Aci, a.Previews);
+            a.Signal = new Material(_shader) { name = "GantrySignal" + style };
+            a.Signal.SetTexture("_MainTex", a.Main);
+            a.Signal.SetTexture("_XYSMap", _xysTex);
+            a.Signal.SetTexture("_ACIMap", a.Aci);
+            a.Signal.SetColor("_Color", Color.white);
+            Styles[style] = a;
+            Log.Debug("Built sign style " + style);
+            return a;
         }
 
         /// <summary>Slightly cool grey, like galvanised steel.</summary>
@@ -136,11 +198,26 @@ namespace GantryTool.Render
             DestroySafe(_mainTex);
             DestroySafe(_xysTex);
             DestroySafe(_aciTex);
-            DestroySafe(Signal);
-            DestroySafe(_signalMain);
-            DestroySafe(_signalAci);
+            var destroyed = new HashSet<StyleAssets>();
+            foreach (StyleAssets a in Styles.Values)
+            {
+                if (!destroyed.Add(a))
+                {
+                    continue; // a failed style shares Europe's assets
+                }
+
+                DestroySafe(a.Signal);
+                DestroySafe(a.Main);
+                DestroySafe(a.Aci);
+                foreach (Texture2D t in a.Previews.Values)
+                {
+                    DestroySafe(t);
+                }
+            }
+
+            Styles.Clear();
             Signal = null;
-            _signalMain = _signalAci = null;
+            _shader = null;
             Structure = null;
             _mainTex = _xysTex = _aciTex = null;
         }

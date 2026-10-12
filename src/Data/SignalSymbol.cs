@@ -53,6 +53,22 @@ namespace GantryTool.Data
             }
         }
 
+        /// <summary>Short name for status lines ("Auto: Green arrow").</summary>
+        public static string PlainName(SignalSymbol s)
+        {
+            switch (s)
+            {
+                case SignalSymbol.Arrow: return "Green arrow";
+                case SignalSymbol.Cross: return "Red X";
+                case SignalSymbol.MergeLeft: return "Merge left";
+                case SignalSymbol.MergeRight: return "Merge right";
+                case SignalSymbol.Reserved: return "Diamond";
+                case SignalSymbol.Blank: return "Blank";
+                case SignalSymbol.Hidden: return "Removed";
+                default: return "Auto";
+            }
+        }
+
         public static string DisplayName(SignalSymbol s)
         {
             switch (s)

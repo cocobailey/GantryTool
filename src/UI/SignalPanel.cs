@@ -1,35 +1,64 @@
 using System;
+using System.Collections.Generic;
 using ColossalFramework.UI;
 using GantryTool.Data;
 using GantryTool.Detect;
+using GantryTool.Render;
 using UnityEngine;
 
 namespace GantryTool.UI
 {
     /// <summary>
-    /// Per-lane signal editor, opened by clicking a signal head with the gantry tool. One dropdown per
-    /// physical face; "Auto" follows the detected lane direction. Changes apply immediately and are saved
-    /// with the city.
+    /// Per-lane signal editor, opened by clicking a signal head with the gantry tool.
+    /// Top: the head's two faces as clickable previews (the face the camera sees is selected first).
+    /// Middle: a grid of real LED previews; clicking one puts it on the selected face ("Auto" follows the
+    /// lane's direction and TM:PE restrictions). Then "Apply this sign to" all lanes on this side or the whole
+    /// gantry, Reset both faces, and Remove / Restore the head. Every change is undoable (Ctrl+Z).
     /// </summary>
     public sealed class SignalPanel : UIPanel
     {
-        private const float PanelWidth = 380f;
+        private const float PanelWidth = 440f;
         private const float Margin = 12f;
+        private const float CardWidth = 202f;
+        private const float CardHeight = 64f;
+        private const float CellWidth = 62f;
+        private const float CellHeight = 84f;
+        private const float CellGap = 6f;
+
+        private static readonly Color32 Selected = new Color32(150, 205, 255, 255);
+        private static readonly Color32 Normal = new Color32(255, 255, 255, 255);
 
         private UILabel _info;
-        private UILabel _minusLabel;
-        private UILabel _plusLabel;
-        private UIDropDown _minusDrop;
-        private UIDropDown _plusDrop;
-        private bool _suppress;
-        private bool _hidden;
-        private static string _autoNote = "";
-        private UIButton _removeButton;
+        private FaceCard _minusCard;
+        private FaceCard _plusCard;
+        private UILabel _categoryLabel;
+        private UIPanel _grid;
+        private UILabel _applyLabel;
+        private UIButton _applySide;
+        private UIButton _applyAll;
+        private UIButton _reset;
+        private UIButton _remove;
+        private UILabel _hint;
+        private readonly List<GridCell> _cells = new List<GridCell>();
 
         private int _gantryId;
         private int _laneIndex;
         private float _offset;
         private int _sign;
+        private bool _minusSelected = true;
+
+        private sealed class FaceCard
+        {
+            public UIPanel Panel;
+            public UITextureSprite Preview;
+            public UILabel Text;
+        }
+
+        private sealed class GridCell
+        {
+            public UIPanel Panel;
+            public SignalSymbol Symbol;
+        }
 
         public static SignalPanel Create()
         {
@@ -42,7 +71,7 @@ namespace GantryTool.UI
             name = "GantryToolSignalPanel";
             backgroundSprite = "MenuPanel2";
             width = PanelWidth;
-            height = 262f;
+            height = 420f;
             isVisible = false;
 
             var title = UIUtils.CreateLabel(this, "Lane signal", 1.0f);
@@ -63,50 +92,31 @@ namespace GantryTool.UI
             close.eventClick += (c, p) => Hide();
 
             _info = UIUtils.CreateLabel(this, "", 0.8f);
-            _info.relativePosition = new Vector3(Margin, 46f);
+            _info.relativePosition = new Vector3(Margin, 44f);
 
-            _minusLabel = UIUtils.CreateLabel(this, "", 0.8f);
-            _minusLabel.relativePosition = new Vector3(Margin, 74f);
-            _minusDrop = UIUtils.CreateDropDown(this, PanelWidth - 2f * Margin);
-            _minusDrop.relativePosition = new Vector3(Margin, 94f);
-            _minusDrop.eventSelectedIndexChanged += (c, i) => OnChanged();
+            _minusCard = CreateCard(new Vector3(Margin, 70f), () => SelectFace(true));
+            _plusCard = CreateCard(new Vector3(PanelWidth - Margin - CardWidth, 70f), () => SelectFace(false));
 
-            _plusLabel = UIUtils.CreateLabel(this, "", 0.8f);
-            _plusLabel.relativePosition = new Vector3(Margin, 134f);
-            _plusDrop = UIUtils.CreateDropDown(this, PanelWidth - 2f * Margin);
-            _plusDrop.relativePosition = new Vector3(Margin, 154f);
-            _plusDrop.eventSelectedIndexChanged += (c, i) => OnChanged();
+            _categoryLabel = UIUtils.CreateLabel(this, "", 0.8f);
+            _categoryLabel.relativePosition = new Vector3(Margin, 146f);
 
-            var reset = AddUIComponent<UIButton>();
-            reset.text = "Reset both to Auto";
-            reset.textScale = 0.8f;
-            reset.normalBgSprite = "ButtonMenu";
-            reset.hoveredBgSprite = "ButtonMenuHovered";
-            reset.pressedBgSprite = "ButtonMenuPressed";
-            reset.size = new Vector2(160f, 28f);
-            reset.relativePosition = new Vector3(Margin, 196f);
-            reset.eventClick += (c, p) => ResetToAuto();
+            _grid = AddUIComponent<UIPanel>();
+            _grid.relativePosition = new Vector3(Margin, 168f);
+            _grid.width = PanelWidth - 2f * Margin;
+            _grid.height = CellHeight;
 
-            _removeButton = AddUIComponent<UIButton>();
-            _removeButton.text = "Remove signal head";
-            _removeButton.textScale = 0.8f;
-            _removeButton.normalBgSprite = "ButtonMenu";
-            _removeButton.hoveredBgSprite = "ButtonMenuHovered";
-            _removeButton.pressedBgSprite = "ButtonMenuPressed";
-            _removeButton.size = new Vector2(180f, 28f);
-            _removeButton.relativePosition = new Vector3(PanelWidth - Margin - 180f, 196f);
-            _removeButton.eventClick += (c, p) => ToggleRemoved();
+            _applyLabel = UIUtils.CreateLabel(this, "Apply this sign to:", 0.75f);
+            _applySide = CreateButton("All lanes on this side", 150f, () => Apply(false));
+            _applyAll = CreateButton("Whole gantry", 110f, () => Apply(true));
+            _reset = CreateButton("Reset both to Auto", 160f, ResetToAuto);
+            _remove = CreateButton("Remove signal head", 180f, ToggleRemoved);
 
-            var hint = UIUtils.CreateLabel(this, "Click another head to edit it. Removed heads still highlight on hover.", 0.7f);
-            hint.textColor = new Color32(170, 170, 170, 255);
-            hint.relativePosition = new Vector3(Margin, 234f);
-
-            // Wrap inside the panel instead of running past its edge, and grow the panel to fit.
-            hint.autoSize = false;
-            hint.width = PanelWidth - 2f * Margin;
-            hint.wordWrap = true;
-            hint.autoHeight = true;
-            height = hint.relativePosition.y + hint.height + 10f;
+            _hint = UIUtils.CreateLabel(this, "Click another head to edit it. Removed heads still highlight on hover. Ctrl+Z undoes.", 0.7f);
+            _hint.textColor = new Color32(170, 170, 170, 255);
+            _hint.autoSize = false;
+            _hint.width = PanelWidth - 2f * Margin;
+            _hint.wordWrap = true;
+            _hint.autoHeight = true;
         }
 
         public override void Start()
@@ -125,97 +135,299 @@ namespace GantryTool.UI
                     return;
                 }
 
+                bool newHead = g.Id != _gantryId || laneIndex != _laneIndex || !isVisible;
                 GantryLane lane = g.Lanes[laneIndex];
                 _gantryId = g.Id;
                 _laneIndex = laneIndex;
                 _offset = lane.Offset;
                 _sign = lane.TravelSign;
-
-                Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
-                Vector2 side = new Vector2(-d.y, d.x);
-                string traffic = lane.TravelSign == 0
-                    ? "two-way"
-                    : "traffic heading " + LaneScanner.Compass(side * lane.TravelSign);
-                _info.text = "Gantry #" + g.Id + "  ·  lane " + (laneIndex + 1) + " of " + g.Lanes.Count + "  ·  " + traffic;
-
-                // Minus face has normal -side: it faces -side and is seen by traffic heading +side.
-                _minusLabel.text = "Face toward " + LaneScanner.Compass(-side) + " (seen by " +
-                                   LaneScanner.Compass(side) + "-bound traffic)";
-                _plusLabel.text = "Face toward " + LaneScanner.Compass(side) + " (seen by " +
-                                  LaneScanner.Compass(-side) + "-bound traffic)";
-
-                SignalSymbol autoMinus, autoPlus;
-                SignalRules.Auto(lane.TravelSign, lane.Restriction, out autoMinus, out autoPlus);
-                _autoNote = lane.Restriction == LaneRestriction.Banned ? " - TM:PE ban"
-                    : lane.Restriction == LaneRestriction.Reserved ? " - TM:PE bus lane" : "";
-                SignalSymbol minus = SignalSymbol.Auto, plus = SignalSymbol.Auto;
-                lock (GantryManager.Lock)
+                if (newHead)
                 {
-                    int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
-                    if (idx >= 0)
-                    {
-                        minus = g.Overrides[idx].Minus;
-                        plus = g.Overrides[idx].Plus;
-                    }
+                    _minusSelected = CameraSeesMinusFace(g);
                 }
 
-                _hidden = SignalRules.IsHidden(minus, plus);
-                _suppress = true;
-                _minusDrop.items = Items(autoMinus);
-                _plusDrop.items = Items(autoPlus);
-                _minusDrop.selectedIndex = _hidden || minus > SignalSymbol.Blank ? 0 : (int)minus;
-                _plusDrop.selectedIndex = _hidden || plus > SignalSymbol.Blank ? 0 : (int)plus;
-                _suppress = false;
-                UpdateRemovedState();
-
+                Refresh(g);
                 Show();
                 BringToFront();
             }
             catch (Exception e)
             {
-                _suppress = false;
                 Log.Error("SignalPanel.ShowFor failed", e);
             }
         }
 
-        /// <summary>Dropdown items in SignalSymbol order (index == enum value).</summary>
-        private static string[] Items(SignalSymbol auto)
+        /// <summary>True if the panel is open on this gantry (used to close it when the gantry is deleted).</summary>
+        public bool IsShowing(int gantryId)
         {
-            var items = new string[(int)SignalSymbol.Blank + 1];
-            for (int i = 0; i < items.Length; i++)
-            {
-                items[i] = i == 0
-                    ? "Auto (" + SignalRules.DisplayName(auto) + _autoNote + ")"
-                    : SignalRules.DisplayName((SignalSymbol)i);
-            }
-
-            return items;
+            return isVisible && _gantryId == gantryId;
         }
 
-        private void OnChanged()
+        public int LaneIndex => _laneIndex;
+
+        // ------------------------------------------------------------------------------ building
+
+        private FaceCard CreateCard(Vector3 pos, Action onClick)
         {
-            if (_suppress)
+            var card = new FaceCard { Panel = AddUIComponent<UIPanel>() };
+            card.Panel.backgroundSprite = "ButtonMenu";
+            card.Panel.size = new Vector2(CardWidth, CardHeight);
+            card.Panel.relativePosition = pos;
+            card.Panel.eventClick += (c, p) => onClick();
+
+            card.Preview = card.Panel.AddUIComponent<UITextureSprite>();
+            card.Preview.size = new Vector2(48f, 48f);
+            card.Preview.relativePosition = new Vector3(8f, 8f);
+            card.Preview.isInteractive = false;
+
+            card.Text = card.Panel.AddUIComponent<UILabel>();
+            card.Text.textScale = 0.65f;
+            card.Text.autoSize = false;
+            card.Text.wordWrap = true;
+            card.Text.size = new Vector2(CardWidth - 66f, CardHeight - 8f);
+            card.Text.relativePosition = new Vector3(62f, 6f);
+            card.Text.isInteractive = false;
+            return card;
+        }
+
+        private UIButton CreateButton(string text, float w, Action onClick)
+        {
+            var b = AddUIComponent<UIButton>();
+            b.text = text;
+            b.textScale = 0.75f;
+            b.normalBgSprite = "ButtonMenu";
+            b.hoveredBgSprite = "ButtonMenuHovered";
+            b.pressedBgSprite = "ButtonMenuPressed";
+            b.size = new Vector2(w, 28f);
+            b.eventClick += (c, p) => onClick();
+            return b;
+        }
+
+        /// <summary>Re-reads the gantry and redraws everything.</summary>
+        private void Refresh(Gantry g)
+        {
+            int lane = CurrentLane(g);
+            if (lane < 0)
+            {
+                Hide();
+                return;
+            }
+
+            GantryLane info = g.Lanes[lane];
+            SignStyle style = SignStyles.Resolve(g.Style);
+
+            Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
+            Vector2 side = new Vector2(-d.y, d.x);
+            string traffic = info.TravelSign == 0 ? "two-way" : "traffic heading " + LaneScanner.Compass(side * info.TravelSign);
+            _info.text = "Gantry #" + g.Id + "  ·  lane " + (lane + 1) + " of " + g.Lanes.Count + "  ·  " + traffic;
+
+            SignalSymbol minus, plus, autoMinus, autoPlus;
+            GantryManager.GetFaces(g, lane, out minus, out plus);
+            SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus);
+            bool hidden = SignalRules.IsHidden(minus, plus);
+            string note = info.Restriction == LaneRestriction.Banned ? " (TM:PE ban)"
+                : info.Restriction == LaneRestriction.Reserved ? " (TM:PE bus lane)" : "";
+
+            // Minus face has normal -side: it faces -side and is seen by traffic heading +side.
+            FillCard(_minusCard, style, "Face toward " + LaneScanner.Compass(-side), LaneScanner.Compass(side),
+                minus, autoMinus, hidden, note, _minusSelected);
+            FillCard(_plusCard, style, "Face toward " + LaneScanner.Compass(side), LaneScanner.Compass(-side),
+                plus, autoPlus, hidden, note, !_minusSelected);
+
+            SignalSymbol current = _minusSelected ? minus : plus;
+            SignalSymbol auto = _minusSelected ? autoMinus : autoPlus;
+            _categoryLabel.text = SignCatalog.CategoryName(SignCategory.Lane) + (hidden ? "  ·  pick a sign to restore this head" : "");
+            BuildGrid(style, current, auto, hidden);
+
+            // Lay out what follows the grid.
+            float y = _grid.relativePosition.y + _grid.height + 10f;
+            _applyLabel.relativePosition = new Vector3(Margin, y + 7f);
+            _applySide.relativePosition = new Vector3(Margin + 118f, y);
+            _applyAll.relativePosition = new Vector3(Margin + 118f + 156f, y);
+            y += 36f;
+            _reset.relativePosition = new Vector3(Margin, y);
+            _remove.relativePosition = new Vector3(PanelWidth - Margin - _remove.width, y);
+            _remove.text = hidden ? "Restore signal head" : "Remove signal head";
+            y += 38f;
+            _hint.relativePosition = new Vector3(Margin, y);
+            height = y + _hint.height + 10f;
+        }
+
+        private static void FillCard(FaceCard card, SignStyle style, string toward, string seenBy, SignalSymbol symbol,
+            SignalSymbol auto, bool hidden, string note, bool selected)
+        {
+            SignalSymbol shown = hidden ? SignalSymbol.Blank : symbol == SignalSymbol.Auto ? auto : symbol;
+            card.Preview.texture = GantryMaterials.Preview(style, shown);
+            string status = hidden ? "Head removed"
+                : symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
+                : SignalRules.PlainName(symbol);
+            card.Text.text = toward + "\nSeen by " + seenBy + "-bound traffic\n" + status;
+            card.Panel.backgroundSprite = selected ? "ButtonMenuHovered" : "ButtonMenu";
+            card.Panel.color = selected ? Selected : Normal;
+        }
+
+        private void BuildGrid(SignStyle style, SignalSymbol current, SignalSymbol auto, bool hidden)
+        {
+            for (int i = 0; i < _cells.Count; i++)
+            {
+                UnityEngine.Object.Destroy(_cells[i].Panel.gameObject);
+            }
+
+            _cells.Clear();
+
+            var items = new List<KeyValuePair<SignalSymbol, string>>
+            {
+                new KeyValuePair<SignalSymbol, string>(SignalSymbol.Auto, "Auto")
+            };
+            foreach (SignDef def in SignCatalog.InCategory(style, SignCategory.Lane))
+            {
+                items.Add(new KeyValuePair<SignalSymbol, string>(def.Symbol, def.GridName));
+            }
+
+            int perRow = Mathf.Max(1, (int)((_grid.width + CellGap) / (CellWidth + CellGap)));
+            for (int i = 0; i < items.Count; i++)
+            {
+                SignalSymbol symbol = items[i].Key;
+                var cell = new GridCell { Symbol = symbol, Panel = _grid.AddUIComponent<UIPanel>() };
+                bool isCurrent = !hidden && symbol == current;
+                cell.Panel.backgroundSprite = isCurrent ? "ButtonMenuHovered" : "ButtonMenu";
+                cell.Panel.color = isCurrent ? Selected : Normal;
+                cell.Panel.size = new Vector2(CellWidth, CellHeight);
+                cell.Panel.relativePosition = new Vector3((i % perRow) * (CellWidth + CellGap), (i / perRow) * (CellHeight + CellGap));
+                cell.Panel.tooltip = symbol == SignalSymbol.Auto
+                    ? "Follow the lane's direction (now: " + SignalRules.PlainName(auto) + ")"
+                    : SignalRules.DisplayName(symbol);
+                cell.Panel.eventClick += (c, p) => Pick(symbol);
+
+                var preview = cell.Panel.AddUIComponent<UITextureSprite>();
+                preview.size = new Vector2(52f, 52f);
+                preview.relativePosition = new Vector3(5f, 5f);
+                preview.texture = GantryMaterials.Preview(style, symbol == SignalSymbol.Auto ? auto : symbol);
+                preview.isInteractive = false;
+
+                var label = cell.Panel.AddUIComponent<UILabel>();
+                label.text = items[i].Value;
+                label.textScale = 0.6f;
+                label.autoSize = false;
+                label.wordWrap = true;
+                label.textAlignment = UIHorizontalAlignment.Center;
+                label.size = new Vector2(CellWidth - 4f, 24f);
+                label.relativePosition = new Vector3(2f, 60f);
+                label.isInteractive = false;
+
+                _cells.Add(cell);
+            }
+
+            int rows = (items.Count + perRow - 1) / perRow;
+            _grid.height = rows * CellHeight + (rows - 1) * CellGap;
+        }
+
+        // ------------------------------------------------------------------------------ actions
+
+        private Gantry CurrentGantry()
+        {
+            Gantry g = GantryManager.Find(_gantryId);
+            if (g == null)
+            {
+                Hide();
+            }
+
+            return g;
+        }
+
+        private void SelectFace(bool minus)
+        {
+            Gantry g = CurrentGantry();
+            if (g == null)
             {
                 return;
             }
 
+            _minusSelected = minus;
+            Refresh(g);
+        }
+
+        private void Pick(SignalSymbol symbol)
+        {
             try
             {
-                Gantry g = GantryManager.Find(_gantryId);
+                Gantry g = CurrentGantry();
                 if (g == null)
                 {
-                    Hide();
                     return;
                 }
 
-                GantryManager.SetOverride(g, CurrentLane(g), (SignalSymbol)_minusDrop.selectedIndex,
-                    (SignalSymbol)_plusDrop.selectedIndex);
+                GantryManager.SetFace(g, CurrentLane(g), _minusSelected, symbol);
+                Refresh(g);
             }
             catch (Exception e)
             {
-                Log.Error("SignalPanel change failed", e);
+                Log.Error("SignalPanel pick failed", e);
             }
         }
+
+        private void Apply(bool wholeGantry)
+        {
+            try
+            {
+                Gantry g = CurrentGantry();
+                if (g == null)
+                {
+                    return;
+                }
+
+                SignalSymbol minus, plus;
+                GantryManager.GetFaces(g, CurrentLane(g), out minus, out plus);
+                if (SignalRules.IsHidden(minus, plus))
+                {
+                    return;
+                }
+
+                GantryManager.ApplyToAllLanes(g, _minusSelected, _minusSelected ? minus : plus, wholeGantry);
+                Refresh(g);
+            }
+            catch (Exception e)
+            {
+                Log.Error("SignalPanel apply failed", e);
+            }
+        }
+
+        private void ResetToAuto()
+        {
+            Gantry g = CurrentGantry();
+            if (g == null)
+            {
+                return;
+            }
+
+            GantryManager.SetOverride(g, CurrentLane(g), SignalSymbol.Auto, SignalSymbol.Auto);
+            Refresh(g);
+        }
+
+        /// <summary>Removes the head (both faces Hidden) or restores a removed head to Auto.</summary>
+        private void ToggleRemoved()
+        {
+            try
+            {
+                Gantry g = CurrentGantry();
+                if (g == null)
+                {
+                    return;
+                }
+
+                int lane = CurrentLane(g);
+                SignalSymbol minus, plus;
+                GantryManager.GetFaces(g, lane, out minus, out plus);
+                SignalSymbol s = SignalRules.IsHidden(minus, plus) ? SignalSymbol.Auto : SignalSymbol.Hidden;
+                GantryManager.SetOverride(g, lane, s, s);
+                Refresh(g);
+            }
+            catch (Exception e)
+            {
+                Log.Error("SignalPanel remove/restore failed", e);
+            }
+        }
+
+        // ------------------------------------------------------------------------------ helpers
 
         /// <summary>
         /// The edited lane's index now: lanes can be rescanned while the panel is open (road changes), so it is
@@ -229,60 +441,29 @@ namespace GantryTool.UI
                 return _laneIndex;
             }
 
-            return SignalRules.FindLane(g.Lanes, _offset, _sign);
+            int found = SignalRules.FindLane(g.Lanes, _offset, _sign);
+            if (found >= 0)
+            {
+                _laneIndex = found;
+            }
+
+            return found;
         }
 
-        /// <summary>Removes the head (both faces Hidden) or restores a removed head to Auto.</summary>
-        private void ToggleRemoved()
+        /// <summary>The face pointing at the camera: the one the player is looking at.</summary>
+        private static bool CameraSeesMinusFace(Gantry g)
         {
             try
             {
-                Gantry g = GantryManager.Find(_gantryId);
-                if (g == null)
-                {
-                    Hide();
-                    return;
-                }
-
-                _hidden = !_hidden;
-                SignalSymbol s = _hidden ? SignalSymbol.Hidden : SignalSymbol.Auto;
-                _suppress = true;
-                _minusDrop.selectedIndex = 0;
-                _plusDrop.selectedIndex = 0;
-                _suppress = false;
-                GantryManager.SetOverride(g, CurrentLane(g), s, s);
-                UpdateRemovedState();
+                Vector3 d = g.End - g.Start;
+                Vector3 side = new Vector3(-d.z, 0f, d.x);
+                // Looking towards +side means seeing the face whose normal points to -side (the minus face).
+                return Camera.main == null || Vector3.Dot(Camera.main.transform.forward, side) >= 0f;
             }
-            catch (Exception e)
+            catch
             {
-                Log.Error("SignalPanel remove/restore failed", e);
+                return true;
             }
         }
-
-        private void UpdateRemovedState()
-        {
-            _removeButton.text = _hidden ? "Restore signal head" : "Remove signal head";
-            _minusDrop.isEnabled = !_hidden;
-            _plusDrop.isEnabled = !_hidden;
-        }
-
-        private void ResetToAuto()
-        {
-            _hidden = false;
-            UpdateRemovedState();
-            _suppress = true;
-            _minusDrop.selectedIndex = 0;
-            _plusDrop.selectedIndex = 0;
-            _suppress = false;
-            OnChanged();
-        }
-
-        /// <summary>True if the panel is open on this gantry (used to close it when the gantry is deleted).</summary>
-        public bool IsShowing(int gantryId)
-        {
-            return isVisible && _gantryId == gantryId;
-        }
-
-        public int LaneIndex => _laneIndex;
     }
 }

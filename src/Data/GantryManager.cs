@@ -124,8 +124,86 @@ namespace GantryTool.Data
                 return;
             }
 
-            float offset = g.Lanes[laneIndex].Offset;
             UndoStack.PushModified(g, "sign", coalesce: false);
+            SetOverrideCore(g, laneIndex, minus, plus, true);
+        }
+
+        /// <summary>The manual symbols of a lane's two faces (Auto when none are set).</summary>
+        public static void GetFaces(Gantry g, int laneIndex, out SignalSymbol minus, out SignalSymbol plus)
+        {
+            minus = SignalSymbol.Auto;
+            plus = SignalSymbol.Auto;
+            lock (Lock)
+            {
+                int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
+                if (idx >= 0)
+                {
+                    minus = g.Overrides[idx].Minus;
+                    plus = g.Overrides[idx].Plus;
+                }
+            }
+        }
+
+        /// <summary>Sets one face of a lane, keeping the other face as it is.</summary>
+        public static void SetFace(Gantry g, int laneIndex, bool minusFace, SignalSymbol symbol)
+        {
+            if (laneIndex < 0 || laneIndex >= g.Lanes.Count)
+            {
+                return;
+            }
+
+            SignalSymbol minus, plus;
+            GetFaces(g, laneIndex, out minus, out plus);
+            if (SignalRules.IsHidden(minus, plus))
+            {
+                // Picking a sign on a removed head brings it back with the other face on Auto.
+                minus = SignalSymbol.Auto;
+                plus = SignalSymbol.Auto;
+            }
+
+            SetOverride(g, laneIndex, minusFace ? symbol : minus, minusFace ? plus : symbol);
+        }
+
+        /// <summary>
+        /// "Apply to": sets <paramref name="symbol"/> on the same physical face of every lane, or on both faces of
+        /// every lane, as one undo step. Lanes whose head was removed are left alone. Returns lanes changed.
+        /// </summary>
+        public static int ApplyToAllLanes(Gantry g, bool minusFace, SignalSymbol symbol, bool bothFaces)
+        {
+            UndoStack.PushModified(g, "signs on all lanes", coalesce: false);
+            int changed = 0;
+            for (int i = 0; i < g.Lanes.Count; i++)
+            {
+                SignalSymbol minus, plus;
+                GetFaces(g, i, out minus, out plus);
+                if (SignalRules.IsHidden(minus, plus))
+                {
+                    continue;
+                }
+
+                if (bothFaces || minusFace)
+                {
+                    minus = symbol;
+                }
+
+                if (bothFaces || !minusFace)
+                {
+                    plus = symbol;
+                }
+
+                SetOverrideCore(g, i, minus, plus, false);
+                changed++;
+            }
+
+            UndoStack.DiscardIfUnchanged(g);
+            Log.Info("Applied " + symbol + " to " + (bothFaces ? "both faces" : "one face") + " of " + changed +
+                     " lanes on gantry #" + g.Id);
+            return changed;
+        }
+
+        private static void SetOverrideCore(Gantry g, int laneIndex, SignalSymbol minus, SignalSymbol plus, bool log)
+        {
+            float offset = g.Lanes[laneIndex].Offset;
             lock (Lock)
             {
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
@@ -158,8 +236,11 @@ namespace GantryTool.Data
                 g.SignalsDirty = true;
             }
 
-            Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + minus +
-                     ", +side face=" + plus + " (" + g.Overrides.Count + " overrides on this gantry)");
+            if (log)
+            {
+                Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + minus +
+                         ", +side face=" + plus + " (" + g.Overrides.Count + " overrides on this gantry)");
+            }
         }
 
         /// <summary>Schedules every gantry for a rescan + rebuild (option changes). Main thread.</summary>
