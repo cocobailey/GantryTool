@@ -9,8 +9,8 @@
     <Version>1.0.0</Version>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>portable</DebugType>
-    <!-- reference\ holds decompiled game code for reading only -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);reference\**</DefaultItemExcludes>
+    <!-- reference\ holds decompiled game code for reading only; tests\ is its own project -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);reference\**;tests\**</DefaultItemExcludes>
 
     <!-- Adjust this if the game ever moves -->
     <ManagedDLLPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed</ManagedDLLPath>
@@ -68,7 +68,9 @@
   </ItemGroup>
 
   <!-- Copy the mod DLL + CitiesHarmony.API into the game's local mods folder after every build -->
-  <Target Name="DeployMod" AfterTargets="Build">
+  <!-- Deploying is opt-in (dotnet build -c Release -p:Deploy=true) so day-to-day builds never put a second
+       copy next to the Workshop version in the game. -->
+  <Target Name="DeployMod" AfterTargets="Build" Condition="'$(Deploy)' == 'true'">
     <ItemGroup>
       <DeployFiles Include="$(TargetDir)$(AssemblyName).dll" />
       <DeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />

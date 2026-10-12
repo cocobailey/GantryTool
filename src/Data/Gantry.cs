@@ -16,6 +16,15 @@ namespace GantryTool.Data
         public float PostHeight;
         public float BeamDepth;
 
+        // Per-gantry overrides (saved in the extension block). NaN / 0 = follow the global option, which is how
+        // every gantry from 1.0 loads, so their look doesn't change.
+        public float ClearanceOverride = float.NaN;
+        public float SignalSizeOverride = float.NaN;
+        public byte Style;
+
+        public float Clearance => float.IsNaN(ClearanceOverride) ? Settings.Current.RoadClearance : ClearanceOverride;
+        public float SignalSize => float.IsNaN(SignalSizeOverride) ? Settings.Current.SignalSize : SignalSizeOverride;
+
         // Derived render state; only touched on the main thread.
         public Mesh Mesh;
         public Mesh SignalMesh;
