@@ -19,7 +19,12 @@ namespace GantryTool.Render
         private const float FaceMin = 0.08f;     // LED area inside the frame, tile-normalised
         private const float FaceMax = 0.92f;
         private const float FrameWidth = 0.035f; // grey frame around the black face
-        private const float DotRadius = 0.36f;   // fraction of dot pitch
+        private const float DotRadius = 0.4f;    // fraction of dot pitch
+
+        // Mip levels are built here instead of by Unity: plain averaging mixes the lit dots with the black gaps,
+        // so distant signs fade to a fraction of their brightness. Leaning towards the brightest texel keeps
+        // distant symbols bright and solid, like real LED signs seen from afar.
+        private const float MipBrightBias = 0.65f;
 
         private static readonly Color FrameColor = new Color(0.30f, 0.31f, 0.32f, 1f);
         private static readonly Color FaceColor = new Color(0.02f, 0.02f, 0.02f, 1f);
@@ -126,17 +131,52 @@ namespace GantryTool.Render
             }
 
             main = new Texture2D(width, Tile, TextureFormat.ARGB32, true, false) { name = "GantrySignalMain" };
-            main.SetPixels(mainPx);
             main.wrapMode = TextureWrapMode.Clamp;
             main.filterMode = FilterMode.Trilinear;
             main.anisoLevel = 4;
-            main.Apply(true);
+            SetBrightMips(main, mainPx, width, Tile);
 
             aci = new Texture2D(width, Tile, TextureFormat.ARGB32, true, true) { name = "GantrySignalACI" };
-            aci.SetPixels(aciPx);
             aci.wrapMode = TextureWrapMode.Clamp;
             aci.filterMode = FilterMode.Trilinear;
-            aci.Apply(true);
+            SetBrightMips(aci, aciPx, width, Tile);
+        }
+
+        /// <summary>Fills every mip level, each texel a blend of its 2x2 parent block's average and brightest texel.</summary>
+        private static void SetBrightMips(Texture2D tex, Color[] level0, int width, int height)
+        {
+            tex.SetPixels(level0, 0);
+            Color[] prev = level0;
+            int pw = width, ph = height;
+            for (int level = 1; level < tex.mipmapCount; level++)
+            {
+                int w = Mathf.Max(1, pw >> 1), h = Mathf.Max(1, ph >> 1);
+                var cur = new Color[w * h];
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        int x0 = Mathf.Min(x * 2, pw - 1), x1 = Mathf.Min(x * 2 + 1, pw - 1);
+                        int y0 = Mathf.Min(y * 2, ph - 1), y1 = Mathf.Min(y * 2 + 1, ph - 1);
+                        Color a = prev[y0 * pw + x0], b = prev[y0 * pw + x1], c = prev[y1 * pw + x0], d = prev[y1 * pw + x1];
+                        Color avg = (a + b + c + d) * 0.25f;
+                        Color max = Brightest(Brightest(a, b), Brightest(c, d));
+                        cur[y * w + x] = Color.Lerp(avg, max, MipBrightBias);
+                    }
+                }
+
+                tex.SetPixels(cur, level);
+                prev = cur;
+                pw = w;
+                ph = h;
+            }
+
+            tex.Apply(false);
+        }
+
+        private static Color Brightest(Color a, Color b)
+        {
+            return a.r + a.g + a.b >= b.r + b.g + b.b ? a : b;
         }
 
         private static Color SymbolColor(SignalSymbol s)
