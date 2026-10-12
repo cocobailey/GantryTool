@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.1.0-dev4";
+        public const string Version = "1.1.0-dev5";
 
         public string Name => "Gantry Tool";
 
@@ -41,9 +41,9 @@ namespace GantryTool
                 Settings s = Settings.Current;
 
                 UIHelperBase newGroup = helper.AddGroup("New gantries");
-                AddSlider(newGroup, "Height above road", 2f, 15f, 0.1f, s.PostHeight, " m",
+                AddSlider(newGroup, "Height above road", 2f, 15f, 0.1f, s.HeightAboveRoad, " m",
                     "Beam underside above the highest road it crosses (above the ground if there's no road), for gantries placed from now on.",
-                    v => s.PostHeight = v, false);
+                    v => s.HeightAboveRoad = v, false);
                 AddSlider(newGroup, "Truss depth", 1f, 2.5f, 0.1f, s.BeamDepth, " m",
                     "Height of the truss beam, for gantries placed from now on.",
                     v => s.BeamDepth = v, false);
@@ -94,13 +94,14 @@ namespace GantryTool
             string unit, string tooltip, Action<float> apply, bool rebuildAll)
         {
             UILabel label = null;
+            string fmt = step >= 1f ? "0" : step >= 0.1f ? "0.0" : "0.00";
             var slider = (UISlider)group.AddSlider(text, min, max, step, value, v =>
             {
                 apply(v);
                 Settings.Current.Save();
                 if (label != null)
                 {
-                    label.text = text + ": " + v.ToString("0.##") + unit;
+                    label.text = text + ": " + v.ToString(fmt) + unit;
                 }
 
                 if (rebuildAll && GantryRenderer.Active)
@@ -116,7 +117,8 @@ namespace GantryTool
             if (label != null)
             {
                 label.wordWrap = false;
-                label.text = text + ": " + value.ToString("0.##") + unit;
+                label.autoSize = true;
+                label.text = text + ": " + value.ToString(fmt) + unit;
                 label.tooltip = tooltip;
             }
         }

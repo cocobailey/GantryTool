@@ -13,7 +13,8 @@ namespace GantryTool
     [XmlRoot("GantryToolSettings")]
     public sealed class Settings
     {
-        public float PostHeight = 7.5f;        // height above road for new gantries (name kept for old settings files)
+        public float PostHeight = 7.5f;        // 1.0 setting (post height); no longer used
+        public float HeightAboveRoad = 5.5f;   // beam underside above the highest road crossed, for new gantries
         public float BeamDepth = 1.5f;         // truss depth (new gantries)
         public float RoadClearance = 5.5f;     // 1.0 setting; only used to convert 1.0 gantries
         public float SignalSize = 1.2f;        // LED face edge (m), clamped to fit the truss

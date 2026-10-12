@@ -108,7 +108,7 @@ namespace GantryTool.UI
                 Settings s = Settings.Current;
 
                 string heightLabel = float.IsNaN(g.RoadTopY) ? "Height above ground" : "Height above road";
-                float height = float.IsNaN(g.HeightAboveRoad) ? s.PostHeight : g.HeightAboveRoad;
+                float height = float.IsNaN(g.HeightAboveRoad) ? s.HeightAboveRoad : g.HeightAboveRoad;
                 Slider(helper, heightLabel, 2f, 15f, 0.1f, height, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
                 Slider(helper, "Truss depth", 1f, 2.5f, 0.1f, g.BeamDepth, " m", true, v => Change(g, "truss depth", () => g.BeamDepth = v));
 
@@ -121,12 +121,12 @@ namespace GantryTool.UI
                     Rebuild();
                 });
 
-                Button(helper, "Reset height and depth to defaults (" + s.PostHeight.ToString("0.#") + " m / " +
+                Button(helper, "Reset height and depth to defaults (" + s.HeightAboveRoad.ToString("0.0") + " m / " +
                                s.BeamDepth.ToString("0.#") + " m)", () =>
                 {
                     Change(g, "height and depth", () =>
                     {
-                        g.HeightAboveRoad = s.PostHeight;
+                        g.HeightAboveRoad = s.HeightAboveRoad;
                         g.BeamDepth = s.BeamDepth;
                     });
                     Rebuild();
@@ -206,11 +206,12 @@ namespace GantryTool.UI
             bool enabled, Action<float> onChange)
         {
             UILabel label = null;
+            string fmt = step >= 1f ? "0" : step >= 0.1f ? "0.0" : "0.00";
             var slider = (UISlider)helper.AddSlider(text, min, max, step, Mathf.Clamp(value, min, max), v =>
             {
                 if (label != null)
                 {
-                    label.text = text + ": " + v.ToString("0.##") + unit;
+                    label.text = text + ": " + v.ToString(fmt) + unit;
                 }
 
                 onChange(v);
@@ -224,7 +225,8 @@ namespace GantryTool.UI
             if (label != null)
             {
                 label.wordWrap = false;
-                label.text = text + ": " + value.ToString("0.##") + unit;
+                label.autoSize = true;
+                label.text = text + ": " + value.ToString(fmt) + unit;
             }
 
             // The options-page template is dark on this panel's background and reads as disabled. Tint it lighter
