@@ -39,6 +39,7 @@ namespace GantryTool.UI
         private UIDropDown _categoryDrop;
         private SignCategory _category = SignCategory.Lane;
         private bool _suppressCategory;
+        private int _relabelFrames;
         private UIPanel _grid;
         private UILabel _applyLabel;
         private UIButton _applySide;
@@ -171,14 +172,17 @@ namespace GantryTool.UI
             _hint.autoHeight = true;
         }
 
-        protected override void OnVisibilityChanged()
+        public override void Update()
         {
-            base.OnVisibilityChanged();
-            if (!isVisible)
+            base.Update();
+
+            // Labels filled while the panel was hidden can show blank on its first open (their text is measured before
+            // the font has those letters at that size). Redraw them once the panel has been on screen for a frame.
+            if (_relabelFrames > 0 && --_relabelFrames == 0)
             {
-                for (int i = 0; i < _cells.Count; i++)
+                foreach (UILabel label in GetComponentsInChildren<UILabel>())
                 {
-                    UIUtils.HideTooltip(_cells[i].Panel);
+                    label.Invalidate();
                 }
             }
         }
@@ -214,6 +218,7 @@ namespace GantryTool.UI
                 }
 
                 Refresh(g);
+                _relabelFrames = 2;
                 Show();
                 BringToFront();
             }
@@ -336,6 +341,19 @@ namespace GantryTool.UI
             // The hint wraps to two lines; leave room for both (its height isn't final until it's laid out).
             _hint.relativePosition = new Vector3(Margin, y);
             height = y + Mathf.Max(_hint.height, 32f) + 12f;
+        }
+
+        /// <summary>One log line about a label's state (diagnoses labels that render blank in some sessions).</summary>
+        private static void LogLabel(string name, UILabel l)
+        {
+            if (l == null)
+            {
+                return;
+            }
+
+            Log.Info("Label " + name + ": visible=" + l.isVisible + " len=" + (l.text ?? "").Length + " size=" + l.size +
+                     " scale=" + l.textScale + " opacity=" + l.opacity + " color=" + l.textColor +
+                     " font=" + (l.font != null ? l.font.name + (l.font.isValid ? "" : " (invalid)") : "null"));
         }
 
         private static void FillCard(FaceCard card, SignStyle style, bool mph, string toward, string seenBy, FaceSign sign,
@@ -538,6 +556,12 @@ namespace GantryTool.UI
             note.width = _layoutBox.width;
             note.autoHeight = true;
             note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
+            if (note.height < 20f)
+            {
+                LogLabel("note", note);
+                note.autoHeight = false;
+                note.height = 26f; // two lines; the text was not measured
+            }
 
             // Stack the controls ourselves so the height never depends on when auto layout runs.
             float y = 0f;
