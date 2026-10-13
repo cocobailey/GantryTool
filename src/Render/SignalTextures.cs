@@ -202,9 +202,9 @@ namespace GantryTool.Render
                     return Triangle(u, v) ? Red
                         : Segment(u, v, 0.5f, 0.37f, 0.5f, 0.64f, 0.042f) || Disc(u, v, 0.5f, 0.24f, 0.048f) ? White : Clear;
                 case SignalSymbol.NoOvertaking:
-                    return Ring(u, v) ? Red : CarRear(u, v, 0.32f, 0.3f, 0.32f) ? Red : CarRear(u, v, 0.68f, 0.3f, 0.32f) ? White : Clear;
+                    return Ring(u, v) ? Red : CarRear(u, v, 0.35f, 0.35f, 0.26f) ? Red : CarRear(u, v, 0.65f, 0.35f, 0.26f) ? White : Clear;
                 case SignalSymbol.NoOvertakingTrucks:
-                    return Ring(u, v) ? Red : TruckRear(u, v, 0.32f, 0.27f, 0.3f) ? Red : CarRear(u, v, 0.68f, 0.3f, 0.32f) ? White : Clear;
+                    return Ring(u, v) ? Red : TruckRear(u, v, 0.35f, 0.31f, 0.26f) ? Red : CarRear(u, v, 0.65f, 0.35f, 0.26f) ? White : Clear;
                 case SignalSymbol.EndRestrictions:
                     return EndStripes(u, v) ? White : Clear;
                 default:

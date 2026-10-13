@@ -171,6 +171,18 @@ namespace GantryTool.UI
             _hint.autoHeight = true;
         }
 
+        protected override void OnVisibilityChanged()
+        {
+            base.OnVisibilityChanged();
+            if (!isVisible)
+            {
+                for (int i = 0; i < _cells.Count; i++)
+                {
+                    UIUtils.HideTooltip(_cells[i].Panel);
+                }
+            }
+        }
+
         public override void Start()
         {
             base.Start();
@@ -404,6 +416,7 @@ namespace GantryTool.UI
         {
             for (int i = 0; i < _cells.Count; i++)
             {
+                UIUtils.HideTooltip(_cells[i].Panel); // a tile destroyed under the mouse leaves its tooltip on screen
                 UnityEngine.Object.Destroy(_cells[i].Panel.gameObject);
             }
 

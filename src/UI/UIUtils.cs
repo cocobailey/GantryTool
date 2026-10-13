@@ -63,6 +63,18 @@ namespace GantryTool.UI
         }
 
         /// <summary>
+        /// Hides a component's tooltip if it is showing. The game leaves it on screen when the component is destroyed
+        /// or hidden while the mouse is over it.
+        /// </summary>
+        public static void HideTooltip(UIComponent c)
+        {
+            if (c != null && c.tooltipBox != null && c.tooltipBox.isVisible)
+            {
+                c.tooltipBox.Hide();
+            }
+        }
+
+        /// <summary>
         /// A slider from the options-page template (UIHelper), sized to <paramref name="rowWidth"/>, with its value in
         /// the label and colours that read clearly on a MenuPanel2 background. <paramref name="format"/> null =
         /// decimals chosen from the step.
