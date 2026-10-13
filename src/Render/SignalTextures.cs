@@ -204,7 +204,7 @@ namespace GantryTool.Render
                 case SignalSymbol.NoOvertaking:
                     return Ring(u, v) ? Red : CarRear(u, v, 0.35f, 0.35f, 0.26f) ? Red : CarRear(u, v, 0.65f, 0.35f, 0.26f) ? White : Clear;
                 case SignalSymbol.NoOvertakingTrucks:
-                    return Ring(u, v) ? Red : TruckRear(u, v, 0.35f, 0.31f, 0.26f) ? Red : CarRear(u, v, 0.65f, 0.35f, 0.26f) ? White : Clear;
+                    return Ring(u, v) ? Red : TruckRear(u, v, 0.34f, 0.3f) ? Red : CarRear(u, v, 0.65f, 0.35f, 0.26f) ? White : Clear;
                 case SignalSymbol.EndRestrictions:
                     return EndStripes(u, v) ? White : Clear;
                 default:
@@ -260,13 +260,21 @@ namespace GantryTool.Render
                    Box(u, v, cx + 0.26f * w, bottom, cx + h, bottom + 0.14f * w);
         }
 
-        /// <summary>A truck seen from behind: a tall box on wheels.</summary>
-        private static bool TruckRear(float u, float v, float cx, float bottom, float w)
+        /// <summary>
+        /// A truck seen from behind, laid out in whole LEDs (40-dot grid) so each part keeps its own row: twin wheels,
+        /// a wide bumper, then a tall cargo box drawn as an outline with the seam between its two doors.
+        /// </summary>
+        private static bool TruckRear(float u, float v, float cx, float bottom)
         {
-            float h = w * 0.5f;
-            return Box(u, v, cx - h, bottom + 0.14f * w, cx + h, bottom + 1.0f * w) ||
-                   Box(u, v, cx - h, bottom, cx - 0.26f * w, bottom + 0.14f * w) ||
-                   Box(u, v, cx + 0.26f * w, bottom, cx + h, bottom + 0.14f * w);
+            const float L = 1f / SpeedDots;
+            float h = 5.5f * L;
+            float y0 = bottom + 4f * L, y1 = y0 + 13f * L;
+            bool box = Box(u, v, cx - h, y0, cx + h, y1) && !Box(u, v, cx - h + L, y0 + L, cx + h - L, y1 - L);
+            bool doors = Mathf.Abs(u - cx) <= 0.5f * L && v >= y0 && v <= y1;
+            bool bumper = Box(u, v, cx - h - L, bottom + 2f * L, cx + h + L, bottom + 3f * L);
+            bool wheels = Box(u, v, cx - h, bottom, cx - h + 3f * L, bottom + 2f * L) ||
+                          Box(u, v, cx + h - 3f * L, bottom, cx + h, bottom + 2f * L);
+            return box || doors || bumper || wheels;
         }
 
         /// <summary>A car from the side, facing right, tilted by <paramref name="degrees"/> around its centre.</summary>
