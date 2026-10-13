@@ -96,7 +96,7 @@ namespace GantryTool.Render
             }
 
             // Decide once per LED which ones are lit and in what colour.
-            int dots = spec.Kind == TileKind.Speed ? SpeedDots : LaneDots;
+            int dots = spec.Kind == TileKind.Lane ? LaneDots : SpeedDots;
             var led = new Color[dots, dots];
             for (int dy = 0; dy < dots; dy++)
             {
@@ -168,7 +168,159 @@ namespace GantryTool.Render
                 return SpeedRing(spec.Shown, u, v, 1f / dots);
             }
 
+            if (spec.Kind == TileKind.Pictogram)
+            {
+                return Pictogram(spec.Symbol, u, v);
+            }
+
             return Clear;
+        }
+
+        // ------------------------------------------------------------------------------ warnings and restrictions
+
+        private const float Line = 0.03f;  // half width of pictogram strokes
+
+        /// <summary>European-style warnings (red triangle) and restrictions (red ring), white pictograms.</summary>
+        private static Color Pictogram(SignalSymbol s, float u, float v)
+        {
+            switch (s)
+            {
+                case SignalSymbol.Roadworks:
+                    return Triangle(u, v) ? Red : Roadworks(u, v) ? White : Clear;
+                case SignalSymbol.Queue:
+                    return Triangle(u, v) ? Red : CarRear(u, v, 0.5f, 0.16f, 0.38f) || CarRear(u, v, 0.5f, 0.47f, 0.24f) ? White : Clear;
+                case SignalSymbol.Accident:
+                    return Triangle(u, v) ? Red
+                        : CarSide(u, v, 0.34f, 0.21f, 0.32f, 12f) || CarSide(1f - u, v, 0.34f, 0.21f, 0.32f, 12f) ? White : Clear;
+                case SignalSymbol.Slippery:
+                    return Triangle(u, v) ? Red : CarSide(u, v, 0.5f, 0.4f, 0.4f, 0f) || Skid(u, v, 0.4f) || Skid(u, v, 0.6f) ? White : Clear;
+                case SignalSymbol.Fog:
+                    return Triangle(u, v) ? Red
+                        : Segment(u, v, 0.22f, 0.2f, 0.78f, 0.2f, 0.022f) || Segment(u, v, 0.28f, 0.3f, 0.72f, 0.3f, 0.022f) ||
+                          Segment(u, v, 0.33f, 0.4f, 0.67f, 0.4f, 0.022f) || Segment(u, v, 0.38f, 0.5f, 0.62f, 0.5f, 0.022f) ? White : Clear;
+                case SignalSymbol.Danger:
+                    return Triangle(u, v) ? Red
+                        : Segment(u, v, 0.5f, 0.37f, 0.5f, 0.64f, 0.042f) || Disc(u, v, 0.5f, 0.24f, 0.048f) ? White : Clear;
+                case SignalSymbol.NoOvertaking:
+                    return Ring(u, v) ? Red : CarRear(u, v, 0.32f, 0.3f, 0.32f) ? Red : CarRear(u, v, 0.68f, 0.3f, 0.32f) ? White : Clear;
+                case SignalSymbol.NoOvertakingTrucks:
+                    return Ring(u, v) ? Red : TruckRear(u, v, 0.32f, 0.27f, 0.3f) ? Red : CarRear(u, v, 0.68f, 0.3f, 0.32f) ? White : Clear;
+                case SignalSymbol.EndRestrictions:
+                    return EndStripes(u, v) ? White : Clear;
+                default:
+                    return Clear;
+            }
+        }
+
+        /// <summary>Red warning triangle outline, point up.</summary>
+        private static bool Triangle(float u, float v)
+        {
+            const float top = 0.94f, bottom = 0.12f, left = 0.04f, right = 0.96f, half = 0.042f;
+            return Segment(u, v, left, bottom, right, bottom, half) || Segment(u, v, right, bottom, 0.5f, top, half) ||
+                   Segment(u, v, 0.5f, top, left, bottom, half);
+        }
+
+        /// <summary>Red prohibition ring (same as the speed limit ring).</summary>
+        private static bool Ring(float u, float v)
+        {
+            float du = u - 0.5f, dv = v - 0.5f;
+            return Mathf.Abs(Mathf.Sqrt(du * du + dv * dv) - 0.445f) <= 0.035f;
+        }
+
+        private static bool Disc(float u, float v, float cx, float cy, float r)
+        {
+            return (u - cx) * (u - cx) + (v - cy) * (v - cy) <= r * r;
+        }
+
+        private static bool Box(float u, float v, float x0, float y0, float x1, float y1)
+        {
+            return u >= x0 && u <= x1 && v >= y0 && v <= y1;
+        }
+
+        /// <summary>A worker digging, with a heap of earth.</summary>
+        private static bool Roadworks(float u, float v)
+        {
+            return Disc(u, v, 0.43f, 0.6f, 0.045f) ||
+                   Segment(u, v, 0.43f, 0.54f, 0.39f, 0.4f, 0.036f) ||                // body
+                   Segment(u, v, 0.39f, 0.4f, 0.32f, 0.2f, Line) ||                   // legs
+                   Segment(u, v, 0.39f, 0.4f, 0.46f, 0.2f, Line) ||
+                   Segment(u, v, 0.42f, 0.5f, 0.57f, 0.3f, 0.024f) ||                 // arms and shovel
+                   Segment(u, v, 0.56f, 0.3f, 0.6f, 0.24f, 0.036f) ||
+                   (v >= 0.18f && v <= 0.3f - 0.9f * Mathf.Abs(u - 0.67f));           // heap
+        }
+
+        /// <summary>A car seen from behind; (cx, bottom) = centre of its wheels' bottom edge, w = width.</summary>
+        private static bool CarRear(float u, float v, float cx, float bottom, float w)
+        {
+            float h = w * 0.5f;
+            bool window = Box(u, v, cx - 0.26f * w, bottom + 0.5f * w, cx + 0.26f * w, bottom + 0.66f * w);
+            return Box(u, v, cx - h, bottom + 0.14f * w, cx + h, bottom + 0.46f * w) ||                 // body
+                   (Box(u, v, cx - 0.38f * w, bottom + 0.46f * w, cx + 0.38f * w, bottom + 0.74f * w) && !window) || // cabin
+                   Box(u, v, cx - h, bottom, cx - 0.26f * w, bottom + 0.14f * w) ||                     // wheels
+                   Box(u, v, cx + 0.26f * w, bottom, cx + h, bottom + 0.14f * w);
+        }
+
+        /// <summary>A truck seen from behind: a tall box on wheels.</summary>
+        private static bool TruckRear(float u, float v, float cx, float bottom, float w)
+        {
+            float h = w * 0.5f;
+            return Box(u, v, cx - h, bottom + 0.14f * w, cx + h, bottom + 1.0f * w) ||
+                   Box(u, v, cx - h, bottom, cx - 0.26f * w, bottom + 0.14f * w) ||
+                   Box(u, v, cx + 0.26f * w, bottom, cx + h, bottom + 0.14f * w);
+        }
+
+        /// <summary>A car from the side, facing right, tilted by <paramref name="degrees"/> around its centre.</summary>
+        private static bool CarSide(float u, float v, float cx, float bottom, float len, float degrees)
+        {
+            float a = -degrees * Mathf.Deg2Rad;
+            float du = u - cx, dv = v - bottom;
+            float x = du * Mathf.Cos(a) - dv * Mathf.Sin(a);
+            float y = du * Mathf.Sin(a) + dv * Mathf.Cos(a);
+            float r = 0.12f * len;
+            bool window = Box(x, y, -0.18f * len, 0.4f * len, 0.12f * len, 0.54f * len);
+            bool wheel = Disc(x, y, -0.3f * len, r, r) || Disc(x, y, 0.3f * len, r, r);
+            return wheel ||
+                   Box(x, y, -0.5f * len, 0.14f * len, 0.5f * len, 0.36f * len) ||                      // body
+                   (Box(x, y, -0.28f * len, 0.36f * len, 0.2f * len, 0.6f * len) && !window);           // cabin
+        }
+
+        /// <summary>A wavy skid mark under the car on the slippery-road sign.</summary>
+        private static bool Skid(float u, float v, float cx)
+        {
+            if (v < 0.17f || v > 0.36f)
+            {
+                return false;
+            }
+
+            float centre = cx + 0.05f * Mathf.Sin((v - 0.17f) / 0.19f * 2f * Mathf.PI);
+            return Mathf.Abs(u - centre) <= 0.028f;
+        }
+
+        /// <summary>End of all restrictions: a thin ring crossed by diagonal stripes (bottom-left to top-right).</summary>
+        private static bool EndStripes(float u, float v)
+        {
+            float du = u - 0.5f, dv = v - 0.5f;
+            float r = Mathf.Sqrt(du * du + dv * dv);
+            if (Mathf.Abs(r - 0.445f) <= 0.022f)
+            {
+                return true;
+            }
+
+            if (r > 0.4f)
+            {
+                return false;
+            }
+
+            float d = (du - dv) * 0.7071f;   // distance across the stripes
+            for (int k = -2; k <= 2; k++)
+            {
+                if (Mathf.Abs(d - k * 0.075f) <= 0.019f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // ------------------------------------------------------------------------------ speed limits

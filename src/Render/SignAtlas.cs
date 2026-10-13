@@ -9,7 +9,8 @@ namespace GantryTool.Render
         Lane,      // one of the 1.0 lane signs (row 1, unchanged since 1.0)
         Housing,   // plain housing colour for the box sides
         Empty,
-        Speed      // speed limit; Shown = number on the sign in the style's units
+        Speed,     // speed limit; Shown = number on the sign in the style's units
+        Pictogram  // warning or restriction sign
     }
 
     public struct TileSpec
@@ -35,6 +36,7 @@ namespace GantryTool.Render
         public readonly bool Mph;
         public readonly List<TileSpec> Tiles = new List<TileSpec>();
         private readonly Dictionary<int, int> _speedTile = new Dictionary<int, int>();
+        private readonly Dictionary<SignalSymbol, int> _pictogramTile = new Dictionary<SignalSymbol, int>();
 
         public int Width => Tile * Columns;
         public int Rows => (Tiles.Count + Columns - 1) / Columns;
@@ -74,6 +76,17 @@ namespace GantryTool.Render
                 _speedTile[v] = Tiles.Count;
                 Tiles.Add(new TileSpec { Kind = TileKind.Speed, Symbol = SignalSymbol.SpeedLimit, Shown = v });
             }
+
+            // Warnings and restrictions this style has.
+            foreach (SignDef def in SignCatalog.All)
+            {
+                if ((def.Category == SignCategory.Warning || def.Category == SignCategory.Restriction) &&
+                    SignCatalog.IsAvailable(style, def.Symbol))
+                {
+                    _pictogramTile[def.Symbol] = Tiles.Count;
+                    Tiles.Add(new TileSpec { Kind = TileKind.Pictogram, Symbol = def.Symbol });
+                }
+            }
         }
 
         public static SignAtlas For(SignStyle style)
@@ -88,6 +101,12 @@ namespace GantryTool.Render
             if (s >= (int)SignalSymbol.Arrow && s <= (int)SignalSymbol.Blank)
             {
                 return s - 1;
+            }
+
+            int pictogram;
+            if (_pictogramTile.TryGetValue(SignCatalog.Fallback(Style, f.Symbol), out pictogram))
+            {
+                return pictogram;
             }
 
             if (f.Symbol == SignalSymbol.SpeedLimit)

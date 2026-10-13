@@ -45,6 +45,8 @@ namespace GantryTool.Tests
             Run("a face changed in 1.0 keeps that change", FaceChangedIn10Wins);
             Run("a plain face reset in 1.0 is not undone", PlainFaceResetIn10Kept);
             Run("unknown future signs load as Auto", UnknownExtSymbolIsAuto);
+            Run("warning and restriction signs round-trip; 1.0 sees Auto", WarningsRoundTrip);
+            Run("every sign has its own tile; unknown ones draw blank", AtlasTiles);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -452,6 +454,37 @@ namespace GantryTool.Tests
             List<Gantry> loaded = SaveAndLoad(gantries, true);
             Check(loaded[0].Overrides[0].Plus == SignalSymbol.Auto, "future sign shows Auto");
             Check(loaded[0].Overrides[0].Minus == SignalSymbol.MergeRight, "known face kept");
+        }
+
+        private static void WarningsRoundTrip()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Roadworks, Plus = SignalSymbol.EndRestrictions, Sign = 1 });
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[1].Overrides[0].Minus == SignalSymbol.Roadworks && loaded[1].Overrides[0].Plus == SignalSymbol.EndRestrictions, "kept");
+            string err;
+            List<Gantry> by10 = Old10.Read(GantryData.WriteLegacy(gantries, new object()), out err);
+            Check(err == null && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Auto, "1.0 sees Auto");
+        }
+
+        private static void AtlasTiles()
+        {
+            GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(SignStyle.Europe);
+            var seen = new HashSet<int>();
+            foreach (SignDef def in SignCatalog.All)
+            {
+                int t = atlas.TileOf(new FaceSign(def.Symbol, 0));
+                Check(def.Symbol == SignalSymbol.Blank || t != 5, def.Symbol + " has a tile");
+                Check(seen.Add(t), def.Symbol + " tile is unique");
+            }
+
+            for (int s = 1; s <= 6; s++)
+            {
+                Check(atlas.TileOf(new FaceSign((SignalSymbol)s, 0)) == s - 1, "1.0 tile layout unchanged for " + (SignalSymbol)s);
+            }
+
+            Check(atlas.TileOf(new FaceSign((SignalSymbol)300, 0)) == 5, "unknown sign draws blank");
+            Check(atlas.Height <= 2048, "atlas fits (" + atlas.Height + " px)");
         }
 
         // ------------------------------------------------------------------------------ helpers

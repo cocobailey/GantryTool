@@ -363,14 +363,18 @@ namespace GantryTool.UI
                 return items;
             }
 
-            items.Add(new PickItem
+            if (_category == SignCategory.Lane)
             {
-                Sign = new FaceSign(SignalSymbol.Auto, 0),
-                Preview = new FaceSign(autoLane, 0),
-                Label = "Auto",
-                Tooltip = "Follow the lane's direction (now: " + SignalRules.PlainName(autoLane) + ")"
-            });
-            foreach (SignDef def in SignCatalog.InCategory(style, SignCategory.Lane))
+                items.Add(new PickItem
+                {
+                    Sign = new FaceSign(SignalSymbol.Auto, 0),
+                    Preview = new FaceSign(autoLane, 0),
+                    Label = "Auto",
+                    Tooltip = "Follow the lane's direction (now: " + SignalRules.PlainName(autoLane) + ")"
+                });
+            }
+
+            foreach (SignDef def in SignCatalog.InCategory(style, _category))
             {
                 items.Add(new PickItem
                 {

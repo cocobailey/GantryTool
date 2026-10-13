@@ -323,7 +323,7 @@ namespace GantryTool.Data
         /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
         private static SignalSymbol ExtSymbol(ushort v)
         {
-            return v <= (ushort)SignalSymbol.SpeedLimit ? (SignalSymbol)v : SignalSymbol.Auto;
+            return v <= (ushort)SignalSymbol.EndRestrictions ? (SignalSymbol)v : SignalSymbol.Auto;
         }
 
         /// <summary>

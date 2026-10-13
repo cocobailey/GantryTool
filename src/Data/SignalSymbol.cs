@@ -21,7 +21,18 @@ namespace GantryTool.Data
 
         // Added in 1.1 (extension block only)
         SpeedAuto = 8,   // overrides only: the speed limit of the lane underneath (TM:PE-aware)
-        SpeedLimit = 9   // speed limit; value = km/h
+        SpeedLimit = 9,  // speed limit; value = km/h
+
+        // Warnings and restrictions (extension block only)
+        Roadworks = 10,
+        Queue = 11,              // congestion ahead
+        Accident = 12,
+        Slippery = 13,
+        Fog = 14,
+        Danger = 15,             // general danger "!"
+        NoOvertaking = 16,
+        NoOvertakingTrucks = 17,
+        EndRestrictions = 18     // end of all restrictions
     }
 
     /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
@@ -93,6 +104,15 @@ namespace GantryTool.Data
                 case SignalSymbol.Hidden: return "x";
                 case SignalSymbol.SpeedAuto: return "SA";
                 case SignalSymbol.SpeedLimit: return "S";
+                case SignalSymbol.Roadworks: return "WR";
+                case SignalSymbol.Queue: return "WQ";
+                case SignalSymbol.Accident: return "WA";
+                case SignalSymbol.Slippery: return "WS";
+                case SignalSymbol.Fog: return "WF";
+                case SignalSymbol.Danger: return "W!";
+                case SignalSymbol.NoOvertaking: return "NO";
+                case SignalSymbol.NoOvertakingTrucks: return "NT";
+                case SignalSymbol.EndRestrictions: return "E";
                 default: return "?";
             }
         }
@@ -111,6 +131,15 @@ namespace GantryTool.Data
                 case SignalSymbol.Hidden: return "Removed";
                 case SignalSymbol.SpeedAuto: return "Speed limit (road)";
                 case SignalSymbol.SpeedLimit: return "Speed limit";
+                case SignalSymbol.Roadworks: return "Roadworks";
+                case SignalSymbol.Queue: return "Queue ahead";
+                case SignalSymbol.Accident: return "Accident";
+                case SignalSymbol.Slippery: return "Slippery road";
+                case SignalSymbol.Fog: return "Fog";
+                case SignalSymbol.Danger: return "Danger";
+                case SignalSymbol.NoOvertaking: return "No overtaking";
+                case SignalSymbol.NoOvertakingTrucks: return "No overtaking (trucks)";
+                case SignalSymbol.EndRestrictions: return "End of restrictions";
                 default: return "Auto";
             }
         }
@@ -127,7 +156,16 @@ namespace GantryTool.Data
                 case SignalSymbol.Reserved: return "White diamond (reserved)";
                 case SignalSymbol.Blank: return "Blank (off)";
                 case SignalSymbol.Hidden: return "Removed";
-                default: return s.ToString();
+                case SignalSymbol.Roadworks: return "Warning: roadworks";
+                case SignalSymbol.Queue: return "Warning: queue / congestion ahead";
+                case SignalSymbol.Accident: return "Warning: accident ahead";
+                case SignalSymbol.Slippery: return "Warning: slippery road";
+                case SignalSymbol.Fog: return "Warning: fog";
+                case SignalSymbol.Danger: return "Warning: other danger";
+                case SignalSymbol.NoOvertaking: return "No overtaking";
+                case SignalSymbol.NoOvertakingTrucks: return "No overtaking for trucks";
+                case SignalSymbol.EndRestrictions: return "End of all restrictions";
+                default: return PlainName(s);
             }
         }
 

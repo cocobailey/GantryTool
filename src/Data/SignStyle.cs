@@ -72,7 +72,9 @@ namespace GantryTool.Data
     public enum SignCategory
     {
         Lane,
-        Speed
+        Speed,
+        Warning,
+        Restriction
     }
 
     /// <summary>One pickable sign.</summary>
@@ -81,6 +83,7 @@ namespace GantryTool.Data
         public SignalSymbol Symbol;
         public SignCategory Category;
         public string GridName;   // short label under the preview
+        public SignStyle[] Styles; // styles that have this sign; null = every style
     }
 
     /// <summary>Every sign that can be picked, and which styles have it.</summary>
@@ -93,12 +96,62 @@ namespace GantryTool.Data
             new SignDef { Symbol = SignalSymbol.MergeLeft, Category = SignCategory.Lane, GridName = "Merge left" },
             new SignDef { Symbol = SignalSymbol.MergeRight, Category = SignCategory.Lane, GridName = "Merge right" },
             new SignDef { Symbol = SignalSymbol.Reserved, Category = SignCategory.Lane, GridName = "Reserved" },
-            new SignDef { Symbol = SignalSymbol.Blank, Category = SignCategory.Lane, GridName = "Blank" }
+            new SignDef { Symbol = SignalSymbol.Blank, Category = SignCategory.Lane, GridName = "Blank" },
+
+            new SignDef { Symbol = SignalSymbol.Roadworks, Category = SignCategory.Warning, GridName = "Roadworks" },
+            new SignDef { Symbol = SignalSymbol.Queue, Category = SignCategory.Warning, GridName = "Queue" },
+            new SignDef { Symbol = SignalSymbol.Accident, Category = SignCategory.Warning, GridName = "Accident" },
+            new SignDef { Symbol = SignalSymbol.Slippery, Category = SignCategory.Warning, GridName = "Slippery" },
+            new SignDef { Symbol = SignalSymbol.Fog, Category = SignCategory.Warning, GridName = "Fog" },
+            new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger" },
+
+            new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No overtaking" },
+            new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No overtaking trucks" },
+            new SignDef { Symbol = SignalSymbol.EndRestrictions, Category = SignCategory.Restriction, GridName = "End of limits" }
         };
+
+        public static SignDef Find(SignalSymbol symbol)
+        {
+            for (int i = 0; i < All.Length; i++)
+            {
+                if (All[i].Symbol == symbol)
+                {
+                    return All[i];
+                }
+            }
+
+            return null;
+        }
 
         public static bool IsAvailable(SignStyle style, SignalSymbol symbol)
         {
-            return true; // every style has every lane sign so far
+            SignDef def = Find(symbol);
+            if (def == null || def.Styles == null)
+            {
+                return true;
+            }
+
+            return System.Array.IndexOf(def.Styles, style) >= 0;
+        }
+
+        /// <summary>
+        /// What a style shows for a sign it doesn't have (e.g. after the gantry's style was changed). The face keeps
+        /// its sign, so switching back shows it again.
+        /// </summary>
+        public static SignalSymbol Fallback(SignStyle style, SignalSymbol symbol)
+        {
+            if (IsAvailable(style, symbol))
+            {
+                return symbol;
+            }
+
+            SignDef def = Find(symbol);
+            if (def != null && def.Category == SignCategory.Warning && IsAvailable(style, SignalSymbol.Danger))
+            {
+                return SignalSymbol.Danger;
+            }
+
+            return SignalSymbol.Blank;
         }
 
         public static List<SignDef> InCategory(SignStyle style, SignCategory category)
@@ -116,7 +169,10 @@ namespace GantryTool.Data
         }
 
         /// <summary>Categories shown in the picker's dropdown, in order.</summary>
-        public static readonly SignCategory[] Categories = { SignCategory.Lane, SignCategory.Speed };
+        public static readonly SignCategory[] Categories =
+        {
+            SignCategory.Lane, SignCategory.Speed, SignCategory.Warning, SignCategory.Restriction
+        };
 
         public static string CategoryName(SignCategory c)
         {
@@ -124,6 +180,8 @@ namespace GantryTool.Data
             {
                 case SignCategory.Lane: return "Lane signals";
                 case SignCategory.Speed: return "Speed limits";
+                case SignCategory.Warning: return "Warnings";
+                case SignCategory.Restriction: return "Restrictions";
                 default: return c.ToString();
             }
         }
@@ -131,7 +189,13 @@ namespace GantryTool.Data
         /// <summary>Which category a face's sign belongs to (to open the picker on it).</summary>
         public static SignCategory CategoryOf(SignalSymbol s)
         {
-            return s == SignalSymbol.SpeedAuto || s == SignalSymbol.SpeedLimit ? SignCategory.Speed : SignCategory.Lane;
+            if (s == SignalSymbol.SpeedAuto || s == SignalSymbol.SpeedLimit)
+            {
+                return SignCategory.Speed;
+            }
+
+            SignDef def = Find(s);
+            return def != null ? def.Category : SignCategory.Lane;
         }
     }
 }
