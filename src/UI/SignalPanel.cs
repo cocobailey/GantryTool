@@ -377,19 +377,6 @@ namespace GantryTool.UI
             height = y + Mathf.Max(_hint.height, 32f) + 12f;
         }
 
-        /// <summary>One log line about a label's state (diagnoses labels that render blank in some sessions).</summary>
-        private static void LogLabel(string name, UILabel l)
-        {
-            if (l == null)
-            {
-                return;
-            }
-
-            Log.Info("Label " + name + ": visible=" + l.isVisible + " len=" + (l.text ?? "").Length + " size=" + l.size +
-                     " scale=" + l.textScale + " opacity=" + l.opacity + " color=" + l.textColor +
-                     " font=" + (l.font != null ? l.font.name + (l.font.isValid ? "" : " (invalid)") : "null"));
-        }
-
         private static void FillCard(FaceCard card, SignStyle style, bool mph, string toward, string seenBy, FaceSign sign,
             FaceSign shown, SignalSymbol auto, bool hidden, string note, bool selected)
         {
@@ -612,7 +599,6 @@ namespace GantryTool.UI
             note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
             if (note.height < 20f)
             {
-                LogLabel("note", note);
                 note.autoHeight = false;
                 note.height = 26f; // two lines; the text was not measured
             }
