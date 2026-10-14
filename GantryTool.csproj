@@ -73,7 +73,6 @@
   <Target Name="DeployMod" AfterTargets="Build" Condition="'$(Deploy)' == 'true'">
     <ItemGroup>
       <DeployFiles Include="$(TargetDir)$(AssemblyName).dll" />
-      <DeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
       <DeployFiles Include="$(TargetDir)CitiesHarmony.API.dll" />
       <!-- Unified UI helper library, shipped by every UUI-aware mod; only active when the UUI mod is enabled -->
       <DeployFiles Include="$(TargetDir)UnifiedUILib.dll" />

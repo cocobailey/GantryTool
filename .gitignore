@@ -8,4 +8,4 @@ obj/
 .vs/
 
 # Workshop upload helpers
-workshop_preview.png
+workshop_*.png
