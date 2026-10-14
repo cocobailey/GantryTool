@@ -60,6 +60,7 @@ namespace GantryTool
                 }
 
                 Log.Info("Tool installed");
+                UpdateNotesPanel.ShowIfNew();
             }
             catch (Exception e)
             {

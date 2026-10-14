@@ -23,6 +23,11 @@ namespace GantryTool
         public bool DebugLogging;              // per-lane scan details in the log
         public bool UseTmpeRestrictions = true; // TM:PE: banned lanes -> red X, bus-only lanes -> diamond
         public byte DefaultStyle = 1;          // SignStyle used by gantries set to "Default" (1 = Europe)
+        public string LastSeenNotes = "";      // "what's new" release the player has closed
+
+        /// <summary>Whether a settings file existed when the game started (1.0 only wrote one after an option change).</summary>
+        [XmlIgnore]
+        public static bool FileExisted;
 
         private static Settings _current;
 
@@ -45,7 +50,8 @@ namespace GantryTool
         {
             try
             {
-                if (File.Exists(FilePath))
+                FileExisted = File.Exists(FilePath);
+                if (FileExisted)
                 {
                     using (var reader = new StreamReader(FilePath))
                     {
