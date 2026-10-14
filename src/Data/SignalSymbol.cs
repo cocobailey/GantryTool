@@ -179,7 +179,8 @@ namespace GantryTool.Data
         /// TM:PE restriction. Banned -> red X on both faces. Reserved (bus-only) -> diamond on the face(s) that
         /// would show the green arrow; the oncoming face keeps its red X.
         /// </summary>
-        public static void Auto(int travelSign, LaneRestriction restriction, out SignalSymbol minus, out SignalSymbol plus)
+        public static void Auto(int travelSign, LaneRestriction restriction, out SignalSymbol minus, out SignalSymbol plus,
+            SignStyle style = SignStyle.Europe)
         {
             minus = travelSign >= 0 ? SignalSymbol.Arrow : SignalSymbol.Cross;
             plus = travelSign <= 0 ? SignalSymbol.Arrow : SignalSymbol.Cross;
@@ -200,6 +201,12 @@ namespace GantryTool.Data
                 {
                     plus = SignalSymbol.Reserved;
                 }
+            }
+
+            if (SignStyles.BlankOpenLanes(style))
+            {
+                minus = minus == SignalSymbol.Arrow ? SignalSymbol.Blank : minus;
+                plus = plus == SignalSymbol.Arrow ? SignalSymbol.Blank : plus;
             }
         }
 
@@ -291,11 +298,11 @@ namespace GantryTool.Data
         /// lane's actual speed limit.
         /// </summary>
         public static void ResolveFaces(List<GantryLane> lanes, int laneIndex, List<SignalOverride> overrides,
-            out FaceSign minus, out FaceSign plus)
+            out FaceSign minus, out FaceSign plus, SignStyle style = SignStyle.Europe)
         {
             GantryLane lane = lanes[laneIndex];
             SignalSymbol am, ap;
-            Auto(lane.TravelSign, lane.Restriction, out am, out ap);
+            Auto(lane.TravelSign, lane.Restriction, out am, out ap, style);
             minus = new FaceSign(am, 0);
             plus = new FaceSign(ap, 0);
             int idx = FindOverride(lanes, laneIndex, overrides);

@@ -132,7 +132,7 @@ namespace GantryTool.Render
             for (int i = 0; i < lanes.Count; i++)
             {
                 FaceSign minus, plus;
-                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus);
+                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus, atlas.Style);
                 if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue; // head removed by the player

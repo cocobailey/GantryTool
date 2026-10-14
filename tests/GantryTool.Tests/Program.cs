@@ -504,7 +504,12 @@ namespace GantryTool.Tests
                 Check(eu.TileOf(new FaceSign((SignalSymbol)s, 0)) == s - 1, "1.0 tile layout unchanged for " + (SignalSymbol)s);
             }
 
-            Check(SignCatalog.Fallback(SignStyle.UnitedKingdom, SignalSymbol.Arrow) == SignalSymbol.Blank, "UK: open lanes blank");
+            SignalSymbol am, ap;
+            SignalRules.Auto(1, GantryTool.Detect.LaneRestriction.None, out am, out ap, SignStyle.UnitedKingdom);
+            Check(am == SignalSymbol.Blank && ap == SignalSymbol.Cross, "UK: open lanes blank on Auto");
+            Check(SignCatalog.IsAvailable(SignStyle.UnitedKingdom, SignalSymbol.Arrow), "UK: green arrow can be picked");
+            SignalRules.Auto(1, GantryTool.Detect.LaneRestriction.None, out am, out ap, SignStyle.Europe);
+            Check(am == SignalSymbol.Arrow, "Europe: Auto unchanged");
             Check(SignCatalog.Fallback(SignStyle.Europe, SignalSymbol.YellowCross) == SignalSymbol.Cross, "yellow X -> red X");
             Check(SignCatalog.Fallback(SignStyle.Netherlands, SignalSymbol.Roadworks) == SignalSymbol.Blank, "NL: no warnings");
         }

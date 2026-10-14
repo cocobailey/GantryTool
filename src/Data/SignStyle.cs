@@ -75,6 +75,14 @@ namespace GantryTool.Data
             return s == SignStyle.Canada;
         }
 
+        /// <summary>
+        /// Styles whose open lanes are blank on Auto, like UK smart motorways. The green arrow can still be picked.
+        /// </summary>
+        public static bool BlankOpenLanes(SignStyle s)
+        {
+            return s == SignStyle.UnitedKingdom;
+        }
+
         /// <summary>Styles that show speeds in mph.</summary>
         public static bool UsesMph(SignStyle s)
         {
@@ -117,11 +125,6 @@ namespace GantryTool.Data
     /// <summary>Every sign that can be picked, and which styles have it.</summary>
     public static class SignCatalog
     {
-        private static readonly SignStyle[] NotUk =
-        {
-            SignStyle.Europe, SignStyle.Netherlands, SignStyle.UnitedStates, SignStyle.Canada, SignStyle.AustraliaNz
-        };
-
         private static readonly SignStyle[] NotNl =
         {
             SignStyle.Europe, SignStyle.UnitedKingdom, SignStyle.UnitedStates, SignStyle.Canada, SignStyle.AustraliaNz
@@ -132,8 +135,7 @@ namespace GantryTool.Data
 
         public static readonly SignDef[] All =
         {
-            // UK smart motorways leave open lanes blank: no green arrow.
-            new SignDef { Symbol = SignalSymbol.Arrow, Category = SignCategory.Lane, GridName = "Open", Styles = NotUk },
+            new SignDef { Symbol = SignalSymbol.Arrow, Category = SignCategory.Lane, GridName = "Open" },
             new SignDef { Symbol = SignalSymbol.Cross, Category = SignCategory.Lane, GridName = "Closed" },
             new SignDef { Symbol = SignalSymbol.YellowCross, Category = SignCategory.Lane, GridName = "Closing", Styles = NorthAmerica },
             new SignDef { Symbol = SignalSymbol.MergeLeft, Category = SignCategory.Lane, GridName = "Merge left" },

@@ -297,10 +297,10 @@ namespace GantryTool.UI
             GantryManager.GetFaces(g, lane, out minus, out plus);
             lock (GantryManager.Lock)
             {
-                SignalRules.ResolveFaces(g.Lanes, lane, g.Overrides, out shownMinus, out shownPlus);
+                SignalRules.ResolveFaces(g.Lanes, lane, g.Overrides, out shownMinus, out shownPlus, style);
             }
 
-            SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus);
+            SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus, style);
             bool hidden = SignalRules.IsHidden(minus.Symbol, plus.Symbol);
             bool mph = SignStyles.UsesMph(style);
             string note = info.Restriction == LaneRestriction.Banned ? " (TM:PE ban)"

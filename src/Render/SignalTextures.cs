@@ -83,6 +83,12 @@ namespace GantryTool.Render
         /// <summary>Paints one tile with its bottom-left corner at pixel (x0, y0).</summary>
         private static void PaintTile(TileSpec spec, SignStyle style, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
         {
+            if (spec.Kind == TileKind.Speed && style == SignStyle.Canada)
+            {
+                PaintPrintedMaximum(spec.Shown, mainPx, aciPx, width, x0, y0);
+                return;
+            }
+
             if (spec.Kind == TileKind.Lamp)
             {
                 PaintLamp(spec.Shown == 1, mainPx, aciPx, width, x0, y0);
@@ -180,8 +186,6 @@ namespace GantryTool.Render
                 {
                     case SignStyle.UnitedStates:
                         return TextSpeed("SPEED", "LIMIT", spec.Shown, col, row, dots) ? White : Clear;
-                    case SignStyle.Canada:
-                        return CanadaSpeed(spec.Shown, col, row, dots);
                     default:
                         return SpeedRing(spec.Shown, u, v, 1f / dots);
                 }
@@ -238,15 +242,67 @@ namespace GantryTool.Render
             return LedFont.LitBlock(new[] { value.ToString() }, col, row, dots, areaTop, dots - 2 - areaTop, 2, 0);
         }
 
-        /// <summary>Canadian (BC) variable speed sign: "MAXIMUM", the number in amber, "km/h".</summary>
-        private static Color CanadaSpeed(int value, int col, int row, int dots)
-        {
-            if (LedFont.Lit("MAXIMUM", col, row, dots / 2f, 2, 1) || LedFont.Lit("km/h", col, row, dots / 2f, 30, 1))
-            {
-                return White;
-            }
+        // Printed sign parts (not lit): white face, black border and lettering.
+        private static readonly Color SignWhite = new Color(0.86f, 0.86f, 0.84f, 1f);
+        private static readonly Color SignBlack = new Color(0.04f, 0.04f, 0.04f, 1f);
 
-            return LedFont.Lit(value.ToString(), col, row, dots / 2f, 12, 2) ? Amber : Clear;
+        private const float PrintCell = 1f / 54f;            // printed lettering: one font dot, tile-normalised
+        private const int WindowCols = 36, WindowRows = 20;  // LED window in the middle
+        private const float WindowLeft = 0.08f, WindowRight = 0.92f, WindowBottom = 0.25f, WindowTop = 0.72f;
+
+        /// <summary>
+        /// Canadian (BC) variable speed sign: a printed white sign with "MAXIMUM" and "km/h" in black, and a black LED
+        /// window in the middle showing the number in amber. Only the window's LEDs light up at night.
+        /// </summary>
+        private static void PaintPrintedMaximum(int value, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        {
+            string number = value.ToString();
+            float pitchU = (WindowRight - WindowLeft) / WindowCols;
+            float pitchV = (WindowTop - WindowBottom) / WindowRows;
+            float texelsPerDot = Tile * Mathf.Min(pitchU, pitchV);
+            int printCols = Mathf.RoundToInt(1f / PrintCell);
+
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    float u = (x + 0.5f) / Tile, v = (y + 0.5f) / Tile;
+                    Color c;
+                    float glow = 0f;
+
+                    if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
+                    {
+                        c = FrameColor;
+                    }
+                    else if (u < 0.055f || u > 0.945f || v < 0.055f || v > 0.945f)
+                    {
+                        c = SignBlack; // printed border
+                    }
+                    else if (u >= WindowLeft && u <= WindowRight && v >= WindowBottom && v <= WindowTop)
+                    {
+                        // LED window: round dots, lit amber where the number is.
+                        float gu = (u - WindowLeft) / pitchU, gv = (WindowTop - v) / pitchV;
+                        int col = Mathf.Min(WindowCols - 1, Mathf.FloorToInt(gu));
+                        int row = Mathf.Min(WindowRows - 1, Mathf.FloorToInt(gv));
+                        float fx = gu - col - 0.5f, fy = gv - row - 0.5f;
+                        float cover = Mathf.Clamp01((DotRadius - Mathf.Sqrt(fx * fx + fy * fy)) * texelsPerDot + 0.5f);
+                        bool on = LedFont.Lit(number, col, row, WindowCols / 2f, 3, 2);
+                        c = Color.Lerp(FaceColor, on ? Amber : UnlitDot, cover);
+                        glow = on ? cover : 0f;
+                    }
+                    else
+                    {
+                        int col = Mathf.FloorToInt(u / PrintCell), row = Mathf.FloorToInt((1f - v) / PrintCell);
+                        bool ink = LedFont.Lit("MAXIMUM", col, row, printCols / 2f, 5, 1) ||
+                                   LedFont.Lit("km/h", col, row, printCols / 2f, 43, 1);
+                        c = ink ? SignBlack : SignWhite;
+                    }
+
+                    int i = (y0 + y) * width + x0 + x;
+                    mainPx[i] = c;
+                    aciPx[i] = new Color(0f, 0f, glow, 1f);
+                }
+            }
         }
 
         /// <summary>A round amber beacon lens: lit (glowing) or unlit, on a housing-coloured square.</summary>
