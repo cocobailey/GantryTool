@@ -187,6 +187,21 @@ namespace GantryTool.Data
             return id;
         }
 
+        /// <summary>Removes a sign from the library (faces still pointing at it draw blank).</summary>
+        public static bool Remove(ushort id)
+        {
+            lock (Sync)
+            {
+                if (!Signs.Remove(id))
+                {
+                    return false;
+                }
+
+                Revision++;
+                return true;
+            }
+        }
+
         public static void Clear()
         {
             lock (Sync)

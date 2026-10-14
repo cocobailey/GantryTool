@@ -51,6 +51,9 @@ namespace GantryTool.UI
         private UIDropDown _colourDrop;
         private UIDropDown _fileDrop;
         private UILabel _customNote;
+        private UIButton _deleteCustom;
+        private ushort _deleteArmedId;
+        private float _deleteArmedUntil;
         private List<string> _files = new List<string>();
         private UIButton _resetLayout;
         private UIButton _reset;
@@ -150,7 +153,10 @@ namespace GantryTool.UI
 
             _categoryLabel = UIUtils.CreateLabel(this, "", 0.7f);
             _categoryLabel.textColor = new Color32(185, 185, 185, 255);
-            _categoryLabel.relativePosition = new Vector3(Margin + 210f, 150f);
+            _categoryLabel.autoSize = false;
+            _categoryLabel.wordWrap = true;
+            _categoryLabel.size = new Vector2(PanelWidth - 2f * Margin - 210f, 30f); // stays inside the panel
+            _categoryLabel.relativePosition = new Vector3(Margin + 210f, 146f);
 
             _grid = AddUIComponent<UIPanel>();
             _grid.relativePosition = new Vector3(Margin, 182f);
@@ -334,8 +340,10 @@ namespace GantryTool.UI
             {
                 if (CustomSigns.Count == 0 && !hidden)
                 {
-                    _categoryLabel.text = "No custom signs yet: make one below";
+                    _categoryLabel.text = "None yet: make one below";
                 }
+
+                UpdateDeleteButton(current);
 
                 _customBox.relativePosition = new Vector3(Margin, _cells.Count == 0 ? _grid.relativePosition.y : y);
                 y = _customBox.relativePosition.y + _customBox.height + 10f;
@@ -666,9 +674,11 @@ namespace GantryTool.UI
             _colourDrop.tooltip = "LED colour";
             DropdownToggle.Attach(_colourDrop);
 
-            UIButton addText = CreateButton(_customBox, "Add text sign", ContentWidth, AddTextSign);
+            UIButton addText = CreateButton(_customBox, "Add text sign", HalfWidth, AddTextSign);
             addText.relativePosition = new Vector3(0f, 54f);
             addText.tooltip = "Make this text sign and put it on the selected face";
+            _deleteCustom = CreateButton(_customBox, "Delete this sign", HalfWidth, DeleteCustomSign);
+            _deleteCustom.relativePosition = new Vector3(HalfWidth + ButtonGap, 54f);
 
             var picLabel = UIUtils.CreateLabel(_customBox, "Picture (PNG or JPG) from the Signs folder", 0.75f);
             picLabel.relativePosition = new Vector3(0f, 92f);
@@ -740,6 +750,58 @@ namespace GantryTool.UI
                 Log.Error("Opening the Signs folder failed", e);
                 SetCustomNote("Couldn't open the folder: " + ImageImport.Folder);
             }
+        }
+
+        /// <summary>Delete works on the custom sign the selected face shows.</summary>
+        private void UpdateDeleteButton(FaceSign current)
+        {
+            bool custom = current.Symbol == SignalSymbol.Custom && CustomSigns.Get(current.Value) != null;
+            _deleteCustom.isEnabled = custom;
+            bool armed = custom && _deleteArmedId == current.Value && Time.realtimeSinceStartup < _deleteArmedUntil;
+            if (!armed)
+            {
+                _deleteArmedId = 0;
+            }
+
+            _deleteCustom.text = armed ? "Click again to delete" : "Delete this sign";
+            _deleteCustom.tooltip = custom
+                ? "Remove the custom sign this face shows from the city; every face using it goes back to Auto"
+                : "Select a face showing a custom sign to delete it";
+        }
+
+        private void DeleteCustomSign()
+        {
+            Gantry g = CurrentGantry();
+            if (g == null)
+            {
+                return;
+            }
+
+            FaceSign minus, plus;
+            GantryManager.GetFaces(g, CurrentLane(g), out minus, out plus);
+            FaceSign face = _minusSelected ? minus : plus;
+            if (face.Symbol != SignalSymbol.Custom || CustomSigns.Get(face.Value) == null)
+            {
+                return;
+            }
+
+            // Signs used on other faces too need a second click.
+            int uses = GantryManager.CountCustomUses(face.Value);
+            bool armed = _deleteArmedId == face.Value && Time.realtimeSinceStartup < _deleteArmedUntil;
+            if (uses > 1 && !armed)
+            {
+                _deleteArmedId = face.Value;
+                _deleteArmedUntil = Time.realtimeSinceStartup + 4f;
+                _deleteCustom.text = "Click again to delete";
+                SetCustomNote("This sign is on " + uses + " faces. Click Delete again within a few seconds to remove it; " +
+                              "those faces go back to Auto.");
+                return;
+            }
+
+            _deleteArmedId = 0;
+            GantryManager.DeleteCustomSign(face.Value);
+            SetCustomNote(null);
+            Refresh(g);
         }
 
         private void AddTextSign()

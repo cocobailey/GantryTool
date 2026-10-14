@@ -322,6 +322,68 @@ namespace GantryTool.Data
             }
         }
 
+        /// <summary>How many faces, on all gantries, show custom sign <paramref name="id"/>.</summary>
+        public static int CountCustomUses(ushort id)
+        {
+            int n = 0;
+            lock (Lock)
+            {
+                foreach (Gantry g in _gantries)
+                {
+                    foreach (SignalOverride o in g.Overrides)
+                    {
+                        n += (o.Minus == SignalSymbol.Custom && o.MinusValue == id ? 1 : 0) +
+                             (o.Plus == SignalSymbol.Custom && o.PlusValue == id ? 1 : 0);
+                    }
+                }
+            }
+
+            return n;
+        }
+
+        /// <summary>Deletes a custom sign: every face showing it goes back to Auto. Returns how many faces changed.</summary>
+        public static int DeleteCustomSign(ushort id)
+        {
+            int changed = 0;
+            lock (Lock)
+            {
+                foreach (Gantry g in _gantries)
+                {
+                    bool touched = false;
+                    for (int k = 0; k < g.Overrides.Count; k++)
+                    {
+                        SignalOverride o = g.Overrides[k];
+                        if (o.Minus == SignalSymbol.Custom && o.MinusValue == id)
+                        {
+                            o.Minus = SignalSymbol.Auto;
+                            o.MinusValue = 0;
+                            changed++;
+                            touched = true;
+                        }
+
+                        if (o.Plus == SignalSymbol.Custom && o.PlusValue == id)
+                        {
+                            o.Plus = SignalSymbol.Auto;
+                            o.PlusValue = 0;
+                            changed++;
+                            touched = true;
+                        }
+
+                        g.Overrides[k] = o;
+                    }
+
+                    if (touched)
+                    {
+                        g.SignalsDirty = true;
+                    }
+                }
+            }
+
+            CustomSigns.Remove(id);
+            Log.Info("Deleted custom sign #" + id + "; " + changed + " faces back to Auto");
+            return changed;
+        }
+
         /// <summary>Schedules every gantry for a rescan + rebuild (option changes). Main thread.</summary>
         public static void MarkAllDirty()
         {
