@@ -10,7 +10,8 @@ namespace GantryTool.Render
         Housing,   // plain housing colour for the box sides
         Empty,
         Speed,     // speed limit; Shown = number on the sign in the style's units
-        Pictogram  // warning or restriction sign
+        Pictogram, // warning or restriction sign
+        Lamp       // beacon lens above a speed sign; Shown = 1 when lit
     }
 
     public struct TileSpec
@@ -38,6 +39,10 @@ namespace GantryTool.Render
         private readonly Dictionary<int, int> _speedTile = new Dictionary<int, int>();
         private readonly Dictionary<SignalSymbol, int> _pictogramTile = new Dictionary<SignalSymbol, int>();
         private readonly Dictionary<SignalSymbol, int> _extraLaneTile = new Dictionary<SignalSymbol, int>();
+
+        /// <summary>Beacon lens tiles (unlit / lit), or -1 when the style has no beacon.</summary>
+        public readonly int LampOffTile = -1;
+        public readonly int LampOnTile = -1;
 
         public int Width => Tile * Columns;
         public int Rows => (Tiles.Count + Columns - 1) / Columns;
@@ -83,6 +88,14 @@ namespace GantryTool.Render
             {
                 _speedTile[v] = Tiles.Count;
                 Tiles.Add(new TileSpec { Kind = TileKind.Speed, Symbol = SignalSymbol.SpeedLimit, Shown = v });
+            }
+
+            if (SignStyles.HasBeacon(style))
+            {
+                LampOffTile = Tiles.Count;
+                Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 0 });
+                LampOnTile = Tiles.Count;
+                Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 1 });
             }
 
             // Warnings and restrictions this style has.

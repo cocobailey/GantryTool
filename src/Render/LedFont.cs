@@ -52,13 +52,21 @@ namespace GantryTool.Render
             { '/', new[] { "    #", "    #", "   # ", "  #  ", " #   ", "#    ", "#    " } },
             { '.', new[] { " ", " ", " ", " ", " ", " ", "#" } },
             { '!', new[] { "#", "#", "#", "#", "#", " ", "#" } },
-            { ' ', new[] { "  ", "  ", "  ", "  ", "  ", "  ", "  " } }
+            { ' ', new[] { "  ", "  ", "  ", "  ", "  ", "  ", "  " } },
+            { 'k', new[] { "#   ", "#   ", "#  #", "# # ", "##  ", "# # ", "#  #" } },
+            { 'm', new[] { "     ", "     ", "## # ", "# # #", "# # #", "#   #", "#   #" } },
+            { 'h', new[] { "#   ", "#   ", "### ", "#  #", "#  #", "#  #", "#  #" } }
         };
 
         private static string[] Glyph(char c)
         {
             string[] g;
-            return Glyphs.TryGetValue(char.ToUpperInvariant(c), out g) ? g : Glyphs[' '];
+            if (Glyphs.TryGetValue(c, out g) || Glyphs.TryGetValue(char.ToUpperInvariant(c), out g))
+            {
+                return g;
+            }
+
+            return Glyphs[' '];
         }
 
         /// <summary>Width of a line in LEDs at scale 1 (one dot between glyphs).</summary>

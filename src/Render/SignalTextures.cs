@@ -35,6 +35,8 @@ namespace GantryTool.Render
         private static readonly Color Red = new Color(1f, 0.15f, 0.1f, 1f);
         private static readonly Color Yellow = new Color(1f, 0.82f, 0.1f, 1f);
         private static readonly Color White = new Color(1f, 1f, 1f, 1f);
+        private static readonly Color Amber = new Color(1f, 0.62f, 0.08f, 1f);
+        private static readonly Color AmberUnlit = new Color(0.22f, 0.13f, 0.03f, 1f);
         private static readonly Color Clear = new Color(0f, 0f, 0f, 0f); // "not lit" marker in LED colour grids
 
         private const int PreviewMip = 2; // 256 px tiles -> 64 px previews
@@ -81,6 +83,12 @@ namespace GantryTool.Render
         /// <summary>Paints one tile with its bottom-left corner at pixel (x0, y0).</summary>
         private static void PaintTile(TileSpec spec, SignStyle style, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
         {
+            if (spec.Kind == TileKind.Lamp)
+            {
+                PaintLamp(spec.Shown == 1, mainPx, aciPx, width, x0, y0);
+                return;
+            }
+
             if (spec.Kind == TileKind.Housing || spec.Kind == TileKind.Empty)
             {
                 Color fill = spec.Kind == TileKind.Housing ? HousingColor : FaceColor;
@@ -173,7 +181,7 @@ namespace GantryTool.Render
                     case SignStyle.UnitedStates:
                         return TextSpeed("SPEED", "LIMIT", spec.Shown, col, row, dots) ? White : Clear;
                     case SignStyle.Canada:
-                        return TextSpeed("MAXIMUM", null, spec.Shown, col, row, dots) ? White : Clear;
+                        return CanadaSpeed(spec.Shown, col, row, dots);
                     default:
                         return SpeedRing(spec.Shown, u, v, 1f / dots);
                 }
@@ -228,6 +236,36 @@ namespace GantryTool.Render
             // Number at double size in the rest of the box.
             int areaTop = top + 1;
             return LedFont.LitBlock(new[] { value.ToString() }, col, row, dots, areaTop, dots - 2 - areaTop, 2, 0);
+        }
+
+        /// <summary>Canadian (BC) variable speed sign: "MAXIMUM", the number in amber, "km/h".</summary>
+        private static Color CanadaSpeed(int value, int col, int row, int dots)
+        {
+            if (LedFont.Lit("MAXIMUM", col, row, dots / 2f, 2, 1) || LedFont.Lit("km/h", col, row, dots / 2f, 30, 1))
+            {
+                return White;
+            }
+
+            return LedFont.Lit(value.ToString(), col, row, dots / 2f, 12, 2) ? Amber : Clear;
+        }
+
+        /// <summary>A round amber beacon lens: lit (glowing) or unlit, on a housing-coloured square.</summary>
+        private static void PaintLamp(bool lit, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        {
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    float du = (x + 0.5f) / Tile - 0.5f, dv = (y + 0.5f) / Tile - 0.5f;
+                    float r = Mathf.Sqrt(du * du + dv * dv);
+                    float cover = Mathf.Clamp01((0.42f - r) * Tile + 0.5f);
+                    // Lit lenses are brighter in the middle, like a bulb behind a dome.
+                    Color lens = lit ? Color.Lerp(Amber, new Color(1f, 0.9f, 0.6f, 1f), Mathf.Clamp01(1f - r / 0.25f)) : AmberUnlit;
+                    int i = (y0 + y) * width + x0 + x;
+                    mainPx[i] = Color.Lerp(HousingColor, lens, cover);
+                    aciPx[i] = new Color(0f, 0f, lit ? cover : 0f, 1f);
+                }
+            }
         }
 
         /// <summary>Warnings and restrictions drawn the way each region does them.</summary>

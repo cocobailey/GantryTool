@@ -69,6 +69,12 @@ namespace GantryTool.Data
             return s == SignStyle.Netherlands || s == SignStyle.UnitedKingdom || s == SignStyle.AustraliaNz;
         }
 
+        /// <summary>Styles whose speed signs carry an amber beacon that flashes while the limit is lowered (BC).</summary>
+        public static bool HasBeacon(SignStyle s)
+        {
+            return s == SignStyle.Canada;
+        }
+
         /// <summary>Styles that show speeds in mph.</summary>
         public static bool UsesMph(SignStyle s)
         {

@@ -18,6 +18,7 @@ namespace GantryTool.Render
         public const float Frame = 0.2f;              // housing is this much larger than the face
         public const float Proud = 0.04f;             // faces stand this far outside the truss sides
         private const float BlinkLift = 0.01f;        // blink layer sits this far in front of its blank face
+        private const float BeaconScale = 0.26f;      // beacon box edge, as a fraction of the head size
 
         /// <summary>Symbols drawn in the separate blink layer (shown/hidden by the renderer).</summary>
         public static bool Blinks(SignalSymbol s)
@@ -157,7 +158,27 @@ namespace GantryTool.Render
                         AddFace(c + s + lift, side, r, u, atlas.TileRect(atlas.TileOf(plus)));
                     }
 
+                    if (Lowered(minus, lanes[i], atlas))
+                    {
+                        AddBeacon(c, -side, dir, size, atlas, true);
+                    }
+
+                    if (Lowered(plus, lanes[i], atlas))
+                    {
+                        AddBeacon(c, side, dir, size, atlas, true);
+                    }
+
                     continue;
+                }
+
+                if (HasBeacon(minus, atlas))
+                {
+                    AddBeacon(c, -side, dir, size, atlas, false);
+                }
+
+                if (HasBeacon(plus, atlas))
+                {
+                    AddBeacon(c, side, dir, size, atlas, false);
                 }
 
                 FaceSign blank = new FaceSign(SignalSymbol.Blank, 0);
@@ -178,6 +199,50 @@ namespace GantryTool.Render
             mesh.SetTriangles(Tris, 0);
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        /// <summary>Speed faces in a style with beacons (Canada) get a beacon box on top.</summary>
+        private static bool HasBeacon(FaceSign face, SignAtlas atlas)
+        {
+            return atlas.LampOffTile >= 0 && face.Symbol == SignalSymbol.SpeedLimit;
+        }
+
+        /// <summary>The beacon flashes while the sign shows less than the road's own limit.</summary>
+        private static bool Lowered(FaceSign face, GantryLane lane, SignAtlas atlas)
+        {
+            if (!HasBeacon(face, atlas) || lane.SpeedKmh <= 0f)
+            {
+                return false;
+            }
+
+            return SpeedUnits.Display(face.Value, atlas.Mph) < SpeedUnits.Display(Mathf.RoundToInt(lane.SpeedKmh), atlas.Mph);
+        }
+
+        /// <summary>
+        /// A small beacon box sitting on top of the head, on the half facing <paramref name="normal"/>. Static layer:
+        /// housing and an unlit lens. Blink layer: only the lit lens, just in front.
+        /// </summary>
+        private static void AddBeacon(Vector3 headCentre, Vector3 normal, Vector3 dir, float size, SignAtlas atlas, bool lit)
+        {
+            float edge = size * BeaconScale;
+            float depth = HeadDepth * 0.5f;
+            Vector3 c = headCentre + Vector3.up * (size * 0.5f + edge * 0.5f) + normal * (depth * 0.5f);
+            Vector3 r = dir * (edge * 0.5f);
+            Vector3 u = Vector3.up * (edge * 0.5f);
+            Vector3 s = normal * (depth * 0.5f);
+
+            if (lit)
+            {
+                AddFace(c + s + normal * BlinkLift, normal, r, u, atlas.TileRect(atlas.LampOnTile));
+                return;
+            }
+
+            Rect housing = Inset(atlas.TileRect(SignAtlas.HousingTile), 0.25f);
+            AddFace(c + s, normal, r, u, atlas.TileRect(atlas.LampOffTile));
+            AddFace(c - s, -normal, r, u, housing);
+            AddFace(c + u, Vector3.up, r, s, housing);
+            AddFace(c + r, dir, s, u, housing);
+            AddFace(c - r, -dir, s, u, housing);
         }
 
         private static Rect Inset(Rect rect, float fraction)
