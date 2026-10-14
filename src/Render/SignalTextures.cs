@@ -266,6 +266,10 @@ namespace GantryTool.Render
         private static readonly Color SignWhite = new Color(0.86f, 0.86f, 0.84f, 1f);
         private static readonly Color SignBlack = new Color(0.04f, 0.04f, 0.04f, 1f);
 
+        // Printed white is retroreflective on real signs: headlights make it read white at night. A little
+        // self-light imitates that without making the sign glow like the LEDs.
+        private const float PrintedWhiteGlow = 0.32f;
+
         private const float PrintCell = 1f / 54f;            // printed lettering: one font dot, tile-normalised
         private const int WindowCols = 36, WindowRows = 20;  // LED window in the middle
         private const float WindowLeft = 0.08f, WindowRight = 0.92f, WindowBottom = 0.25f, WindowTop = 0.72f;
@@ -289,6 +293,7 @@ namespace GantryTool.Render
                     float u = (x + 0.5f) / Tile, v = (y + 0.5f) / Tile;
                     Color c;
                     float glow = 0f;
+                    bool window = false;
 
                     if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
                     {
@@ -300,6 +305,7 @@ namespace GantryTool.Render
                     }
                     else if (u >= WindowLeft && u <= WindowRight && v >= WindowBottom && v <= WindowTop)
                     {
+                        window = true;
                         // LED window: round dots, lit amber where the number is.
                         float gu = (u - WindowLeft) / pitchU, gv = (WindowTop - v) / pitchV;
                         int col = Mathf.Min(WindowCols - 1, Mathf.FloorToInt(gu));
@@ -314,13 +320,14 @@ namespace GantryTool.Render
                     {
                         // Bold lettering: each font dot is drawn on a half-size grid and grown by half a dot.
                         int col = Mathf.FloorToInt(u / (PrintCell * 0.5f)), row = Mathf.FloorToInt((1f - v) / (PrintCell * 0.5f));
-                        c = PrintedInk(col, row, printCols) || PrintedInk(col - 1, row, printCols) ||
-                            PrintedInk(col, row - 1, printCols) || PrintedInk(col - 1, row - 1, printCols)
-                            ? SignBlack : SignWhite;
+                        bool ink = PrintedInk(col, row, printCols) || PrintedInk(col - 1, row, printCols) ||
+                                   PrintedInk(col, row - 1, printCols) || PrintedInk(col - 1, row - 1, printCols);
+                        c = ink ? SignBlack : SignWhite;
+                        glow = ink ? 0f : PrintedWhiteGlow;
                     }
 
                     int i = (y0 + y) * width + x0 + x;
-                    if (_printed != null && glow <= 0f)
+                    if (_printed != null && !window)
                     {
                         _printed[i] = true;
                     }
