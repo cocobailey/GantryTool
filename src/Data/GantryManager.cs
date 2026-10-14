@@ -393,6 +393,18 @@ namespace GantryTool.Data
             return changed;
         }
 
+        /// <summary>Schedules every gantry's signal mesh for a rebuild (sign textures changed). Main thread.</summary>
+        public static void MarkAllSignalsDirty()
+        {
+            lock (Lock)
+            {
+                for (int i = 0; i < _gantries.Count; i++)
+                {
+                    _gantries[i].SignalsDirty = true;
+                }
+            }
+        }
+
         /// <summary>Schedules every gantry for a rescan + rebuild (option changes). Main thread.</summary>
         public static void MarkAllDirty()
         {

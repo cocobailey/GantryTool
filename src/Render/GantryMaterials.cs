@@ -152,7 +152,7 @@ namespace GantryTool.Render
                 // (the atlas may have grown, which moves every tile's UVs).
                 Release(a);
                 Styles.Remove(style);
-                GantryManager.MarkAllDirty();
+                GantryManager.MarkAllSignalsDirty();
             }
 
             try

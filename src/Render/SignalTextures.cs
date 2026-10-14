@@ -528,7 +528,8 @@ namespace GantryTool.Render
             var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
             try
             {
-                if (tex.LoadImage(sign.Image) && tex.width > 0 && tex.height > 0)
+                // Saved pictures are at most 256 px; anything far bigger isn't ours (or is damaged), so skip it.
+                if (tex.LoadImage(sign.Image) && tex.width > 0 && tex.height > 0 && tex.width <= 1024 && tex.height <= 1024)
                 {
                     img = new DecodedImage { Source = sign.Image, Pixels = tex.GetPixels(), Width = tex.width, Height = tex.height };
                 }

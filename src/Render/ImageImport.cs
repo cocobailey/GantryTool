@@ -14,6 +14,8 @@ namespace GantryTool.Render
     public static class ImageImport
     {
         private static readonly int[] Sizes = { 256, 192, 128, 96, 64, 48 };
+        private const int MaxFileBytes = 20 * 1024 * 1024;
+        private const int MaxSide = 4096;
 
         /// <summary>%LOCALAPPDATA%\Colossal Order\Cities_Skylines\GantryTool\Signs (created when needed).</summary>
         public static string Folder => Path.Combine(Path.Combine(DataLocation.localApplicationData, "GantryTool"), "Signs");
@@ -24,7 +26,11 @@ namespace GantryTool.Render
             var files = new List<string>();
             try
             {
-                Directory.CreateDirectory(Folder);
+                if (!Directory.Exists(Folder))
+                {
+                    return files; // created by "Open folder", not just by opening the panel
+                }
+
                 foreach (string f in Directory.GetFiles(Folder))
                 {
                     string ext = Path.GetExtension(f).ToLowerInvariant();
@@ -53,7 +59,14 @@ namespace GantryTool.Render
             byte[] raw;
             try
             {
-                raw = File.ReadAllBytes(Path.Combine(Folder, fileName));
+                string path = Path.Combine(Folder, fileName);
+                if (new FileInfo(path).Length > MaxFileBytes)
+                {
+                    error = fileName + " is over 20 MB; save a smaller copy (signs only need about 256 px)";
+                    return null;
+                }
+
+                raw = File.ReadAllBytes(path);
             }
             catch (Exception e)
             {
@@ -71,12 +84,18 @@ namespace GantryTool.Render
                 }
 
                 int longest = Mathf.Max(tex.width, tex.height);
+                if (longest > MaxSide)
+                {
+                    error = fileName + " is " + tex.width + "x" + tex.height + "; please use a picture under " + MaxSide + " px";
+                    return null;
+                }
+
                 if (raw.Length <= CustomSigns.MaxImageBytes && longest <= Sizes[0])
                 {
                     return raw; // small enough as it is
                 }
 
-                Color[] src = tex.GetPixels();
+                Color32[] src = tex.GetPixels32(); // 4 bytes a pixel, so big pictures don't need gigabytes
                 foreach (int size in Sizes)
                 {
                     if (size > longest)
@@ -103,7 +122,7 @@ namespace GantryTool.Render
         }
 
         /// <summary>Box-filtered copy whose longest side is <paramref name="size"/>, as PNG.</summary>
-        private static byte[] Shrunk(Color[] src, int w, int h, int size)
+        private static byte[] Shrunk(Color32[] src, int w, int h, int size)
         {
             float scale = (float)size / Mathf.Max(w, h);
             int nw = Mathf.Max(1, Mathf.RoundToInt(w * scale)), nh = Mathf.Max(1, Mathf.RoundToInt(h * scale));
@@ -114,16 +133,21 @@ namespace GantryTool.Render
                 for (int x = 0; x < nw; x++)
                 {
                     int x0 = x * w / nw, x1 = Mathf.Max(x0 + 1, (x + 1) * w / nw);
-                    Color sum = new Color(0f, 0f, 0f, 0f);
+                    int r = 0, g = 0, b = 0, a = 0;
                     for (int sy = y0; sy < y1; sy++)
                     {
                         for (int sx = x0; sx < x1; sx++)
                         {
-                            sum += src[sy * w + sx];
+                            Color32 p = src[sy * w + sx];
+                            r += p.r;
+                            g += p.g;
+                            b += p.b;
+                            a += p.a;
                         }
                     }
 
-                    dst[y * nw + x] = sum / ((x1 - x0) * (y1 - y0));
+                    float n = 255f * (x1 - x0) * (y1 - y0);
+                    dst[y * nw + x] = new Color(r / n, g / n, b / n, a / n);
                 }
             }
 

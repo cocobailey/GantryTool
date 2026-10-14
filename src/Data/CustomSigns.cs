@@ -348,7 +348,7 @@ namespace GantryTool.Data
                         s.Colour = (byte)Math.Min(s.Colour, ColourNames.Length - 1);
                         bool valid = s.Id != 0 && seen.Add(s.Id) &&
                                      (s.Kind == CustomKind.Text ? s.Line1.Length > 0 : s.Kind == CustomKind.Image && length > 0);
-                        if (valid)
+                        if (valid && list.Count < MaxSigns) // never more than the sign textures have room for
                         {
                             list.Add(s);
                         }
