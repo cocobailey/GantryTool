@@ -45,6 +45,13 @@ namespace GantryTool.UI
         private UIButton _applySide;
         private UIButton _applyAll;
         private UIPanel _layoutBox;
+        private UIPanel _customBox;
+        private UITextField _line1;
+        private UITextField _line2;
+        private UIDropDown _colourDrop;
+        private UIDropDown _fileDrop;
+        private UILabel _customNote;
+        private List<string> _files = new List<string>();
         private UIButton _resetLayout;
         private UIButton _reset;
         private UIButton _remove;
@@ -157,6 +164,8 @@ namespace GantryTool.UI
             _applyAll.tooltip = "Put this sign on both sides of every lane";
             _layoutBox = AddUIComponent<UIPanel>();
             _layoutBox.width = PanelWidth - 2f * Margin;
+
+            BuildCustomBox();
 
             _reset = CreateButton("Reset signs", ThirdWidth, ResetToAuto);
             _reset.tooltip = "Set both faces back to Auto";
@@ -317,8 +326,21 @@ namespace GantryTool.UI
             _categoryLabel.text = hidden ? "Pick a sign to restore this head" : "";
             BuildGrid(style, Items(style, mph, auto, info.SpeedKmh), current, hidden, mph);
 
-            // Lay out what follows the grid: Apply row, position and size, then one row of actions.
+            // Lay out what follows the grid: custom sign maker, Apply row, position and size, then one row of actions.
             float y = _grid.relativePosition.y + _grid.height + 12f;
+            bool custom = _category == SignCategory.Custom;
+            _customBox.isVisible = custom;
+            if (custom)
+            {
+                if (CustomSigns.Count == 0 && !hidden)
+                {
+                    _categoryLabel.text = "No custom signs yet: make one below";
+                }
+
+                _customBox.relativePosition = new Vector3(Margin, _cells.Count == 0 ? _grid.relativePosition.y : y);
+                y = _customBox.relativePosition.y + _customBox.height + 10f;
+            }
+
             _applyLabel.relativePosition = new Vector3(Margin, y);
             y += 18f;
             _applySide.relativePosition = new Vector3(Margin, y);
@@ -374,6 +396,21 @@ namespace GantryTool.UI
         {
             var items = new List<PickItem>();
             string unit = mph ? " mph" : " km/h";
+            if (_category == SignCategory.Custom)
+            {
+                foreach (CustomSign c in CustomSigns.All())
+                {
+                    var sign = new FaceSign(SignalSymbol.Custom, c.Id);
+                    string label = c.Label.Length > 12 ? c.Label.Substring(0, 11) + "." : c.Label;
+                    string tip = c.Kind == CustomKind.Text
+                        ? "Text: " + c.Label + " (" + CustomSigns.ColourNames[c.Colour].ToLowerInvariant() + ")"
+                        : "Picture: " + c.FileName + (c.LedLook ? " (LED dots)" : "");
+                    items.Add(new PickItem { Sign = sign, Preview = sign, Label = label, Tooltip = tip });
+                }
+
+                return items;
+            }
+
             if (_category == SignCategory.Speed)
             {
                 int road = SpeedUnits.Display(Mathf.RoundToInt(laneKmh), mph);
@@ -426,6 +463,11 @@ namespace GantryTool.UI
                 return false;
             }
 
+            if (item.Sign.Symbol == SignalSymbol.Custom)
+            {
+                return item.Sign.Value == current.Value;
+            }
+
             return item.Sign.Symbol != SignalSymbol.SpeedLimit ||
                    SpeedUnits.Display(item.Sign.Value, mph) == SpeedUnits.Display(current.Value, mph);
         }
@@ -473,7 +515,7 @@ namespace GantryTool.UI
             }
 
             int rows = (items.Count + perRow - 1) / perRow;
-            _grid.height = rows * CellHeight + (rows - 1) * CellGap;
+            _grid.height = rows == 0 ? 0f : rows * CellHeight + (rows - 1) * CellGap;
         }
 
         private void SetCategory(SignCategory category)
@@ -598,6 +640,154 @@ namespace GantryTool.UI
 
             _minusSelected = minus;
             Refresh(g);
+        }
+
+        // ------------------------------------------------------------------------------ custom signs
+
+        private void BuildCustomBox()
+        {
+            _customBox = AddUIComponent<UIPanel>();
+            _customBox.width = ContentWidth;
+            _customBox.isVisible = false;
+
+            var textLabel = UIUtils.CreateLabel(_customBox, "Text: up to two lines of " + CustomSigns.MaxChars + " letters", 0.75f);
+            textLabel.relativePosition = Vector3.zero;
+
+            _line1 = UIUtils.CreateTextField(_customBox, 150f, CustomSigns.MaxChars);
+            _line1.relativePosition = new Vector3(0f, 18f);
+            _line1.tooltip = "First line";
+            _line2 = UIUtils.CreateTextField(_customBox, 150f, CustomSigns.MaxChars);
+            _line2.relativePosition = new Vector3(156f, 18f);
+            _line2.tooltip = "Second line (optional)";
+            _colourDrop = UIUtils.CreateDropDown(_customBox, ContentWidth - 312f);
+            _colourDrop.relativePosition = new Vector3(312f, 18f);
+            _colourDrop.items = CustomSigns.ColourNames;
+            _colourDrop.selectedIndex = 0;
+            _colourDrop.tooltip = "LED colour";
+            DropdownToggle.Attach(_colourDrop);
+
+            UIButton addText = CreateButton(_customBox, "Add text sign", ContentWidth, AddTextSign);
+            addText.relativePosition = new Vector3(0f, 54f);
+            addText.tooltip = "Make this text sign and put it on the selected face";
+
+            var picLabel = UIUtils.CreateLabel(_customBox, "Picture (PNG or JPG) from the Signs folder", 0.75f);
+            picLabel.relativePosition = new Vector3(0f, 92f);
+
+            _fileDrop = UIUtils.CreateDropDown(_customBox, ContentWidth - 116f);
+            _fileDrop.relativePosition = new Vector3(0f, 110f);
+            DropdownToggle.Attach(_fileDrop);
+            UIButton rescan = CreateButton(_customBox, "Rescan", 110f, RescanFiles);
+            rescan.relativePosition = new Vector3(ContentWidth - 110f, 111f);
+            rescan.tooltip = "Look for new pictures in the folder";
+
+            UIButton asPicture = CreateButton(_customBox, "Add as picture", ThirdWidth, () => AddImageSign(false));
+            asPicture.relativePosition = new Vector3(0f, 146f);
+            asPicture.tooltip = "Show the picture as it is";
+            UIButton asLed = CreateButton(_customBox, "Add as LED dots", ThirdWidth, () => AddImageSign(true));
+            asLed.relativePosition = new Vector3(ThirdWidth + ButtonGap, 146f);
+            asLed.tooltip = "Redraw the picture with the sign's LED dots";
+            UIButton open = CreateButton(_customBox, "Open folder", ThirdWidth, OpenFolder);
+            open.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 146f);
+            open.tooltip = ImageImport.Folder;
+
+            _customNote = UIUtils.CreateLabel(_customBox, "", 0.65f);
+            _customNote.textColor = new Color32(170, 170, 170, 255);
+            _customNote.autoSize = false;
+            _customNote.wordWrap = true;
+            _customNote.size = new Vector2(ContentWidth, 28f);
+            _customNote.relativePosition = new Vector3(0f, 180f);
+            SetCustomNote(null);
+
+            _customBox.height = 208f;
+            RescanFiles();
+        }
+
+        private static UIButton CreateButton(UIComponent parent, string text, float w, Action onClick)
+        {
+            var b = parent.AddUIComponent<UIButton>();
+            b.text = text;
+            b.textScale = 0.75f;
+            b.normalBgSprite = "ButtonMenu";
+            b.hoveredBgSprite = "ButtonMenuHovered";
+            b.pressedBgSprite = "ButtonMenuPressed";
+            b.size = new Vector2(w, 28f);
+            b.eventClick += (c, p) => onClick();
+            return b;
+        }
+
+        private void SetCustomNote(string message)
+        {
+            _customNote.text = message ?? "Pictures are copied into the save (shrunk to fit 64 KB), so shared cities show them " +
+                               "too. Up to " + CustomSigns.MaxSigns + " custom signs per city.";
+        }
+
+        private void RescanFiles()
+        {
+            _files = ImageImport.ListFiles();
+            _fileDrop.items = _files.Count > 0 ? _files.ToArray() : new[] { "(folder is empty)" };
+            _fileDrop.selectedIndex = 0;
+        }
+
+        private void OpenFolder()
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(ImageImport.Folder);
+                ColossalFramework.Utils.OpenInFileBrowser(ImageImport.Folder);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Opening the Signs folder failed", e);
+                SetCustomNote("Couldn't open the folder: " + ImageImport.Folder);
+            }
+        }
+
+        private void AddTextSign()
+        {
+            if (CustomSigns.CleanLine(_line1.text).Length == 0 && CustomSigns.CleanLine(_line2.text).Length == 0)
+            {
+                SetCustomNote("Type some text first (letters, numbers, - / . !).");
+                return;
+            }
+
+            ushort id = CustomSigns.AddText(_line1.text, _line2.text, (byte)Mathf.Max(0, _colourDrop.selectedIndex));
+            UseCustom(id);
+        }
+
+        private void AddImageSign(bool ledLook)
+        {
+            int i = _fileDrop.selectedIndex;
+            if (_files.Count == 0 || i < 0 || i >= _files.Count)
+            {
+                SetCustomNote("Put PNG or JPG files in the Signs folder (Open folder), then Rescan.");
+                return;
+            }
+
+            string error;
+            byte[] image = ImageImport.Load(_files[i], out error);
+            if (image == null)
+            {
+                SetCustomNote(error);
+                return;
+            }
+
+            UseCustom(CustomSigns.AddImage(_files[i], image, ledLook));
+        }
+
+        /// <summary>Puts a newly made custom sign on the selected face.</summary>
+        private void UseCustom(ushort id)
+        {
+            if (id == 0)
+            {
+                SetCustomNote("This city already has " + CustomSigns.MaxSigns + " custom signs. Signs no head uses are " +
+                              "dropped when you save and reload.");
+                return;
+            }
+
+            SetCustomNote(null);
+            _line1.Unfocus();
+            _line2.Unfocus();
+            Pick(new FaceSign(SignalSymbol.Custom, id));
         }
 
         private void Pick(FaceSign sign)

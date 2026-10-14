@@ -116,6 +116,7 @@ namespace GantryTool
 
                 GantryManager.Clear();
                 UndoStack.Clear();
+                CustomSigns.Clear();
                 GantryMaterials.Release();
                 Log.Info("Level unloading; tool removed, gantries cleared");
             }

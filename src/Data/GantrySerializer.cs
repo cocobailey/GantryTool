@@ -25,6 +25,7 @@ namespace GantryTool.Data
                 byte[] ext = GantryData.WriteExt(gantries, GantryManager.Lock);
                 serializableDataManager.SaveData(GantryData.LegacyKey, legacy);
                 serializableDataManager.SaveData(GantryData.ExtKey, ext);
+                SaveCustomSigns(gantries);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +
                          GantryData.LegacyVersion + " + ext v" + GantryData.ExtVersion + ")");
             }
@@ -34,8 +35,53 @@ namespace GantryTool.Data
             }
         }
 
+        /// <summary>Custom signs in use go under their own key, so a problem there can never touch the gantries.</summary>
+        private void SaveCustomSigns(List<Gantry> gantries)
+        {
+            try
+            {
+                HashSet<ushort> used = CustomSigns.UsedIds(gantries, GantryManager.Lock);
+                byte[] custom = CustomSigns.Write(CustomSigns.All(), used);
+                serializableDataManager.SaveData(CustomSigns.Key, custom);
+                if (used.Count > 0)
+                {
+                    Log.Info("Saved " + used.Count + " custom signs (" + custom.Length + " bytes)");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Saving custom signs failed", e);
+            }
+        }
+
+        private void LoadCustomSigns()
+        {
+            try
+            {
+                string error;
+                List<CustomSign> signs = CustomSigns.Read(serializableDataManager.LoadData(CustomSigns.Key), out error);
+                if (error != null)
+                {
+                    Log.Warn("Custom signs: " + error);
+                }
+
+                CustomSigns.ReplaceAll(signs);
+                if (signs.Count > 0)
+                {
+                    Log.Info("Loaded " + signs.Count + " custom signs");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Loading custom signs failed; those heads show blank", e);
+                CustomSigns.Clear();
+            }
+        }
+
         public override void OnLoadData()
         {
+            LoadCustomSigns();
+
             var loaded = new List<Gantry>();
             try
             {

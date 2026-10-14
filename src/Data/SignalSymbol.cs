@@ -34,7 +34,9 @@ namespace GantryTool.Data
         NoOvertakingTrucks = 17,
         EndRestrictions = 18,    // end of all restrictions
 
-        YellowCross = 19         // North America: lane closing ahead
+        YellowCross = 19,        // North America: lane closing ahead
+
+        Custom = 20              // player-made sign; value = CustomSigns id
     }
 
     /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
@@ -116,6 +118,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertakingTrucks: return "NT";
                 case SignalSymbol.EndRestrictions: return "E";
                 case SignalSymbol.YellowCross: return "Y";
+                case SignalSymbol.Custom: return "C";
                 default: return "?";
             }
         }
@@ -144,6 +147,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertakingTrucks: return "No overtaking (trucks)";
                 case SignalSymbol.EndRestrictions: return "End of restrictions";
                 case SignalSymbol.YellowCross: return "Yellow X";
+                case SignalSymbol.Custom: return "Custom sign";
                 default: return "Auto";
             }
         }
@@ -345,6 +349,12 @@ namespace GantryTool.Data
             if (f.Symbol == SignalSymbol.SpeedAuto)
             {
                 return "Road speed";
+            }
+
+            if (f.Symbol == SignalSymbol.Custom)
+            {
+                CustomSign c = CustomSigns.Get(f.Value);
+                return c != null ? "Custom: " + c.Label : "Custom sign (missing)";
             }
 
             return PlainName(f.Symbol);

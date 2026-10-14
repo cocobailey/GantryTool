@@ -110,7 +110,8 @@ namespace GantryTool.Data
         Lane,
         Speed,
         Warning,
-        Restriction
+        Restriction,
+        Custom
     }
 
     /// <summary>One pickable sign.</summary>
@@ -221,7 +222,7 @@ namespace GantryTool.Data
         /// <summary>Categories shown in the picker's dropdown, in order.</summary>
         public static readonly SignCategory[] Categories =
         {
-            SignCategory.Lane, SignCategory.Speed, SignCategory.Warning, SignCategory.Restriction
+            SignCategory.Lane, SignCategory.Speed, SignCategory.Warning, SignCategory.Restriction, SignCategory.Custom
         };
 
         public static string CategoryName(SignCategory c)
@@ -232,6 +233,7 @@ namespace GantryTool.Data
                 case SignCategory.Speed: return "Speed limits";
                 case SignCategory.Warning: return "Warnings";
                 case SignCategory.Restriction: return "Restrictions";
+                case SignCategory.Custom: return "Custom";
                 default: return c.ToString();
             }
         }
@@ -242,6 +244,11 @@ namespace GantryTool.Data
             if (s == SignalSymbol.SpeedAuto || s == SignalSymbol.SpeedLimit)
             {
                 return SignCategory.Speed;
+            }
+
+            if (s == SignalSymbol.Custom)
+            {
+                return SignCategory.Custom;
             }
 
             SignDef def = Find(s);

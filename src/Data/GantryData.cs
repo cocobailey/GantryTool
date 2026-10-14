@@ -323,7 +323,7 @@ namespace GantryTool.Data
         /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
         private static SignalSymbol ExtSymbol(ushort v)
         {
-            return v <= (ushort)SignalSymbol.YellowCross ? (SignalSymbol)v : SignalSymbol.Auto;
+            return v <= (ushort)SignalSymbol.Custom ? (SignalSymbol)v : SignalSymbol.Auto;
         }
 
         /// <summary>

@@ -390,7 +390,7 @@ namespace GantryTool.Tool
             base.OnToolGUI(e);
             try
             {
-                if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Z && (e.control || e.command))
+                if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Z && (e.control || e.command) && !UIView.HasInputFocus())
                 {
                     UndoLast();
                     e.Use();

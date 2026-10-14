@@ -10,6 +10,29 @@ namespace GantryTool.UI
     /// </summary>
     public static class UIUtils
     {
+        /// <summary>A single-line text box in the game's dropdown look.</summary>
+        public static UITextField CreateTextField(UIComponent parent, float width, int maxLength)
+        {
+            var tf = parent.AddUIComponent<UITextField>();
+            tf.size = new Vector2(width, 30f);
+            tf.padding = new RectOffset(8, 8, 8, 6);
+            tf.textScale = 0.9f;
+            tf.maxLength = maxLength;
+            tf.builtinKeyNavigation = true;
+            tf.isInteractive = true;
+            tf.readOnly = false;
+            tf.horizontalAlignment = UIHorizontalAlignment.Left;
+            tf.normalBgSprite = "OptionsDropboxListbox";
+            tf.hoveredBgSprite = "OptionsDropboxListboxHovered";
+            tf.focusedBgSprite = "OptionsDropboxListboxFocused";
+            tf.selectionSprite = "EmptySprite";
+            tf.selectionBackgroundColor = new Color32(0, 172, 234, 255);
+            tf.textColor = new Color32(255, 255, 255, 255);
+            tf.cursorBlinkTime = 0.45f;
+            tf.cursorWidth = 1;
+            return tf;
+        }
+
         public static UIDropDown CreateDropDown(UIComponent parent, float width)
         {
             var dropDown = parent.AddUIComponent<UIDropDown>();

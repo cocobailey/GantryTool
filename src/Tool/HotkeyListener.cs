@@ -21,7 +21,7 @@ namespace GantryTool.Tool
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.G) &&
+            if (Input.GetKeyDown(KeyCode.G) && !ColossalFramework.UI.UIView.HasInputFocus() &&
                 (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
                 (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)))
             {

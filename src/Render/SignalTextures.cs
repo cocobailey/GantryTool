@@ -91,6 +91,16 @@ namespace GantryTool.Render
                 return;
             }
 
+            if (spec.Kind == TileKind.Custom)
+            {
+                CustomSign custom = CustomSigns.Get((ushort)spec.Shown);
+                if (custom != null && custom.Kind == CustomKind.Image && !custom.LedLook)
+                {
+                    PaintImage(custom, mainPx, aciPx, width, x0, y0);
+                    return;
+                }
+            }
+
             if (spec.Kind == TileKind.Lamp)
             {
                 PaintLamp(spec.Shown == 1, mainPx, aciPx, width, x0, y0);
@@ -196,6 +206,11 @@ namespace GantryTool.Render
             if (spec.Kind == TileKind.Pictogram)
             {
                 return RegionalPictogram(spec.Symbol, style, u, v, col, row, dots);
+            }
+
+            if (spec.Kind == TileKind.Custom)
+            {
+                return CustomLed(CustomSigns.Get((ushort)spec.Shown), col, row, dots);
             }
 
             return Clear;
@@ -319,6 +334,209 @@ namespace GantryTool.Render
         private static bool PrintedInk(int col, int row, int printCols)
         {
             return LedFont.Lit("MAXIMUM", col, row, printCols, 9, 2) || LedFont.Lit("km/h", col, row, printCols, 86, 2);
+        }
+
+        // ------------------------------------------------------------------------------ custom signs
+
+        private static readonly Color[] TextColours =
+        {
+            White, Amber, Red, Green, Yellow
+        };
+
+        private sealed class DecodedImage
+        {
+            public byte[] Source;
+            public Color[] Pixels;
+            public int Width, Height;
+        }
+
+        private static readonly Dictionary<ushort, DecodedImage> Decoded = new Dictionary<ushort, DecodedImage>();
+
+        /// <summary>LED colour of a custom text sign, or of an image sign drawn as LED dots.</summary>
+        private static Color CustomLed(CustomSign sign, int col, int row, int dots)
+        {
+            if (sign == null)
+            {
+                return Clear;
+            }
+
+            if (sign.Kind == CustomKind.Text)
+            {
+                return CustomTextLit(sign, col, row, dots) ? TextColours[Mathf.Min(sign.Colour, TextColours.Length - 1)] : Clear;
+            }
+
+            DecodedImage img = Decode(sign);
+            if (img == null)
+            {
+                return Clear;
+            }
+
+            // Average the picture over this LED, then light it at full brightness in that colour.
+            float x0, y0, w, h;
+            FitImage(img, 0f, 1f, out x0, out y0, out w, out h);
+            Color sum = new Color(0f, 0f, 0f, 0f);
+            for (int sy = 0; sy < 3; sy++)
+            {
+                for (int sx = 0; sx < 3; sx++)
+                {
+                    float u = (col + (sx + 0.5f) / 3f) / dots, v = 1f - (row + (sy + 0.5f) / 3f) / dots;
+                    sum += Sample(img, (u - x0) / w, (v - y0) / h);
+                }
+            }
+
+            Color c = sum / 9f;
+            float peak = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            if (c.a < 0.5f || peak < 0.15f)
+            {
+                return Clear;
+            }
+
+            return new Color(c.r / peak, c.g / peak, c.b / peak, 1f);
+        }
+
+        /// <summary>Text laid out as large as it fits: double size for very short text, else normal, else tight.</summary>
+        private static bool CustomTextLit(CustomSign sign, int col, int row, int dots)
+        {
+            string[] lines = sign.Line2.Length > 0 ? new[] { sign.Line1, sign.Line2 } : new[] { sign.Line1 };
+            int widest = 0;
+            foreach (string l in lines)
+            {
+                widest = Mathf.Max(widest, LedFont.Width(l));
+            }
+
+            int room = dots - 2;
+            if (widest * 2 + 1 <= room && lines.Length * LedFont.Height * 2 + (lines.Length - 1) * 3 <= room)
+            {
+                return LedFont.LitBlock(lines, col, row, dots, 0, dots, 2, 3);
+            }
+
+            int spacing = widest <= room ? 1 : 0;
+            int gap = 4;
+            int blockHeight = lines.Length * LedFont.Height + (lines.Length - 1) * gap;
+            int top = (dots - blockHeight) / 2;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (LedFont.Lit(lines[i], col, row, dots / 2f, top, 1, spacing))
+                {
+                    return true;
+                }
+
+                top += LedFont.Height + gap;
+            }
+
+            return false;
+        }
+
+        /// <summary>A picture shown as it is on the sign face (letterboxed on black), lit like a screen at night.</summary>
+        private static void PaintImage(CustomSign sign, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        {
+            DecodedImage img = Decode(sign);
+            float ix, iy, iw, ih;
+            if (img != null)
+            {
+                FitImage(img, FrameWidth, 1f - FrameWidth, out ix, out iy, out iw, out ih);
+            }
+            else
+            {
+                ix = iy = 0f;
+                iw = ih = 1f;
+            }
+
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    float u = (x + 0.5f) / Tile, v = (y + 0.5f) / Tile;
+                    Color c = FaceColor;
+                    float glow = 0f;
+                    if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
+                    {
+                        c = FrameColor;
+                    }
+                    else if (img != null)
+                    {
+                        float fx = (u - ix) / iw, fy = (v - iy) / ih;
+                        if (fx >= 0f && fx <= 1f && fy >= 0f && fy <= 1f)
+                        {
+                            Color p = Sample(img, fx, fy);
+                            c = Color.Lerp(FaceColor, new Color(p.r, p.g, p.b, 1f), p.a);
+                            glow = p.a * Mathf.Max(p.r, Mathf.Max(p.g, p.b)) * 0.9f;
+                        }
+                    }
+
+                    int i = (y0 + y) * width + x0 + x;
+                    mainPx[i] = c;
+                    aciPx[i] = new Color(0f, 0f, glow, 1f);
+                    if (_printed != null)
+                    {
+                        _printed[i] = true; // a picture shrinks like a photo, not like LEDs
+                    }
+                }
+            }
+        }
+
+        /// <summary>Where a picture goes inside [lo, hi]², keeping its proportions and centred.</summary>
+        private static void FitImage(DecodedImage img, float lo, float hi, out float x0, out float y0, out float w, out float h)
+        {
+            float size = hi - lo;
+            float aspect = (float)img.Width / Mathf.Max(1, img.Height);
+            w = aspect >= 1f ? size : size * aspect;
+            h = aspect >= 1f ? size / aspect : size;
+            x0 = lo + (size - w) * 0.5f;
+            y0 = lo + (size - h) * 0.5f;
+        }
+
+        /// <summary>Bilinear sample at (fx, fy) in [0, 1] (fy = 0 is the bottom); transparent outside.</summary>
+        private static Color Sample(DecodedImage img, float fx, float fy)
+        {
+            if (fx < 0f || fx > 1f || fy < 0f || fy > 1f)
+            {
+                return new Color(0f, 0f, 0f, 0f);
+            }
+
+            float px = fx * img.Width - 0.5f, py = fy * img.Height - 0.5f;
+            int xa = Mathf.Clamp(Mathf.FloorToInt(px), 0, img.Width - 1), ya = Mathf.Clamp(Mathf.FloorToInt(py), 0, img.Height - 1);
+            int xb = Mathf.Min(xa + 1, img.Width - 1), yb = Mathf.Min(ya + 1, img.Height - 1);
+            float tx = Mathf.Clamp01(px - xa), ty = Mathf.Clamp01(py - ya);
+            Color bottom = Color.Lerp(img.Pixels[ya * img.Width + xa], img.Pixels[ya * img.Width + xb], tx);
+            Color top = Color.Lerp(img.Pixels[yb * img.Width + xa], img.Pixels[yb * img.Width + xb], tx);
+            return Color.Lerp(bottom, top, ty);
+        }
+
+        /// <summary>Decodes a custom image once (main thread); null if the data isn't a readable PNG/JPG.</summary>
+        private static DecodedImage Decode(CustomSign sign)
+        {
+            if (sign == null || sign.Image == null)
+            {
+                return null;
+            }
+
+            DecodedImage img;
+            if (Decoded.TryGetValue(sign.Id, out img) && ReferenceEquals(img.Source, sign.Image))
+            {
+                return img;
+            }
+
+            img = null;
+            var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+            try
+            {
+                if (tex.LoadImage(sign.Image) && tex.width > 0 && tex.height > 0)
+                {
+                    img = new DecodedImage { Source = sign.Image, Pixels = tex.GetPixels(), Width = tex.width, Height = tex.height };
+                }
+                else
+                {
+                    Log.Warn("Custom sign #" + sign.Id + " (" + sign.FileName + "): image could not be read");
+                }
+            }
+            finally
+            {
+                Object.Destroy(tex);
+            }
+
+            Decoded[sign.Id] = img;
+            return img;
         }
 
         /// <summary>A round amber beacon lens: lit (glowing) or unlit, on a housing-coloured square.</summary>

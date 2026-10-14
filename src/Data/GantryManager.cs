@@ -220,9 +220,9 @@ namespace GantryTool.Data
             float offset = UpdateEntry(g, laneIndex, o =>
             {
                 o.Minus = minus.Symbol;
-                o.MinusValue = minus.Symbol == SignalSymbol.SpeedLimit ? minus.Value : (ushort)0;
+                o.MinusValue = HasValue(minus.Symbol) ? minus.Value : (ushort)0;
                 o.Plus = plus.Symbol;
-                o.PlusValue = plus.Symbol == SignalSymbol.SpeedLimit ? plus.Value : (ushort)0;
+                o.PlusValue = HasValue(plus.Symbol) ? plus.Value : (ushort)0;
                 return o;
             });
 
@@ -231,6 +231,12 @@ namespace GantryTool.Data
                 Log.Info("Override gantry #" + g.Id + " lane @" + offset.ToString("F2") + "m: -side face=" + Describe(minus) +
                          ", +side face=" + Describe(plus) + " (" + g.Overrides.Count + " overrides on this gantry)");
             }
+        }
+
+        /// <summary>Signs that carry a value: speed limits (km/h) and custom signs (library id).</summary>
+        private static bool HasValue(SignalSymbol s)
+        {
+            return s == SignalSymbol.SpeedLimit || s == SignalSymbol.Custom;
         }
 
         private static string Describe(FaceSign f)

@@ -47,6 +47,11 @@ namespace GantryTool.Tests
             Run("unknown future signs load as Auto", UnknownExtSymbolIsAuto);
             Run("warning and restriction signs round-trip; 1.0 sees Auto", WarningsRoundTrip);
             Run("every style: each sign has its own tile, missing ones fall back", AtlasTiles);
+            Run("custom signs: library round-trips; only used signs are saved", CustomRoundTrip);
+            Run("custom signs: faces keep their sign; 1.0 sees Auto", CustomFaces);
+            Run("custom signs: bad or cut-short data never throws", CustomCorrupt);
+            Run("custom signs: text is cleaned; duplicates reused; library capped", CustomLibraryRules);
+            Run("custom signs: a full library still fits every style's texture", CustomAtlasFits);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -512,6 +517,104 @@ namespace GantryTool.Tests
             Check(am == SignalSymbol.Arrow, "Europe: Auto unchanged");
             Check(SignCatalog.Fallback(SignStyle.Europe, SignalSymbol.YellowCross) == SignalSymbol.Cross, "yellow X -> red X");
             Check(SignCatalog.Fallback(SignStyle.Netherlands, SignalSymbol.Roadworks) == SignalSymbol.Blank, "NL: no warnings");
+        }
+
+        private static void CustomRoundTrip()
+        {
+            CustomSigns.Clear();
+            ushort a = CustomSigns.AddText("stau", "5 km", 1);
+            ushort b = CustomSigns.AddImage("logo.png", new byte[] { 1, 2, 3, 4 }, true);
+            ushort unused = CustomSigns.AddText("unused", "", 0);
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Custom, MinusValue = a, Plus = SignalSymbol.Custom, PlusValue = b, Sign = 1 });
+
+            byte[] bytes = CustomSigns.Write(CustomSigns.All(), CustomSigns.UsedIds(gantries, new object()));
+            string err;
+            List<CustomSign> read = CustomSigns.Read(bytes, out err);
+            Check(err == null, "no error: " + err);
+            Check(read.Count == 2, "unused sign dropped (" + read.Count + ")");
+            CustomSign t = read.Find(x => x.Id == a), i = read.Find(x => x.Id == b);
+            Check(t != null && t.Kind == CustomKind.Text && t.Line1 == "STAU" && t.Line2 == "5 KM" && t.Colour == 1, "text sign");
+            Check(i != null && i.Kind == CustomKind.Image && i.LedLook && i.FileName == "logo.png" && i.Image.Length == 4 && i.Image[3] == 4, "image sign");
+            Check(read.Find(x => x.Id == unused) == null, "unused not saved");
+            CustomSigns.Clear();
+        }
+
+        private static void CustomFaces()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.Custom, MinusValue = 7, Plus = SignalSymbol.Arrow, Sign = 1 });
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[1].Overrides[0].Minus == SignalSymbol.Custom && loaded[1].Overrides[0].MinusValue == 7, "custom face and id kept");
+            string err;
+            List<Gantry> by10 = Old10.Read(GantryData.WriteLegacy(gantries, new object()), out err);
+            Check(err == null && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Arrow, "1.0 sees Auto");
+            GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(SignStyle.Europe);
+            Check(atlas.TileOf(new FaceSign(SignalSymbol.Custom, 999)) == 5, "a missing custom sign draws blank");
+        }
+
+        private static void CustomCorrupt()
+        {
+            CustomSigns.Clear();
+            CustomSigns.AddText("A", "B", 0);
+            CustomSigns.AddImage("x.png", new byte[300], false);
+            byte[] good = CustomSigns.Write(CustomSigns.All(), null);
+            string err;
+            for (int cut = 0; cut < good.Length; cut += 7)
+            {
+                var part = new byte[cut];
+                Array.Copy(good, part, cut);
+                List<CustomSign> r = CustomSigns.Read(part, out err);
+                Check(r != null, "never null");
+            }
+
+            var garbage = new byte[64];
+            new System.Random(5).NextBytes(garbage);
+            Check(CustomSigns.Read(garbage, out err) != null && err != null, "garbage reported, not thrown");
+            CustomSigns.Clear();
+        }
+
+        private static void CustomLibraryRules()
+        {
+            CustomSigns.Clear();
+            Check(CustomSigns.CleanLine("hello world") == "HELLO W", "upper-case, 7 characters");
+            Check(CustomSigns.CleanLine("a{b}c") == "ABC", "unknown characters dropped");
+            Check(CustomSigns.AddText("", "  ", 0) == 0, "empty text refused");
+            ushort x = CustomSigns.AddText("exit", "12", 2);
+            Check(x != 0 && CustomSigns.AddText("EXIT", "12", 2) == x, "duplicate reused");
+            Check(CustomSigns.AddText("exit", "12", 3) != x, "different colour is a new sign");
+            Check(CustomSigns.AddImage("big.png", new byte[CustomSigns.MaxImageBytes + 1], false) == 0, "oversized picture refused");
+            for (int i = 0; i < CustomSigns.MaxSigns + 5; i++)
+            {
+                CustomSigns.AddText("S" + i, "", 0);
+            }
+
+            Check(CustomSigns.Count == CustomSigns.MaxSigns, "library capped at " + CustomSigns.MaxSigns);
+            Check(CustomSigns.AddText("MORE", "", 0) == 0, "full library refuses new signs");
+            CustomSigns.Clear();
+        }
+
+        private static void CustomAtlasFits()
+        {
+            CustomSigns.Clear();
+            for (int i = 0; i < CustomSigns.MaxSigns; i++)
+            {
+                CustomSigns.AddText("T" + i, "", 0);
+            }
+
+            foreach (SignStyle style in SignStyles.Available)
+            {
+                GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(style);
+                Check(atlas.Height <= 2048, style + ": " + atlas.Height + " px");
+                Check(atlas.TileOf(new FaceSign(SignalSymbol.Arrow, 0)) == 0, style + ": row 1 unchanged");
+                var seen = new HashSet<int>();
+                foreach (CustomSign c in CustomSigns.All())
+                {
+                    Check(seen.Add(atlas.TileOf(new FaceSign(SignalSymbol.Custom, c.Id))), style + ": custom tiles unique");
+                }
+            }
+
+            CustomSigns.Clear();
         }
 
         // ------------------------------------------------------------------------------ helpers

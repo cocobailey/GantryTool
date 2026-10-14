@@ -11,7 +11,8 @@ namespace GantryTool.Render
         Empty,
         Speed,     // speed limit; Shown = number on the sign in the style's units
         Pictogram, // warning or restriction sign
-        Lamp       // beacon lens above a speed sign; Shown = 1 when lit
+        Lamp,      // beacon lens above a speed sign; Shown = 1 when lit
+        Custom     // player-made sign; Shown = CustomSigns id
     }
 
     public struct TileSpec
@@ -39,6 +40,10 @@ namespace GantryTool.Render
         private readonly Dictionary<int, int> _speedTile = new Dictionary<int, int>();
         private readonly Dictionary<SignalSymbol, int> _pictogramTile = new Dictionary<SignalSymbol, int>();
         private readonly Dictionary<SignalSymbol, int> _extraLaneTile = new Dictionary<SignalSymbol, int>();
+        private readonly Dictionary<ushort, int> _customTile = new Dictionary<ushort, int>();
+
+        /// <summary>The custom sign library revision this atlas was laid out for.</summary>
+        public readonly int CustomRevision;
 
         /// <summary>Beacon lens tiles (unlit / lit), or -1 when the style has no beacon.</summary>
         public readonly int LampOffTile = -1;
@@ -65,6 +70,7 @@ namespace GantryTool.Render
         private SignAtlas(SignStyle style)
         {
             Style = style;
+            CustomRevision = CustomSigns.Revision;
             Mph = SignStyles.UsesMph(style);
 
             // Row 1: exactly the 1.0 atlas.
@@ -108,6 +114,13 @@ namespace GantryTool.Render
                     Tiles.Add(new TileSpec { Kind = TileKind.Pictogram, Symbol = def.Symbol });
                 }
             }
+
+            // Custom signs, after everything else (so nothing above moves when the library changes).
+            foreach (CustomSign c in CustomSigns.All())
+            {
+                _customTile[c.Id] = Tiles.Count;
+                Tiles.Add(new TileSpec { Kind = TileKind.Custom, Shown = c.Id });
+            }
         }
 
         public static SignAtlas For(SignStyle style)
@@ -130,6 +143,11 @@ namespace GantryTool.Render
             if (_pictogramTile.TryGetValue(f.Symbol, out tile) || _extraLaneTile.TryGetValue(f.Symbol, out tile))
             {
                 return tile;
+            }
+
+            if (f.Symbol == SignalSymbol.Custom)
+            {
+                return _customTile.TryGetValue(f.Value, out tile) ? tile : BlankTile;
             }
 
             if (f.Symbol == SignalSymbol.SpeedLimit)

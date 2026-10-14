@@ -70,12 +70,12 @@ namespace GantryTool.Render
         }
 
         /// <summary>Width of a line in LEDs at scale 1 (one dot between glyphs).</summary>
-        public static int Width(string line)
+        public static int Width(string line, int spacing = 1)
         {
             int w = 0;
             for (int i = 0; i < line.Length; i++)
             {
-                w += Glyph(line[i])[0].Length + (i > 0 ? 1 : 0);
+                w += Glyph(line[i])[0].Length + (i > 0 ? spacing : 0);
             }
 
             return w;
@@ -86,7 +86,7 @@ namespace GantryTool.Render
         /// its top row at <paramref name="top"/> (rows counted from the top), each glyph dot <paramref name="scale"/>
         /// LEDs square.
         /// </summary>
-        public static bool Lit(string line, int col, int row, float centreCol, int top, int scale)
+        public static bool Lit(string line, int col, int row, float centreCol, int top, int scale, int spacing = 1)
         {
             int rowIn = row - top;
             if (rowIn < 0 || rowIn >= Height * scale)
@@ -94,7 +94,7 @@ namespace GantryTool.Render
                 return false;
             }
 
-            int left = (int)System.Math.Round(centreCol - Width(line) * scale / 2f);
+            int left = (int)System.Math.Round(centreCol - Width(line, spacing) * scale / 2f);
             int x = col - left;
             if (x < 0)
             {
@@ -110,7 +110,7 @@ namespace GantryTool.Render
                     return g[rowIn / scale][x / scale] == '#';
                 }
 
-                x -= w + scale;
+                x -= w + spacing * scale;
                 if (x < 0)
                 {
                     return false; // the gap between glyphs

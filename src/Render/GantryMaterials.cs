@@ -143,7 +143,16 @@ namespace GantryTool.Render
             StyleAssets a;
             if (Styles.TryGetValue(style, out a))
             {
-                return a;
+                if (a.Atlas.CustomRevision == CustomSigns.Revision)
+                {
+                    return a;
+                }
+
+                // The custom sign library changed: rebuild this style's textures and every gantry's signal mesh
+                // (the atlas may have grown, which moves every tile's UVs).
+                Release(a);
+                Styles.Remove(style);
+                GantryManager.MarkAllDirty();
             }
 
             try
@@ -168,8 +177,31 @@ namespace GantryTool.Render
             a.Signal.SetTexture("_ACIMap", a.Aci);
             a.Signal.SetColor("_Color", Color.white);
             Styles[style] = a;
+            if (style == SignStyle.Europe)
+            {
+                Signal = a.Signal;
+            }
             Log.Debug("Built sign style " + style);
             return a;
+        }
+
+        private static void Release(StyleAssets a)
+        {
+            foreach (var kv in Styles)
+            {
+                if (kv.Value == a && kv.Key != a.Atlas.Style)
+                {
+                    return; // shared fallback entry; released with its owner
+                }
+            }
+
+            UnityEngine.Object.Destroy(a.Main);
+            UnityEngine.Object.Destroy(a.Aci);
+            UnityEngine.Object.Destroy(a.Signal);
+            foreach (Texture2D t in a.Previews.Values)
+            {
+                UnityEngine.Object.Destroy(t);
+            }
         }
 
         /// <summary>Slightly cool grey, like galvanised steel.</summary>
