@@ -106,7 +106,7 @@ namespace GantryTool.Data
             new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger" },
 
             new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No passing" },
-            new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No passing (trucks)" },
+            new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No truck passing" },
             new SignDef { Symbol = SignalSymbol.EndRestrictions, Category = SignCategory.Restriction, GridName = "End of limits" }
         };
 
