@@ -37,6 +37,7 @@ namespace GantryTool.Render
         public readonly List<TileSpec> Tiles = new List<TileSpec>();
         private readonly Dictionary<int, int> _speedTile = new Dictionary<int, int>();
         private readonly Dictionary<SignalSymbol, int> _pictogramTile = new Dictionary<SignalSymbol, int>();
+        private readonly Dictionary<SignalSymbol, int> _extraLaneTile = new Dictionary<SignalSymbol, int>();
 
         public int Width => Tile * Columns;
         public int Rows => (Tiles.Count + Columns - 1) / Columns;
@@ -70,6 +71,13 @@ namespace GantryTool.Render
             Tiles.Add(new TileSpec { Kind = TileKind.Housing });
             Tiles.Add(new TileSpec { Kind = TileKind.Empty });
 
+            // Lane signs only some styles have.
+            if (SignCatalog.IsAvailable(style, SignalSymbol.YellowCross))
+            {
+                _extraLaneTile[SignalSymbol.YellowCross] = Tiles.Count;
+                Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = SignalSymbol.YellowCross });
+            }
+
             // Speed limits in the style's units.
             foreach (int v in SpeedUnits.Values(Mph))
             {
@@ -97,21 +105,22 @@ namespace GantryTool.Render
         /// <summary>The tile showing a resolved face sign (anything without a tile draws as Blank).</summary>
         public int TileOf(FaceSign f)
         {
+            // Signs this style doesn't have show its nearest equivalent; the face keeps its own sign.
+            f = new FaceSign(SignCatalog.Fallback(Style, f.Symbol), f.Value);
             int s = (int)f.Symbol;
             if (s >= (int)SignalSymbol.Arrow && s <= (int)SignalSymbol.Blank)
             {
                 return s - 1;
             }
 
-            int pictogram;
-            if (_pictogramTile.TryGetValue(SignCatalog.Fallback(Style, f.Symbol), out pictogram))
+            int tile;
+            if (_pictogramTile.TryGetValue(f.Symbol, out tile) || _extraLaneTile.TryGetValue(f.Symbol, out tile))
             {
-                return pictogram;
+                return tile;
             }
 
             if (f.Symbol == SignalSymbol.SpeedLimit)
             {
-                int tile;
                 if (_speedTile.TryGetValue(SpeedUnits.Display(f.Value, Mph), out tile))
                 {
                     return tile;

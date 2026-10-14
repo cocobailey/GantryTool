@@ -17,7 +17,11 @@ namespace GantryTool.Data
     public static class SignStyles
     {
         /// <summary>Styles that can be picked. Grows as styles are drawn; anything else falls back.</summary>
-        public static readonly SignStyle[] Available = { SignStyle.Europe };
+        public static readonly SignStyle[] Available =
+        {
+            SignStyle.Europe, SignStyle.Netherlands, SignStyle.UnitedKingdom, SignStyle.UnitedStates, SignStyle.Canada,
+            SignStyle.AustraliaNz
+        };
 
         public static bool IsAvailable(SignStyle s)
         {
@@ -45,6 +49,24 @@ namespace GantryTool.Data
             }
 
             return IsAvailable(s) ? s : SignStyle.Europe;
+        }
+
+        /// <summary>North American styles: yellow diamond warnings, text restrictions, yellow X.</summary>
+        public static bool IsNorthAmerica(SignStyle s)
+        {
+            return s == SignStyle.UnitedStates || s == SignStyle.Canada;
+        }
+
+        /// <summary>Styles whose warnings are yellow diamonds instead of red triangles.</summary>
+        public static bool DiamondWarnings(SignStyle s)
+        {
+            return IsNorthAmerica(s) || s == SignStyle.AustraliaNz;
+        }
+
+        /// <summary>Styles with white merge arrows instead of yellow ones.</summary>
+        public static bool WhiteMergeArrows(SignStyle s)
+        {
+            return s == SignStyle.Netherlands || s == SignStyle.UnitedKingdom || s == SignStyle.AustraliaNz;
         }
 
         /// <summary>Styles that show speeds in mph.</summary>
@@ -89,25 +111,40 @@ namespace GantryTool.Data
     /// <summary>Every sign that can be picked, and which styles have it.</summary>
     public static class SignCatalog
     {
+        private static readonly SignStyle[] NotUk =
+        {
+            SignStyle.Europe, SignStyle.Netherlands, SignStyle.UnitedStates, SignStyle.Canada, SignStyle.AustraliaNz
+        };
+
+        private static readonly SignStyle[] NotNl =
+        {
+            SignStyle.Europe, SignStyle.UnitedKingdom, SignStyle.UnitedStates, SignStyle.Canada, SignStyle.AustraliaNz
+        };
+
+        private static readonly SignStyle[] NorthAmerica = { SignStyle.UnitedStates, SignStyle.Canada };
+        private static readonly SignStyle[] EndSigns = { SignStyle.Europe, SignStyle.Netherlands, SignStyle.UnitedKingdom };
+
         public static readonly SignDef[] All =
         {
-            new SignDef { Symbol = SignalSymbol.Arrow, Category = SignCategory.Lane, GridName = "Open" },
+            // UK smart motorways leave open lanes blank: no green arrow.
+            new SignDef { Symbol = SignalSymbol.Arrow, Category = SignCategory.Lane, GridName = "Open", Styles = NotUk },
             new SignDef { Symbol = SignalSymbol.Cross, Category = SignCategory.Lane, GridName = "Closed" },
+            new SignDef { Symbol = SignalSymbol.YellowCross, Category = SignCategory.Lane, GridName = "Closing", Styles = NorthAmerica },
             new SignDef { Symbol = SignalSymbol.MergeLeft, Category = SignCategory.Lane, GridName = "Merge left" },
             new SignDef { Symbol = SignalSymbol.MergeRight, Category = SignCategory.Lane, GridName = "Merge right" },
             new SignDef { Symbol = SignalSymbol.Reserved, Category = SignCategory.Lane, GridName = "Reserved" },
             new SignDef { Symbol = SignalSymbol.Blank, Category = SignCategory.Lane, GridName = "Blank" },
 
-            new SignDef { Symbol = SignalSymbol.Roadworks, Category = SignCategory.Warning, GridName = "Roadworks" },
-            new SignDef { Symbol = SignalSymbol.Queue, Category = SignCategory.Warning, GridName = "Queue" },
-            new SignDef { Symbol = SignalSymbol.Accident, Category = SignCategory.Warning, GridName = "Accident" },
-            new SignDef { Symbol = SignalSymbol.Slippery, Category = SignCategory.Warning, GridName = "Slippery" },
-            new SignDef { Symbol = SignalSymbol.Fog, Category = SignCategory.Warning, GridName = "Fog" },
-            new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger" },
+            new SignDef { Symbol = SignalSymbol.Roadworks, Category = SignCategory.Warning, GridName = "Roadworks", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.Queue, Category = SignCategory.Warning, GridName = "Queue", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.Accident, Category = SignCategory.Warning, GridName = "Accident", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.Slippery, Category = SignCategory.Warning, GridName = "Slippery", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.Fog, Category = SignCategory.Warning, GridName = "Fog", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger", Styles = NotNl },
 
-            new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No passing" },
-            new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No truck passing" },
-            new SignDef { Symbol = SignalSymbol.EndRestrictions, Category = SignCategory.Restriction, GridName = "End of limits" }
+            new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No passing", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No truck passing", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.EndRestrictions, Category = SignCategory.Restriction, GridName = "End of limits", Styles = EndSigns }
         };
 
         public static SignDef Find(SignalSymbol symbol)
@@ -149,6 +186,11 @@ namespace GantryTool.Data
             if (def != null && def.Category == SignCategory.Warning && IsAvailable(style, SignalSymbol.Danger))
             {
                 return SignalSymbol.Danger;
+            }
+
+            if (symbol == SignalSymbol.YellowCross)
+            {
+                return SignalSymbol.Cross;
             }
 
             return SignalSymbol.Blank;

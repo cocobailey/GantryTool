@@ -32,7 +32,9 @@ namespace GantryTool.Data
         Danger = 15,             // general danger "!"
         NoOvertaking = 16,
         NoOvertakingTrucks = 17,
-        EndRestrictions = 18     // end of all restrictions
+        EndRestrictions = 18,    // end of all restrictions
+
+        YellowCross = 19         // North America: lane closing ahead
     }
 
     /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
@@ -113,6 +115,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertaking: return "NO";
                 case SignalSymbol.NoOvertakingTrucks: return "NT";
                 case SignalSymbol.EndRestrictions: return "E";
+                case SignalSymbol.YellowCross: return "Y";
                 default: return "?";
             }
         }
@@ -140,6 +143,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertaking: return "No overtaking";
                 case SignalSymbol.NoOvertakingTrucks: return "No overtaking (trucks)";
                 case SignalSymbol.EndRestrictions: return "End of restrictions";
+                case SignalSymbol.YellowCross: return "Yellow X";
                 default: return "Auto";
             }
         }
@@ -165,6 +169,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertaking: return "No overtaking";
                 case SignalSymbol.NoOvertakingTrucks: return "No overtaking for trucks";
                 case SignalSymbol.EndRestrictions: return "End of all restrictions";
+                case SignalSymbol.YellowCross: return "Yellow X (lane closing ahead)";
                 default: return PlainName(s);
             }
         }

@@ -46,7 +46,7 @@ namespace GantryTool.Tests
             Run("a plain face reset in 1.0 is not undone", PlainFaceResetIn10Kept);
             Run("unknown future signs load as Auto", UnknownExtSymbolIsAuto);
             Run("warning and restriction signs round-trip; 1.0 sees Auto", WarningsRoundTrip);
-            Run("every sign has its own tile; unknown ones draw blank", AtlasTiles);
+            Run("every style: each sign has its own tile, missing ones fall back", AtlasTiles);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -469,22 +469,44 @@ namespace GantryTool.Tests
 
         private static void AtlasTiles()
         {
-            GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(SignStyle.Europe);
-            var seen = new HashSet<int>();
-            foreach (SignDef def in SignCatalog.All)
+            foreach (SignStyle style in SignStyles.Available)
             {
-                int t = atlas.TileOf(new FaceSign(def.Symbol, 0));
-                Check(def.Symbol == SignalSymbol.Blank || t != 5, def.Symbol + " has a tile");
-                Check(seen.Add(t), def.Symbol + " tile is unique");
+                GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(style);
+                var seen = new HashSet<int>();
+                foreach (SignDef def in SignCatalog.All)
+                {
+                    int t = atlas.TileOf(new FaceSign(def.Symbol, 0));
+                    if (SignCatalog.IsAvailable(style, def.Symbol))
+                    {
+                        Check(def.Symbol == SignalSymbol.Blank || t != 5, style + ": " + def.Symbol + " has a tile");
+                        Check(seen.Add(t), style + ": " + def.Symbol + " tile is unique");
+                    }
+                    else
+                    {
+                        int expected = atlas.TileOf(new FaceSign(SignCatalog.Fallback(style, def.Symbol), 0));
+                        Check(t == expected, style + ": missing " + def.Symbol + " shows its fallback");
+                    }
+                }
+
+                foreach (int v in SpeedUnits.Values(SignStyles.UsesMph(style)))
+                {
+                    int t = atlas.TileOf(new FaceSign(SignalSymbol.SpeedLimit, SpeedUnits.ToKmh(v, SignStyles.UsesMph(style))));
+                    Check(t != 5 && seen.Add(t), style + ": speed " + v + " has its own tile");
+                }
+
+                Check(atlas.TileOf(new FaceSign((SignalSymbol)300, 0)) == 5, style + ": unknown sign draws blank");
+                Check(atlas.Height <= 2048, style + ": atlas fits (" + atlas.Height + " px)");
             }
 
+            GantryTool.Render.SignAtlas eu = GantryTool.Render.SignAtlas.For(SignStyle.Europe);
             for (int s = 1; s <= 6; s++)
             {
-                Check(atlas.TileOf(new FaceSign((SignalSymbol)s, 0)) == s - 1, "1.0 tile layout unchanged for " + (SignalSymbol)s);
+                Check(eu.TileOf(new FaceSign((SignalSymbol)s, 0)) == s - 1, "1.0 tile layout unchanged for " + (SignalSymbol)s);
             }
 
-            Check(atlas.TileOf(new FaceSign((SignalSymbol)300, 0)) == 5, "unknown sign draws blank");
-            Check(atlas.Height <= 2048, "atlas fits (" + atlas.Height + " px)");
+            Check(SignCatalog.Fallback(SignStyle.UnitedKingdom, SignalSymbol.Arrow) == SignalSymbol.Blank, "UK: open lanes blank");
+            Check(SignCatalog.Fallback(SignStyle.Europe, SignalSymbol.YellowCross) == SignalSymbol.Cross, "yellow X -> red X");
+            Check(SignCatalog.Fallback(SignStyle.Netherlands, SignalSymbol.Roadworks) == SignalSymbol.Blank, "NL: no warnings");
         }
 
         // ------------------------------------------------------------------------------ helpers

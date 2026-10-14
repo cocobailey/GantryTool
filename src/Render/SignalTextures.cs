@@ -56,7 +56,7 @@ namespace GantryTool.Render
 
             for (int t = 0; t < atlas.Tiles.Count; t++)
             {
-                PaintTile(atlas.Tiles[t], mainPx, aciPx, width, (t % SignAtlas.Columns) * Tile, (t / SignAtlas.Columns) * Tile);
+                PaintTile(atlas.Tiles[t], atlas.Style, mainPx, aciPx, width, (t % SignAtlas.Columns) * Tile, (t / SignAtlas.Columns) * Tile);
             }
 
             main = new Texture2D(width, height, TextureFormat.ARGB32, true, false) { name = "GantrySignalMain" + atlas.Style };
@@ -79,7 +79,7 @@ namespace GantryTool.Render
         // ------------------------------------------------------------------------------ painting
 
         /// <summary>Paints one tile with its bottom-left corner at pixel (x0, y0).</summary>
-        private static void PaintTile(TileSpec spec, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        private static void PaintTile(TileSpec spec, SignStyle style, Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
         {
             if (spec.Kind == TileKind.Housing || spec.Kind == TileKind.Empty)
             {
@@ -102,7 +102,7 @@ namespace GantryTool.Render
             {
                 for (int dx = 0; dx < dots; dx++)
                 {
-                    led[dx, dy] = LedColor(spec, (dx + 0.5f) / dots, (dy + 0.5f) / dots, dots);
+                    led[dx, dy] = LedColor(spec, style, (dx + 0.5f) / dots, (dy + 0.5f) / dots, dots);
                 }
             }
 
@@ -156,24 +156,168 @@ namespace GantryTool.Render
         }
 
         /// <summary>Colour of the LED at grid-normalised (u, v) (v = 0 is the bottom row), or Clear when unlit.</summary>
-        private static Color LedColor(TileSpec spec, float u, float v, int dots)
+        private static Color LedColor(TileSpec spec, SignStyle style, float u, float v, int dots)
         {
             if (spec.Kind == TileKind.Lane)
             {
-                return Shape(spec.Symbol, u, v) ? SymbolColor(spec.Symbol) : Clear;
+                return Shape(spec.Symbol, u, v) ? LaneColor(spec.Symbol, style) : Clear;
             }
+
+            // Text signs are laid out in whole LEDs, counted from the top row.
+            int col = Mathf.FloorToInt(u * dots), row = dots - 1 - Mathf.FloorToInt(v * dots);
 
             if (spec.Kind == TileKind.Speed)
             {
-                return SpeedRing(spec.Shown, u, v, 1f / dots);
+                switch (style)
+                {
+                    case SignStyle.UnitedStates:
+                        return TextSpeed("SPEED", "LIMIT", spec.Shown, col, row, dots) ? White : Clear;
+                    case SignStyle.Canada:
+                        return TextSpeed("MAXIMUM", null, spec.Shown, col, row, dots) ? White : Clear;
+                    default:
+                        return SpeedRing(spec.Shown, u, v, 1f / dots);
+                }
             }
 
             if (spec.Kind == TileKind.Pictogram)
             {
-                return Pictogram(spec.Symbol, u, v);
+                return RegionalPictogram(spec.Symbol, style, u, v, col, row, dots);
             }
 
             return Clear;
+        }
+
+        /// <summary>Lane sign colours; Europe keeps the 1.0 colours exactly.</summary>
+        private static Color LaneColor(SignalSymbol s, SignStyle style)
+        {
+            if (s == SignalSymbol.YellowCross)
+            {
+                return Yellow;
+            }
+
+            if ((s == SignalSymbol.MergeLeft || s == SignalSymbol.MergeRight) && SignStyles.WhiteMergeArrows(style))
+            {
+                return White;
+            }
+
+            return SymbolColor(s);
+        }
+
+        // ------------------------------------------------------------------------------ regional variants
+
+        /// <summary>North American variable speed sign: a caption ("SPEED LIMIT" / "MAXIMUM") over the number.</summary>
+        private static bool TextSpeed(string line1, string line2, int value, int col, int row, int dots)
+        {
+            int top = line2 == null ? 6 : 3;
+            if (LedFont.Lit(line1, col, row, dots / 2f, top, 1))
+            {
+                return true;
+            }
+
+            top += LedFont.Height + 1;
+            if (line2 != null)
+            {
+                if (LedFont.Lit(line2, col, row, dots / 2f, top, 1))
+                {
+                    return true;
+                }
+
+                top += LedFont.Height;
+            }
+
+            // Number at double size in the rest of the box.
+            int areaTop = top + 1;
+            return LedFont.LitBlock(new[] { value.ToString() }, col, row, dots, areaTop, dots - 2 - areaTop, 2, 0);
+        }
+
+        /// <summary>Warnings and restrictions drawn the way each region does them.</summary>
+        private static Color RegionalPictogram(SignalSymbol s, SignStyle style, float u, float v, int col, int row, int dots)
+        {
+            if (SignCatalog.Find(s) != null && SignCatalog.Find(s).Category == SignCategory.Warning &&
+                SignStyles.DiamondWarnings(style))
+            {
+                // Yellow diamond; the pictogram is shrunk and lifted to fit inside it.
+                if (Diamond(u, v))
+                {
+                    return Yellow;
+                }
+
+                const float scale = 0.92f;
+                float pu = 0.5f + (u - 0.5f) / scale, pv = 0.4f + (v - 0.5f) / scale;
+                Color c = Pictogram(s, pu, pv);
+                return c.a > 0f && !Triangle(pu, pv) ? Yellow : Clear;
+            }
+
+            switch (s)
+            {
+                case SignalSymbol.NoOvertaking:
+                    if (SignStyles.IsNorthAmerica(style))
+                    {
+                        return TextPanel(new[] { "DO", "NOT", "PASS" }, col, row, dots) ? White : Clear;
+                    }
+
+                    if (style == SignStyle.AustraliaNz)
+                    {
+                        return TextPanel(new[] { "NO", "OVER-", "TAKING" }, col, row, dots) ? White : Clear;
+                    }
+
+                    break;
+                case SignalSymbol.NoOvertakingTrucks:
+                    if (SignStyles.IsNorthAmerica(style))
+                    {
+                        return TextPanel(new[] { "TRUCKS", "DO NOT", "PASS" }, col, row, dots) ? White : Clear;
+                    }
+
+                    if (style == SignStyle.AustraliaNz)
+                    {
+                        return TextPanel(new[] { "TRUCKS", "NO", "OVER-", "TAKING" }, col, row, dots) ? White : Clear;
+                    }
+
+                    break;
+                case SignalSymbol.EndRestrictions:
+                    if (style == SignStyle.Netherlands)
+                    {
+                        return LedFont.LitBlock(new[] { "END" }, col, row, dots, 0, dots, 2, 0) ? White : Clear;
+                    }
+
+                    if (style == SignStyle.UnitedKingdom)
+                    {
+                        return NationalSpeedLimit(u, v) ? White : Clear;
+                    }
+
+                    break;
+            }
+
+            return Pictogram(s, u, v);
+        }
+
+        /// <summary>Regulatory text sign: white lines inside a white border, like North American / Australian signs.</summary>
+        private static bool TextPanel(string[] lines, int col, int row, int dots)
+        {
+            bool border = col == 0 || col == dots - 1 || row == 0 || row == dots - 1;
+            int gap = lines.Length > 3 ? 2 : 3;
+            return border || LedFont.LitBlock(lines, col, row, dots, 2, dots - 4, 1, gap);
+        }
+
+        /// <summary>Yellow warning diamond outline.</summary>
+        private static bool Diamond(float u, float v)
+        {
+            const float half = 0.04f;
+            return Segment(u, v, 0.5f, 0.96f, 0.96f, 0.5f, half) || Segment(u, v, 0.96f, 0.5f, 0.5f, 0.04f, half) ||
+                   Segment(u, v, 0.5f, 0.04f, 0.04f, 0.5f, half) || Segment(u, v, 0.04f, 0.5f, 0.5f, 0.96f, half);
+        }
+
+        /// <summary>UK national speed limit: a white ring with one broad diagonal band.</summary>
+        private static bool NationalSpeedLimit(float u, float v)
+        {
+            float du = u - 0.5f, dv = v - 0.5f;
+            float r = Mathf.Sqrt(du * du + dv * dv);
+            if (Mathf.Abs(r - 0.445f) <= 0.022f)
+            {
+                return true;
+            }
+
+            return r <= 0.41f && Mathf.Abs((du - dv) * 0.7071f) <= 0.07f;
         }
 
         // ------------------------------------------------------------------------------ warnings and restrictions
@@ -502,6 +646,7 @@ namespace GantryTool.Render
                 case SignalSymbol.Arrow:
                     return DownArrow(u, v);
                 case SignalSymbol.Cross:
+                case SignalSymbol.YellowCross:
                 {
                     if (u < 0.08f || u > 0.92f || v < 0.08f || v > 0.92f)
                     {
