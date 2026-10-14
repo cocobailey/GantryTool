@@ -42,6 +42,7 @@ namespace GantryTool.UI
         private int _relabelFrames;
         private UIPanel _grid;
         private UILabel _applyLabel;
+        private UIButton _applyDirection;
         private UIButton _applySide;
         private UIButton _applyAll;
         private UIPanel _layoutBox;
@@ -164,9 +165,11 @@ namespace GantryTool.UI
             _grid.height = CellHeight;
 
             _applyLabel = UIUtils.CreateLabel(this, "Apply this sign to:", 0.75f);
-            _applySide = CreateButton("All lanes on this side", HalfWidth, () => Apply(false));
-            _applySide.tooltip = "Put this face's sign on the same side of every lane";
-            _applyAll = CreateButton("Whole gantry", HalfWidth, () => Apply(true));
+            _applyDirection = CreateButton("Same direction", ThirdWidth, () => Apply(false, true));
+            _applyDirection.tooltip = "Put this sign on every lane heading the same way as this one";
+            _applySide = CreateButton("All lanes", ThirdWidth, () => Apply(false, false));
+            _applySide.tooltip = "Put this face's sign on the same side of every lane, whichever way it runs";
+            _applyAll = CreateButton("Whole gantry", ThirdWidth, () => Apply(true, false));
             _applyAll.tooltip = "Put this sign on both sides of every lane";
             _layoutBox = AddUIComponent<UIPanel>();
             _layoutBox.width = PanelWidth - 2f * Margin;
@@ -351,9 +354,10 @@ namespace GantryTool.UI
 
             _applyLabel.relativePosition = new Vector3(Margin, y);
             y += 18f;
-            _applySide.relativePosition = new Vector3(Margin, y);
-            _applyAll.relativePosition = new Vector3(Margin + HalfWidth + ButtonGap, y);
-            _applySide.isEnabled = _applyAll.isEnabled = !hidden;
+            _applyDirection.relativePosition = new Vector3(Margin, y);
+            _applySide.relativePosition = new Vector3(Margin + ThirdWidth + ButtonGap, y);
+            _applyAll.relativePosition = new Vector3(Margin + 2f * (ThirdWidth + ButtonGap), y);
+            _applyDirection.isEnabled = _applySide.isEnabled = _applyAll.isEnabled = !hidden;
             y += 40f;
 
             BuildLayoutSection(g, lane, hidden);
@@ -871,7 +875,7 @@ namespace GantryTool.UI
             }
         }
 
-        private void Apply(bool wholeGantry)
+        private void Apply(bool wholeGantry, bool sameDirection)
         {
             try
             {
@@ -888,7 +892,7 @@ namespace GantryTool.UI
                     return;
                 }
 
-                GantryManager.ApplyToAllLanes(g, _minusSelected, _minusSelected ? minus : plus, wholeGantry);
+                GantryManager.ApplyToAllLanes(g, _minusSelected, _minusSelected ? minus : plus, wholeGantry, sameDirection);
                 Refresh(g);
             }
             catch (Exception e)

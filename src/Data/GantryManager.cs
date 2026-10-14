@@ -177,12 +177,20 @@ namespace GantryTool.Data
         /// "Apply to": sets <paramref name="sign"/> on the same physical face of every lane, or on both faces of
         /// every lane, as one undo step. Lanes whose head was removed are left alone. Returns lanes changed.
         /// </summary>
-        public static int ApplyToAllLanes(Gantry g, bool minusFace, FaceSign sign, bool bothFaces)
+        public static int ApplyToAllLanes(Gantry g, bool minusFace, FaceSign sign, bool bothFaces, bool sameDirectionOnly = false)
         {
             UndoStack.PushModified(g, "signs on all lanes", coalesce: false);
             int changed = 0;
             for (int i = 0; i < g.Lanes.Count; i++)
             {
+                // Same direction: only lanes whose traffic sees this face (the minus face is seen by traffic heading
+                // +side); two-way lanes are seen from both sides.
+                int travel = g.Lanes[i].TravelSign;
+                if (sameDirectionOnly && (minusFace ? travel < 0 : travel > 0))
+                {
+                    continue;
+                }
+
                 FaceSign minus, plus;
                 GetFaces(g, i, out minus, out plus);
                 if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
@@ -206,7 +214,8 @@ namespace GantryTool.Data
 
             UndoStack.DiscardIfUnchanged(g);
             Log.Info("Applied " + sign.Symbol + (sign.Value != 0 ? " " + sign.Value : "") + " to " +
-                     (bothFaces ? "both faces" : "one face") + " of " + changed + " lanes on gantry #" + g.Id);
+                     (bothFaces ? "both faces" : "one face") + " of " + changed + (sameDirectionOnly ? " same-direction" : "") +
+                     " lanes on gantry #" + g.Id);
             return changed;
         }
 
