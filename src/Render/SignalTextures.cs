@@ -56,6 +56,7 @@ namespace GantryTool.Render
                 aciPx[i] = new Color(0f, 0f, 0f, 1f);
             }
 
+            _printed = new bool[width * height];
             for (int t = 0; t < atlas.Tiles.Count; t++)
             {
                 PaintTile(atlas.Tiles[t], atlas.Style, mainPx, aciPx, width, (t % SignAtlas.Columns) * Tile, (t / SignAtlas.Columns) * Tile);
@@ -65,12 +66,13 @@ namespace GantryTool.Render
             main.wrapMode = TextureWrapMode.Clamp;
             main.filterMode = FilterMode.Trilinear;
             main.anisoLevel = 4;
-            SetBrightMips(main, mainPx, width, height);
+            SetBrightMips(main, mainPx, width, height, _printed);
 
             aci = new Texture2D(width, height, TextureFormat.ARGB32, true, true) { name = "GantrySignalACI" + atlas.Style };
             aci.wrapMode = TextureWrapMode.Clamp;
             aci.filterMode = FilterMode.Trilinear;
-            SetBrightMips(aci, aciPx, width, height);
+            SetBrightMips(aci, aciPx, width, height, _printed);
+            _printed = null;
 
             if (previews != null)
             {
@@ -242,6 +244,9 @@ namespace GantryTool.Render
             return LedFont.LitBlock(new[] { value.ToString() }, col, row, dots, areaTop, dots - 2 - areaTop, 2, 0);
         }
 
+        /// <summary>Texels of printed (unlit) sign parts while an atlas is built; their mips are plain averages.</summary>
+        private static bool[] _printed;
+
         // Printed sign parts (not lit): white face, black border and lettering.
         private static readonly Color SignWhite = new Color(0.86f, 0.86f, 0.84f, 1f);
         private static readonly Color SignBlack = new Color(0.04f, 0.04f, 0.04f, 1f);
@@ -292,17 +297,28 @@ namespace GantryTool.Render
                     }
                     else
                     {
-                        int col = Mathf.FloorToInt(u / PrintCell), row = Mathf.FloorToInt((1f - v) / PrintCell);
-                        bool ink = LedFont.Lit("MAXIMUM", col, row, printCols / 2f, 5, 1) ||
-                                   LedFont.Lit("km/h", col, row, printCols / 2f, 43, 1);
-                        c = ink ? SignBlack : SignWhite;
+                        // Bold lettering: each font dot is drawn on a half-size grid and grown by half a dot.
+                        int col = Mathf.FloorToInt(u / (PrintCell * 0.5f)), row = Mathf.FloorToInt((1f - v) / (PrintCell * 0.5f));
+                        c = PrintedInk(col, row, printCols) || PrintedInk(col - 1, row, printCols) ||
+                            PrintedInk(col, row - 1, printCols) || PrintedInk(col - 1, row - 1, printCols)
+                            ? SignBlack : SignWhite;
                     }
 
                     int i = (y0 + y) * width + x0 + x;
+                    if (_printed != null && glow <= 0f)
+                    {
+                        _printed[i] = true;
+                    }
+
                     mainPx[i] = c;
                     aciPx[i] = new Color(0f, 0f, glow, 1f);
                 }
             }
+        }
+
+        private static bool PrintedInk(int col, int row, int printCols)
+        {
+            return LedFont.Lit("MAXIMUM", col, row, printCols, 9, 2) || LedFont.Lit("km/h", col, row, printCols, 86, 2);
         }
 
         /// <summary>A round amber beacon lens: lit (glowing) or unlit, on a housing-coloured square.</summary>
@@ -681,15 +697,17 @@ namespace GantryTool.Render
         }
 
         /// <summary>Fills every mip level, each texel a blend of its 2x2 parent block's average and brightest texel.</summary>
-        private static void SetBrightMips(Texture2D tex, Color[] level0, int width, int height)
+        private static void SetBrightMips(Texture2D tex, Color[] level0, int width, int height, bool[] printed)
         {
             tex.SetPixels(level0, 0);
             Color[] prev = level0;
+            bool[] prevPrinted = printed;
             int pw = width, ph = height;
             for (int level = 1; level < tex.mipmapCount; level++)
             {
                 int w = Mathf.Max(1, pw >> 1), h = Mathf.Max(1, ph >> 1);
                 var cur = new Color[w * h];
+                bool[] curPrinted = prevPrinted != null ? new bool[w * h] : null;
                 for (int y = 0; y < h; y++)
                 {
                     for (int x = 0; x < w; x++)
@@ -699,12 +717,21 @@ namespace GantryTool.Render
                         Color a = prev[y0 * pw + x0], b = prev[y0 * pw + x1], c = prev[y1 * pw + x0], d = prev[y1 * pw + x1];
                         Color avg = (a + b + c + d) * 0.25f;
                         Color max = Brightest(Brightest(a, b), Brightest(c, d));
-                        cur[y * w + x] = Color.Lerp(avg, max, MipBrightBias);
+                        // Printed sign parts average normally, or white paper would swallow thin black lettering.
+                        bool flat = prevPrinted != null && (prevPrinted[y0 * pw + x0] || prevPrinted[y0 * pw + x1] ||
+                                                            prevPrinted[y1 * pw + x0] || prevPrinted[y1 * pw + x1]);
+                        if (curPrinted != null)
+                        {
+                            curPrinted[y * w + x] = flat;
+                        }
+
+                        cur[y * w + x] = flat ? avg : Color.Lerp(avg, max, MipBrightBias);
                     }
                 }
 
                 tex.SetPixels(cur, level);
                 prev = cur;
+                prevPrinted = curPrinted;
                 pw = w;
                 ph = h;
             }
