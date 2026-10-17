@@ -27,6 +27,8 @@ namespace GantryTool.Data
     ///   v4: int faceCount, then per head with a 1.1 sign or a value: float offset, sbyte sign, ushort minusSymbol,
     ///       ushort minusValue, ushort plusSymbol, ushort plusValue. The legacy block holds Auto for those faces; a
     ///       face is only restored if it's still Auto there (so a change made in 1.0 in between wins).
+    ///       Symbols added later reuse this list without a version bump: a version that doesn't know a symbol reads it
+    ///       as Auto and keeps everything else (e.g. RampMetered, whose value is the Ramp Meter node it follows).
     ///   The positions guard against stale data: if a player saved in 1.0 (which rewrites only the legacy
     ///   block), ids may have been reused, so an entry is only applied when id AND both posts still match.
     ///   New fields are only ever appended in a new extVersion. Unknown newer versions are skipped
@@ -323,7 +325,7 @@ namespace GantryTool.Data
         /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
         private static SignalSymbol ExtSymbol(ushort v)
         {
-            return v <= (ushort)SignalSymbol.Custom ? (SignalSymbol)v : SignalSymbol.Auto;
+            return v <= (ushort)SignalSymbol.RampMetered ? (SignalSymbol)v : SignalSymbol.Auto;
         }
 
         /// <summary>

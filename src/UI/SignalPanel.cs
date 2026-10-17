@@ -333,7 +333,7 @@ namespace GantryTool.UI
             FaceSign current = _minusSelected ? minus : plus;
             SignalSymbol auto = _minusSelected ? autoMinus : autoPlus;
             _categoryLabel.text = hidden ? "Pick a sign to restore this head" : "";
-            BuildGrid(style, Items(style, mph, auto, info.SpeedKmh), current, hidden, mph);
+            BuildGrid(style, Items(style, mph, auto, info.SpeedKmh, current.Symbol), current, hidden, mph);
 
             // Lay out what follows the grid: custom sign maker, Apply row, position and size, then one row of actions.
             float y = _grid.relativePosition.y + _grid.height + 12f;
@@ -384,14 +384,32 @@ namespace GantryTool.UI
             string status = hidden ? "Head removed"
                 : sign.Symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
                 : sign.Symbol == SignalSymbol.SpeedAuto ? "Road speed: " + SignalRules.PlainName(shown, mph).Replace("Speed ", "")
+                : sign.Symbol == SignalSymbol.RampMetered ? RampStatus(sign.Value)
                 : SignalRules.PlainName(sign, mph);
             card.Text.text = toward + "\n" + seenBy + "-bound traffic\n" + status;
             card.Panel.backgroundSprite = selected ? "ButtonMenuHovered" : "ButtonMenu";
             card.Panel.color = selected ? Selected : Normal;
         }
 
+        /// <summary>Card status of a ramp metering face: its meter and what it's doing.</summary>
+        private static string RampStatus(ushort node)
+        {
+            if (node == 0)
+            {
+                return "Ramp metered: no meter ahead";
+            }
+
+            if (!Integration.RampMeters.Present)
+            {
+                return "Ramp metered: Ramp Meter off";
+            }
+
+            string state = Integration.RampMeters.GetState(node);
+            return "Ramp metered: " + (state != null ? state.ToLowerInvariant() : "meter removed");
+        }
+
         /// <summary>The picker's signs for the selected category.</summary>
-        private List<PickItem> Items(SignStyle style, bool mph, SignalSymbol autoLane, float laneKmh)
+        private List<PickItem> Items(SignStyle style, bool mph, SignalSymbol autoLane, float laneKmh, SignalSymbol currentSymbol)
         {
             var items = new List<PickItem>();
             string unit = mph ? " mph" : " km/h";
@@ -442,6 +460,12 @@ namespace GantryTool.UI
 
             foreach (SignDef def in SignCatalog.InCategory(style, _category))
             {
+                // The ramp metering sign only makes sense with Ramp Meter (placed ones still show without it).
+                if (def.Symbol == SignalSymbol.RampMetered && !Integration.RampMeters.Present && currentSymbol != def.Symbol)
+                {
+                    continue;
+                }
+
                 items.Add(new PickItem
                 {
                     Sign = new FaceSign(def.Symbol, 0),
@@ -852,7 +876,17 @@ namespace GantryTool.UI
                     return;
                 }
 
-                GantryManager.SetFace(g, CurrentLane(g), _minusSelected, sign);
+                int lane = CurrentLane(g);
+                if (sign.Symbol == SignalSymbol.RampMetered)
+                {
+                    // Follow the nearest meter ahead of the traffic that reads this face; picking again re-links.
+                    sign.Value = Integration.RampMeters.FindLink(g, lane, _minusSelected);
+                    Log.Info("Ramp metering sign on gantry #" + g.Id + " lane " + (lane + 1) + " linked to " +
+                             (sign.Value != 0 ? "node " + sign.Value : "no meter (none within " +
+                                                                      Integration.RampMeters.MaxLinkDistance + " m ahead)"));
+                }
+
+                GantryManager.SetFace(g, lane, _minusSelected, sign);
                 Refresh(g);
             }
             catch (Exception e)

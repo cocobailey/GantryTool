@@ -35,6 +35,7 @@ namespace GantryTool.Data
         public Mesh Mesh;
         public Mesh SignalMesh;
         public Mesh BlinkMesh;
+        public readonly List<RampBeacon> RampBeacons = new List<RampBeacon>(); // lit lenses of linked ramp signs
         public Vector3 Origin;
         public Bounds Bounds;
         public bool MeshDirty = true;
@@ -64,5 +65,12 @@ namespace GantryTool.Data
         {
             return "#" + Id + " span=" + Span.ToString("F1") + "m start=" + Start + " end=" + End;
         }
+    }
+
+    /// <summary>The two lit beacon lenses of one ramp metering face (submeshes 0 and 1) and the meter they follow.</summary>
+    public sealed class RampBeacon
+    {
+        public ushort Node;
+        public Mesh Mesh;
     }
 }

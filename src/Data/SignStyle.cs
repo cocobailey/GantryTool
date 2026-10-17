@@ -150,6 +150,7 @@ namespace GantryTool.Data
             new SignDef { Symbol = SignalSymbol.Slippery, Category = SignCategory.Warning, GridName = "Slippery", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.Fog, Category = SignCategory.Warning, GridName = "Fog", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger", Styles = NotNl },
+            new SignDef { Symbol = SignalSymbol.RampMetered, Category = SignCategory.Warning, GridName = "Ramp metered" },
 
             new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No passing", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No truck passing", Styles = NotNl },

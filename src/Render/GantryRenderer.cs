@@ -105,6 +105,15 @@ namespace GantryTool.Render
                     {
                         DrawSignals(g.BlinkMesh, g.Origin, style);
                     }
+
+                    // Ramp metering signs: the two beacons take turns while their meter is metering.
+                    for (int k = 0; k < g.RampBeacons.Count; k++)
+                    {
+                        if (Integration.RampMeters.IsMetering(g.RampBeacons[k].Node))
+                        {
+                            DrawSignals(g.RampBeacons[k].Mesh, g.Origin, style, blinkOn ? 0 : 1);
+                        }
+                    }
                 }
             }
             catch (Exception e)
@@ -136,7 +145,7 @@ namespace GantryTool.Render
         }
 
         /// <summary>Draws a signal mesh with illumination forced on (objectIndex.z = 1, PropInstance.cs:337-360).</summary>
-        public static void DrawSignals(Mesh mesh, Vector3 origin, SignStyle style)
+        public static void DrawSignals(Mesh mesh, Vector3 origin, SignStyle style, int submesh = 0)
         {
             Material material = GantryMaterials.Ready ? GantryMaterials.SignalFor(style) : null;
             if (_instance == null || material == null || mesh == null ||
@@ -152,7 +161,7 @@ namespace GantryTool.Render
             index.z = 1f;
             block.SetVector(_instance._idObjectIndex, index);
             Graphics.DrawMesh(mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one),
-                material, GantryMaterials.Layer, null, 0, block);
+                material, GantryMaterials.Layer, null, submesh, block);
             _instance._drawCallData.m_defaultCalls++;
         }
 
@@ -237,6 +246,8 @@ namespace GantryTool.Render
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
                         g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, atlas, blinkLayer: true);
+                    SignalMeshBuilder.BuildRampBeacons(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
+                        g.Lanes, g.Overrides, g.SignalSize, atlas, g.RampBeacons);
                 }
 
                 if (Settings.Current.DebugLogging)

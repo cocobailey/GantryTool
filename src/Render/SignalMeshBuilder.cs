@@ -19,6 +19,7 @@ namespace GantryTool.Render
         public const float Proud = 0.04f;             // faces stand this far outside the truss sides
         private const float BlinkLift = 0.01f;        // blink layer sits this far in front of its blank face
         private const float BeaconScale = 0.26f;      // beacon box edge, as a fraction of the head size
+        private const float RampBeaconAlong = 0.32f;  // ramp sign beacons: centre offset from the middle, fraction of size
 
         /// <summary>Symbols drawn in the separate blink layer (shown/hidden by the renderer).</summary>
         public static bool Blinks(SignalSymbol s)
@@ -181,6 +182,16 @@ namespace GantryTool.Render
                     AddBeacon(c, side, dir, size, atlas, false);
                 }
 
+                if (minus.Symbol == SignalSymbol.RampMetered)
+                {
+                    AddRampBeacons(c, -side, dir, size, atlas);
+                }
+
+                if (plus.Symbol == SignalSymbol.RampMetered)
+                {
+                    AddRampBeacons(c, side, dir, size, atlas);
+                }
+
                 FaceSign blank = new FaceSign(SignalSymbol.Blank, 0);
                 AddFace(c - s, -side, r, u, atlas.TileRect(atlas.TileOf(Blinks(minus.Symbol) ? blank : minus)));
                 AddFace(c + s, side, r, u, atlas.TileRect(atlas.TileOf(Blinks(plus.Symbol) ? blank : plus)));
@@ -204,7 +215,86 @@ namespace GantryTool.Render
         /// <summary>Speed faces in a style with beacons (Canada) get a beacon box on top.</summary>
         private static bool HasBeacon(FaceSign face, SignAtlas atlas)
         {
-            return atlas.LampOffTile >= 0 && face.Symbol == SignalSymbol.SpeedLimit;
+            return SignStyles.HasBeacon(atlas.Style) && face.Symbol == SignalSymbol.SpeedLimit;
+        }
+
+        /// <summary>
+        /// Lit lenses of every linked ramp metering face, one mesh per face: submesh 0 = one beacon, 1 = the other, so the renderer can wig-wag them while the face's meter is metering. Replaces the
+        /// meshes in <paramref name="beacons"/>. Main thread only.
+        /// </summary>
+        public static void BuildRampBeacons(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
+            List<GantryLane> lanes, List<SignalOverride> overrides, float signalSize, SignAtlas atlas, List<RampBeacon> beacons)
+        {
+            for (int i = 0; i < beacons.Count; i++)
+            {
+                Object.Destroy(beacons[i].Mesh);
+            }
+
+            beacons.Clear();
+            if (lanes == null || lanes.Count == 0)
+            {
+                return;
+            }
+
+            Vector3 flat = end - start;
+            flat.y = 0f;
+            float span = flat.magnitude;
+            Vector3 dir = span > 0.01f ? flat / span : Vector3.right;
+            Vector3 side = new Vector3(-dir.z, 0f, dir.x);
+
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                FaceSign minus, plus;
+                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus, atlas.Style);
+                if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
+                {
+                    continue;
+                }
+
+                float along, size;
+                HeadLayout(lanes, i, overrides, signalSize, beamDepth, span, out along, out size);
+                Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along, size) - origin;
+                if (minus.Symbol == SignalSymbol.RampMetered && minus.Value != 0)
+                {
+                    beacons.Add(new RampBeacon { Node = minus.Value, Mesh = BuildRampLenses(c, -side, dir, size, atlas) });
+                }
+
+                if (plus.Symbol == SignalSymbol.RampMetered && plus.Value != 0)
+                {
+                    beacons.Add(new RampBeacon { Node = plus.Value, Mesh = BuildRampLenses(c, side, dir, size, atlas) });
+                }
+            }
+        }
+
+        private static Mesh BuildRampLenses(Vector3 headCentre, Vector3 normal, Vector3 dir, float size, SignAtlas atlas)
+        {
+            Verts.Clear();
+            Normals.Clear();
+            Tangents.Clear();
+            Uvs.Clear();
+            Tris.Clear();
+
+            AddBeacon(headCentre + dir * (size * RampBeaconAlong), normal, dir, size, atlas, true);
+            int split = Tris.Count;
+            AddBeacon(headCentre - dir * (size * RampBeaconAlong), normal, dir, size, atlas, true);
+
+            var mesh = new Mesh { name = "GantryRampBeacons" };
+            mesh.SetVertices(Verts);
+            mesh.SetNormals(Normals);
+            mesh.SetTangents(Tangents);
+            mesh.SetUVs(0, Uvs);
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(Tris.GetRange(0, split), 0);
+            mesh.SetTriangles(Tris.GetRange(split, Tris.Count - split), 1);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        /// <summary>The ramp sign's two beacon boxes on top of the head (static layer: housings and unlit lenses).</summary>
+        private static void AddRampBeacons(Vector3 headCentre, Vector3 normal, Vector3 dir, float size, SignAtlas atlas)
+        {
+            AddBeacon(headCentre + dir * (size * RampBeaconAlong), normal, dir, size, atlas, false);
+            AddBeacon(headCentre - dir * (size * RampBeaconAlong), normal, dir, size, atlas, false);
         }
 
         /// <summary>The beacon flashes while the sign shows less than the road's own limit.</summary>

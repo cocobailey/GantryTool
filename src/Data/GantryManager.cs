@@ -242,14 +242,19 @@ namespace GantryTool.Data
             }
         }
 
-        /// <summary>Signs that carry a value: speed limits (km/h) and custom signs (library id).</summary>
+        /// <summary>Signs that carry a value: speed limits (km/h), custom signs (library id), ramp signs (meter node).</summary>
         private static bool HasValue(SignalSymbol s)
         {
-            return s == SignalSymbol.SpeedLimit || s == SignalSymbol.Custom;
+            return s == SignalSymbol.SpeedLimit || s == SignalSymbol.Custom || s == SignalSymbol.RampMetered;
         }
 
         private static string Describe(FaceSign f)
         {
+            if (f.Symbol == SignalSymbol.RampMetered)
+            {
+                return "RampMetered (node " + f.Value + ")";
+            }
+
             return f.Symbol == SignalSymbol.SpeedLimit ? "Speed " + f.Value + " km/h" : f.Symbol.ToString();
         }
 
@@ -522,6 +527,13 @@ namespace GantryTool.Data
                     UnityEngine.Object.Destroy(gantry.BlinkMesh);
                     gantry.BlinkMesh = null;
                 }
+
+                for (int i = 0; i < gantry.RampBeacons.Count; i++)
+                {
+                    UnityEngine.Object.Destroy(gantry.RampBeacons[i].Mesh);
+                }
+
+                gantry.RampBeacons.Clear();
             }
             catch (Exception e)
             {

@@ -101,6 +101,12 @@ namespace GantryTool.Render
                 }
             }
 
+            if (spec.Kind == TileKind.RampSign)
+            {
+                PaintPrintedRamp(mainPx, aciPx, width, x0, y0);
+                return;
+            }
+
             if (spec.Kind == TileKind.Lamp)
             {
                 PaintLamp(spec.Shown == 1, mainPx, aciPx, width, x0, y0);
@@ -341,6 +347,74 @@ namespace GantryTool.Render
         private static bool PrintedInk(int col, int row, int printCols)
         {
             return LedFont.Lit("MAXIMUM", col, row, printCols, 9, 2) || LedFont.Lit("km/h", col, row, printCols, 86, 2);
+        }
+
+        // US warning yellow, printed (not lit); retroreflective like the printed white.
+        private static readonly Color SignYellow = new Color(0.98f, 0.78f, 0.06f, 1f);
+        private const int RampPrintCols = 60;                // lettering grid across the tile, in font dots
+        private static readonly string[] RampLines = { "RAMP", "METERED", "WHEN", "FLASHING" };
+
+        /// <summary>
+        /// Ramp metering sign: printed black RAMP / METERED / WHEN / FLASHING on yellow with a black border, like the US
+        /// roadside sign. Nothing on it lights up; its two beacons are separate boxes on top of the head.
+        /// </summary>
+        private static void PaintPrintedRamp(Color[] mainPx, Color[] aciPx, int width, int x0, int y0)
+        {
+            const int gap = 3;
+            int blockRows = RampLines.Length * LedFont.Height + (RampLines.Length - 1) * gap;
+            int top = (RampPrintCols - blockRows) / 2;
+            float half = 0.5f / RampPrintCols;
+
+            for (int y = 0; y < Tile; y++)
+            {
+                for (int x = 0; x < Tile; x++)
+                {
+                    float u = (x + 0.5f) / Tile, v = (y + 0.5f) / Tile;
+                    Color c;
+                    float glow = 0f;
+
+                    if (u < FrameWidth || u > 1f - FrameWidth || v < FrameWidth || v > 1f - FrameWidth)
+                    {
+                        c = FrameColor;
+                    }
+                    else if (u < 0.055f || u > 0.945f || v < 0.055f || v > 0.945f)
+                    {
+                        c = SignBlack; // printed border
+                    }
+                    else
+                    {
+                        // Bold lettering, as on the BC sign: half-size grid, each dot grown by half a dot.
+                        int col = Mathf.FloorToInt(u / half), row = Mathf.FloorToInt((1f - v) / half);
+                        bool ink = RampInk(col, row, top, gap) || RampInk(col - 1, row, top, gap) ||
+                                   RampInk(col, row - 1, top, gap) || RampInk(col - 1, row - 1, top, gap);
+                        c = ink ? SignBlack : SignYellow;
+                        glow = ink ? 0f : PrintedWhiteGlow;
+                    }
+
+                    int i = (y0 + y) * width + x0 + x;
+                    if (_printed != null)
+                    {
+                        _printed[i] = true;
+                    }
+
+                    mainPx[i] = c;
+                    aciPx[i] = new Color(0f, 0f, glow, 1f);
+                }
+            }
+        }
+
+        /// <summary>Lettering of the ramp sign on the half-dot grid (two cells per font dot).</summary>
+        private static bool RampInk(int col, int row, int top, int gap)
+        {
+            for (int i = 0; i < RampLines.Length; i++)
+            {
+                if (LedFont.Lit(RampLines[i], col, row, RampPrintCols, (top + i * (LedFont.Height + gap)) * 2, 2))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // ------------------------------------------------------------------------------ custom signs

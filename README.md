@@ -83,6 +83,14 @@ If TM:PE is enabled:
 Changes in TM:PE update the signals within about half a second. Manual signs still win. The restriction
 handling can be turned off in the options.
 
+### Ramp Meter
+
+If the Ramp Meter mod is enabled, **Warnings** has a **Ramp metered** sign: a yellow RAMP METERED WHEN FLASHING
+panel with two amber beacons on top. When you pick it, the face follows the nearest ramp meter ahead of the traffic
+that reads it (up to 2 km). The beacons take turns flashing while that meter is metering, and stay dark when it
+isn't, when the meter is gone, or when Ramp Meter isn't installed. Pick the sign again to link it to a different
+meter. The panel shows which meter state the sign is following.
+
 ### What counts as a lane
 
 Car-carrying lanes only, which includes bus, tram and trolleybus lanes that cars share. Pedestrian,

@@ -38,6 +38,7 @@ namespace GantryTool
                 GantryUpdater.Reset();
                 GantryUpdater.Enabled = true;
                 Integration.Tmpe.Init();
+                Integration.RampMeters.Init();
 
                 // Tools must live on the ToolController's GameObject to be usable as CurrentTool.
                 _tool = ToolsModifierControl.toolController.gameObject.AddComponent<GantryPlaceTool>();
@@ -76,6 +77,7 @@ namespace GantryTool
                 GantryUpdater.Enabled = false;
                 GantryUpdater.Reset();
                 Integration.Tmpe.Shutdown();
+                Integration.RampMeters.Shutdown();
 
                 if (_tool != null && ToolsModifierControl.toolController != null &&
                     ToolsModifierControl.toolController.CurrentTool == _tool)

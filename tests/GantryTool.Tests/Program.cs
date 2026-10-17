@@ -46,6 +46,7 @@ namespace GantryTool.Tests
             Run("a plain face reset in 1.0 is not undone", PlainFaceResetIn10Kept);
             Run("unknown future signs load as Auto", UnknownExtSymbolIsAuto);
             Run("warning and restriction signs round-trip; 1.0 sees Auto", WarningsRoundTrip);
+            Run("ramp metering signs keep their meter node; 1.0 sees Auto; 1.1.0 can still read the block", RampSignRoundTrip);
             Run("every style: each sign has its own tile, missing ones fall back", AtlasTiles);
             Run("custom signs: library round-trips; only used signs are saved", CustomRoundTrip);
             Run("custom signs: faces keep their sign; 1.0 sees Auto", CustomFaces);
@@ -470,6 +471,31 @@ namespace GantryTool.Tests
             string err;
             List<Gantry> by10 = Old10.Read(GantryData.WriteLegacy(gantries, new object()), out err);
             Check(err == null && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Auto, "1.0 sees Auto");
+        }
+
+        private static void RampSignRoundTrip()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride
+            {
+                Offset = 4f, Minus = SignalSymbol.RampMetered, MinusValue = 4321, Plus = SignalSymbol.Cross, Sign = 1
+            });
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 8f, Minus = SignalSymbol.RampMetered, Plus = SignalSymbol.Auto, Sign = -1 });
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            SignalOverride a = loaded[1].Overrides[0], b = loaded[1].Overrides[1];
+            Check(a.Minus == SignalSymbol.RampMetered && a.MinusValue == 4321, "linked sign keeps its node");
+            Check(a.Plus == SignalSymbol.Cross, "other face kept");
+            Check(b.Minus == SignalSymbol.RampMetered && b.MinusValue == 0, "unlinked sign stays unlinked");
+            AssertSameCore(gantries, loaded);
+
+            string err;
+            List<Gantry> by10 = Old10.Read(GantryData.WriteLegacy(gantries, new object()), out err);
+            Check(err == null && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Cross,
+                "1.0 sees Auto beside the Cross");
+
+            // 1.1.0 reads extension versions up to 4 and turns symbols it doesn't know into Auto, so the block must stay v4.
+            byte[] ext = GantryData.WriteExt(gantries);
+            Check(BitConverter.ToInt32(ext, 0) == 4, "extension block still version 4");
         }
 
         private static void AtlasTiles()

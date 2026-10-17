@@ -11,7 +11,8 @@ namespace GantryTool.Render
         Empty,
         Speed,     // speed limit; Shown = number on the sign in the style's units
         Pictogram, // warning or restriction sign
-        Lamp,      // beacon lens above a speed sign; Shown = 1 when lit
+        Lamp,      // beacon lens (BC speed signs, ramp metering signs); Shown = 1 when lit
+        RampSign,  // printed RAMP METERED WHEN FLASHING panel
         Custom     // player-made sign; Shown = CustomSigns id
     }
 
@@ -45,9 +46,12 @@ namespace GantryTool.Render
         /// <summary>The custom sign library revision this atlas was laid out for.</summary>
         public readonly int CustomRevision;
 
-        /// <summary>Beacon lens tiles (unlit / lit), or -1 when the style has no beacon.</summary>
-        public readonly int LampOffTile = -1;
-        public readonly int LampOnTile = -1;
+        /// <summary>Beacon lens tiles (unlit / lit).</summary>
+        public readonly int LampOffTile;
+        public readonly int LampOnTile;
+
+        /// <summary>The printed ramp metering sign.</summary>
+        public readonly int RampTile;
 
         public int Width => Tile * Columns;
         public int Rows => (Tiles.Count + Columns - 1) / Columns;
@@ -96,24 +100,25 @@ namespace GantryTool.Render
                 Tiles.Add(new TileSpec { Kind = TileKind.Speed, Symbol = SignalSymbol.SpeedLimit, Shown = v });
             }
 
-            if (SignStyles.HasBeacon(style))
-            {
-                LampOffTile = Tiles.Count;
-                Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 0 });
-                LampOnTile = Tiles.Count;
-                Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 1 });
-            }
+            // Beacon lenses: every style has the ramp metering sign, which carries two.
+            LampOffTile = Tiles.Count;
+            Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 0 });
+            LampOnTile = Tiles.Count;
+            Tiles.Add(new TileSpec { Kind = TileKind.Lamp, Shown = 1 });
 
             // Warnings and restrictions this style has.
             foreach (SignDef def in SignCatalog.All)
             {
                 if ((def.Category == SignCategory.Warning || def.Category == SignCategory.Restriction) &&
-                    SignCatalog.IsAvailable(style, def.Symbol))
+                    def.Symbol != SignalSymbol.RampMetered && SignCatalog.IsAvailable(style, def.Symbol))
                 {
                     _pictogramTile[def.Symbol] = Tiles.Count;
                     Tiles.Add(new TileSpec { Kind = TileKind.Pictogram, Symbol = def.Symbol });
                 }
             }
+
+            RampTile = Tiles.Count;
+            Tiles.Add(new TileSpec { Kind = TileKind.RampSign, Symbol = SignalSymbol.RampMetered });
 
             // Custom signs, after everything else (so nothing above moves when the library changes).
             foreach (CustomSign c in CustomSigns.All())
@@ -143,6 +148,11 @@ namespace GantryTool.Render
             if (_pictogramTile.TryGetValue(f.Symbol, out tile) || _extraLaneTile.TryGetValue(f.Symbol, out tile))
             {
                 return tile;
+            }
+
+            if (f.Symbol == SignalSymbol.RampMetered)
+            {
+                return RampTile;
             }
 
             if (f.Symbol == SignalSymbol.Custom)

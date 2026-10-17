@@ -36,7 +36,9 @@ namespace GantryTool.Data
 
         YellowCross = 19,        // North America: lane closing ahead
 
-        Custom = 20              // player-made sign; value = CustomSigns id
+        Custom = 20,             // player-made sign; value = CustomSigns id
+
+        RampMetered = 21         // RAMP METERED WHEN FLASHING; value = Ramp Meter node it follows (0 = none)
     }
 
     /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
@@ -119,6 +121,7 @@ namespace GantryTool.Data
                 case SignalSymbol.EndRestrictions: return "E";
                 case SignalSymbol.YellowCross: return "Y";
                 case SignalSymbol.Custom: return "C";
+                case SignalSymbol.RampMetered: return "RM";
                 default: return "?";
             }
         }
@@ -148,6 +151,7 @@ namespace GantryTool.Data
                 case SignalSymbol.EndRestrictions: return "End of restrictions";
                 case SignalSymbol.YellowCross: return "Yellow X";
                 case SignalSymbol.Custom: return "Custom sign";
+                case SignalSymbol.RampMetered: return "Ramp metered";
                 default: return "Auto";
             }
         }
@@ -174,6 +178,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertakingTrucks: return "No overtaking for trucks";
                 case SignalSymbol.EndRestrictions: return "End of all restrictions";
                 case SignalSymbol.YellowCross: return "Yellow X (lane closing ahead)";
+                case SignalSymbol.RampMetered: return "RAMP METERED WHEN FLASHING (beacons follow the nearest ramp meter ahead)";
                 default: return PlainName(s);
             }
         }
@@ -355,6 +360,11 @@ namespace GantryTool.Data
             {
                 CustomSign c = CustomSigns.Get(f.Value);
                 return c != null ? "Custom: " + c.Label : "Custom sign (missing)";
+            }
+
+            if (f.Symbol == SignalSymbol.RampMetered)
+            {
+                return f.Value != 0 ? "Ramp metered (node " + f.Value + ")" : "Ramp metered (no meter)";
             }
 
             return PlainName(f.Symbol);
