@@ -121,6 +121,7 @@ namespace GantryTool.Data
         public SignCategory Category;
         public string GridName;   // short label under the preview
         public SignStyle[] Styles; // styles that have this sign; null = every style
+        public bool NeedsRampMeter; // only offered while the Ramp Meter mod is running
     }
 
     /// <summary>Every sign that can be picked, and which styles have it.</summary>
@@ -150,7 +151,7 @@ namespace GantryTool.Data
             new SignDef { Symbol = SignalSymbol.Slippery, Category = SignCategory.Warning, GridName = "Slippery", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.Fog, Category = SignCategory.Warning, GridName = "Fog", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.Danger, Category = SignCategory.Warning, GridName = "Danger", Styles = NotNl },
-            new SignDef { Symbol = SignalSymbol.RampMetered, Category = SignCategory.Warning, GridName = "Ramp metered" },
+            new SignDef { Symbol = SignalSymbol.RampMetered, Category = SignCategory.Warning, GridName = "Ramp metered", NeedsRampMeter = true },
 
             new SignDef { Symbol = SignalSymbol.NoOvertaking, Category = SignCategory.Restriction, GridName = "No passing", Styles = NotNl },
             new SignDef { Symbol = SignalSymbol.NoOvertakingTrucks, Category = SignCategory.Restriction, GridName = "No truck passing", Styles = NotNl },
@@ -206,11 +207,23 @@ namespace GantryTool.Data
             return SignalSymbol.Blank;
         }
 
+        /// <summary>
+        /// Set while the Ramp Meter mod is running. Without it the ramp metering sign isn't offered in the picker;
+        /// faces that already show it keep it (beacons dark).
+        /// </summary>
+        public static bool RampMeterPresent;
+
+        /// <summary>Signs the picker offers for a style and category.</summary>
         public static List<SignDef> InCategory(SignStyle style, SignCategory category)
         {
             var list = new List<SignDef>();
             for (int i = 0; i < All.Length; i++)
             {
+                if (All[i].NeedsRampMeter && !RampMeterPresent)
+                {
+                    continue;
+                }
+
                 if (All[i].Category == category && IsAvailable(style, All[i].Symbol))
                 {
                     list.Add(All[i]);

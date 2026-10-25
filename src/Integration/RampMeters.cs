@@ -51,6 +51,7 @@ namespace GantryTool.Integration
                 _getState = Bind<NodeState>(api, "GetState");
                 _getMeteredNodes = Bind<NodeList>(api, "GetMeteredNodes");
                 _isMetering = Bind<NodeTest>(api, "IsMetering"); // last: Present only once everything is bound
+                Data.SignCatalog.RampMeterPresent = true;
 
                 FieldInfo version = api.GetField("ApiVersion", BindingFlags.Public | BindingFlags.Static);
                 Log.Info("Ramp Meter detected (API v" + (version != null ? version.GetValue(null) : "?") +
@@ -65,6 +66,7 @@ namespace GantryTool.Integration
 
         public static void Shutdown()
         {
+            Data.SignCatalog.RampMeterPresent = false;
             _isMetered = null;
             _isMetering = null;
             _getState = null;

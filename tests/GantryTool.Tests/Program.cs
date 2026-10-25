@@ -53,6 +53,7 @@ namespace GantryTool.Tests
             Run("custom signs: bad or cut-short data never throws", CustomCorrupt);
             Run("custom signs: text is cleaned; duplicates reused; library capped", CustomLibraryRules);
             Run("custom signs: a full library still fits every style's texture", CustomAtlasFits);
+            Run("ramp metering sign is only offered while Ramp Meter runs", RampSignNeedsRampMeter);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -641,6 +642,23 @@ namespace GantryTool.Tests
             }
 
             CustomSigns.Clear();
+        }
+
+        private static void RampSignNeedsRampMeter()
+        {
+            SignCatalog.RampMeterPresent = false;
+            foreach (SignStyle style in SignStyles.Available)
+            {
+                Check(!SignCatalog.InCategory(style, SignCategory.Warning).Exists(d => d.Symbol == SignalSymbol.RampMetered),
+                      style + ": hidden without Ramp Meter");
+            }
+
+            SignCatalog.RampMeterPresent = true;
+            Check(SignCatalog.InCategory(SignStyle.Europe, SignCategory.Warning).Exists(d => d.Symbol == SignalSymbol.RampMetered),
+                  "offered with Ramp Meter");
+            SignCatalog.RampMeterPresent = false;
+            GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(SignStyle.Europe);
+            Check(atlas.TileOf(new FaceSign(SignalSymbol.RampMetered, 0)) != 5, "faces already showing it still draw it");
         }
 
         // ------------------------------------------------------------------------------ helpers
