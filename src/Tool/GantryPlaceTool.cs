@@ -601,6 +601,23 @@ namespace GantryTool.Tool
             }
         }
 
+        /// <summary>Selects a head (handles) and opens it in the signal editor, e.g. a sign just added.</summary>
+        public void EditHead(Gantry g, int head)
+        {
+            if (g == null || !GantryManager.HeadExists(g, head))
+            {
+                return;
+            }
+
+            Select(g, openPanel: false);
+            _selHeadGantry = g.Id;
+            _selHeadLane = head;
+            if (Panel != null)
+            {
+                Panel.ShowFor(g, head);
+            }
+        }
+
         public void Deselect()
         {
             _selHeadGantry = 0;
@@ -888,14 +905,15 @@ namespace GantryTool.Tool
         private static bool HeadGeom(Gantry g, int lane, out float along, out float size, out float midY)
         {
             along = size = midY = 0f;
-            if (lane < 0 || lane >= g.Lanes.Count)
+            if (!GantryManager.HeadExists(g, lane))
             {
                 return false;
             }
 
             lock (GantryManager.Lock)
             {
-                SignalMeshBuilder.HeadLayout(g.Lanes, lane, g.Overrides, g.SignalSize, g.BeamDepth, g.Span, out along, out size);
+                SignalMeshBuilder.HeadLayout(g.Lanes, g.Overrides, g.ExtraHeads, lane, g.SignalSize, g.BeamDepth, g.Span,
+                    out along, out size);
             }
 
             midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size);
@@ -950,13 +968,13 @@ namespace GantryTool.Tool
             _headPressMouse = Input.mousePosition;
             _headPressAlong = pa;
             _headOrigAlong = along;
-            _headLaneOffset = g.Lanes[lane].Offset;
+            _headLaneOffset = GantryManager.HeadBase(g, lane);
         }
 
         private void UpdateHeadDrag()
         {
             Gantry g = GantryManager.Find(_selHeadGantry);
-            if (g == null || _selHeadLane < 0 || _selHeadLane >= g.Lanes.Count)
+            if (!GantryManager.HeadExists(g, _selHeadLane))
             {
                 _headDrag = HeadDrag.None;
                 return;
@@ -1137,7 +1155,7 @@ namespace GantryTool.Tool
                     _previewMesh = GantryMeshBuilder.Build(_start, end, bottom,
                         GantryManager.DefaultBeamDepth, _previewMesh, out _previewOrigin);
                     _previewSignals = SignalMeshBuilder.Build(_start, end, _previewOrigin, bottom,
-                        GantryManager.DefaultBeamDepth, scan.Lanes, NoOverrides, SignalMeshBuilder.DefaultSignalSize,
+                        GantryManager.DefaultBeamDepth, scan.Lanes, NoOverrides, null, SignalMeshBuilder.DefaultSignalSize,
                         _previewSignals, GantryMaterials.AtlasFor(SignStyles.Resolve((byte)SignStyle.Default)));
                     _previewEnd = end;
                     _previewBuilt = true;
@@ -1179,7 +1197,7 @@ namespace GantryTool.Tool
                     _headGantryId != 0 && _headLane >= 0)
                 {
                     Gantry hg = GantryManager.Find(_headGantryId);
-                    if (hg != null && _headLane < hg.Lanes.Count)
+                    if (GantryManager.HeadExists(hg, _headLane))
                     {
                         float hAlong, hSize, hMid;
                         HeadGeom(hg, _headLane, out hAlong, out hSize, out hMid);

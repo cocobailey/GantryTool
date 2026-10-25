@@ -25,6 +25,7 @@ namespace GantryTool.Data
                 byte[] ext = GantryData.WriteExt(gantries, GantryManager.Lock);
                 serializableDataManager.SaveData(GantryData.LegacyKey, legacy);
                 serializableDataManager.SaveData(GantryData.ExtKey, ext);
+                SaveExtraHeads(gantries);
                 SaveCustomSigns(gantries);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +
                          GantryData.LegacyVersion + " + ext v" + GantryData.ExtVersion + ")");
@@ -51,6 +52,42 @@ namespace GantryTool.Data
             catch (Exception e)
             {
                 Log.Error("Saving custom signs failed", e);
+            }
+        }
+
+        /// <summary>Extra heads go under their own key too, so versions without them still load everything else.</summary>
+        private void SaveExtraHeads(List<Gantry> gantries)
+        {
+            try
+            {
+                byte[] heads = ExtraHeadData.Write(gantries, GantryManager.Lock);
+                serializableDataManager.SaveData(ExtraHeadData.Key, heads);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Saving extra signal heads failed", e);
+            }
+        }
+
+        private void LoadExtraHeads(List<Gantry> loaded)
+        {
+            try
+            {
+                string error;
+                int added = ExtraHeadData.Apply(serializableDataManager.LoadData(ExtraHeadData.Key), loaded, out error);
+                if (error != null)
+                {
+                    Log.Warn("Extra signal heads: " + error);
+                }
+
+                if (added > 0)
+                {
+                    Log.Info("Loaded " + added + " extra signal heads");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Loading extra signal heads failed; the gantries load without them", e);
             }
         }
 
@@ -115,6 +152,8 @@ namespace GantryTool.Data
                     {
                         Log.Info("Per-gantry settings for " + applied + " of " + loaded.Count + " gantries");
                     }
+
+                    LoadExtraHeads(loaded);
                 }
             }
             catch (Exception e)

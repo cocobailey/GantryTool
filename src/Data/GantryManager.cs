@@ -144,6 +144,18 @@ namespace GantryTool.Data
             plus = new FaceSign(SignalSymbol.Auto, 0);
             lock (Lock)
             {
+                if (HeadRef.IsExtra(laneIndex))
+                {
+                    int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(laneIndex));
+                    if (e >= 0)
+                    {
+                        minus = g.ExtraHeads[e].MinusFace;
+                        plus = g.ExtraHeads[e].PlusFace;
+                    }
+
+                    return;
+                }
+
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
                 if (idx >= 0)
                 {
@@ -156,6 +168,27 @@ namespace GantryTool.Data
         /// <summary>Sets one face of a lane, keeping the other face as it is.</summary>
         public static void SetFace(Gantry g, int laneIndex, bool minusFace, FaceSign sign)
         {
+            if (HeadRef.IsExtra(laneIndex))
+            {
+                UndoStack.PushModified(g, "sign", coalesce: false);
+                UpdateExtra(g, laneIndex, h =>
+                {
+                    if (minusFace)
+                    {
+                        h.Minus = sign.Symbol;
+                        h.MinusValue = HasValue(sign.Symbol) ? sign.Value : (ushort)0;
+                    }
+                    else
+                    {
+                        h.Plus = sign.Symbol;
+                        h.PlusValue = HasValue(sign.Symbol) ? sign.Value : (ushort)0;
+                    }
+
+                    return h;
+                });
+                return;
+            }
+
             if (laneIndex < 0 || laneIndex >= g.Lanes.Count)
             {
                 return;
@@ -212,6 +245,44 @@ namespace GantryTool.Data
                 changed++;
             }
 
+            // Extra heads linked to a lane follow their lane; unlinked ones are one-off signs and stay as they are.
+            lock (Lock)
+            {
+                for (int k = 0; k < g.ExtraHeads.Count; k++)
+                {
+                    ExtraHead h = g.ExtraHeads[k];
+                    int lane = SignalRules.LinkedLane(g.Lanes, h);
+                    if (lane < 0)
+                    {
+                        continue;
+                    }
+
+                    int travel = g.Lanes[lane].TravelSign;
+                    if (sameDirectionOnly && (minusFace ? travel < 0 : travel > 0))
+                    {
+                        continue;
+                    }
+
+                    ushort value = HasValue(sign.Symbol) ? sign.Value : (ushort)0;
+                    if (bothFaces || minusFace)
+                    {
+                        h.Minus = sign.Symbol;
+                        h.MinusValue = value;
+                    }
+
+                    if (bothFaces || !minusFace)
+                    {
+                        h.Plus = sign.Symbol;
+                        h.PlusValue = value;
+                    }
+
+                    g.ExtraHeads[k] = h;
+                    changed++;
+                }
+
+                g.SignalsDirty = true;
+            }
+
             UndoStack.DiscardIfUnchanged(g);
             Log.Info("Applied " + sign.Symbol + (sign.Value != 0 ? " " + sign.Value : "") + " to " +
                      (bothFaces ? "both faces" : "one face") + " of " + changed + (sameDirectionOnly ? " same-direction" : "") +
@@ -264,6 +335,31 @@ namespace GantryTool.Data
         /// </summary>
         public static void SetHeadLayout(Gantry g, int laneIndex, float nudge, float size, string undoKey)
         {
+            if (HeadRef.IsExtra(laneIndex))
+            {
+                // Extra heads: "nudge" is the offset from the linked lane, or the position along the beam when unlinked.
+                if (undoKey != null)
+                {
+                    UndoStack.PushModified(g, undoKey);
+                }
+
+                UpdateExtra(g, laneIndex, h =>
+                {
+                    if (h.Linked)
+                    {
+                        h.Nudge = Mathf.Abs(nudge) < 0.005f ? 0f : nudge;
+                    }
+                    else
+                    {
+                        h.Along = Mathf.Clamp(nudge, 0f, Mathf.Max(0f, g.Span));
+                    }
+
+                    h.Size = size;
+                    return h;
+                });
+                return;
+            }
+
             if (laneIndex < 0 || laneIndex >= g.Lanes.Count)
             {
                 return;
@@ -327,12 +423,260 @@ namespace GantryTool.Data
             size = 0f;
             lock (Lock)
             {
+                if (HeadRef.IsExtra(laneIndex))
+                {
+                    int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(laneIndex));
+                    if (e >= 0)
+                    {
+                        nudge = g.ExtraHeads[e].Linked ? g.ExtraHeads[e].Nudge : g.ExtraHeads[e].Along;
+                        size = g.ExtraHeads[e].Size;
+                    }
+
+                    return;
+                }
+
                 int idx = SignalRules.FindOverride(g.Lanes, laneIndex, g.Overrides);
                 if (idx >= 0)
                 {
                     nudge = g.Overrides[idx].Nudge;
                     size = g.Overrides[idx].Size;
                 }
+            }
+        }
+
+        /// <summary>
+        /// What a head's layout "nudge" is measured from along the beam: its lane's centre, or the start post for an
+        /// unlinked extra head (whose nudge is its position).
+        /// </summary>
+        public static float HeadBase(Gantry g, int head)
+        {
+            lock (Lock)
+            {
+                if (!HeadRef.IsExtra(head))
+                {
+                    return head >= 0 && head < g.Lanes.Count ? g.Lanes[head].Offset : 0f;
+                }
+
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                int lane = e >= 0 ? SignalRules.LinkedLane(g.Lanes, g.ExtraHeads[e]) : -1;
+                return lane >= 0 ? g.Lanes[lane].Offset : 0f;
+            }
+        }
+
+        // ------------------------------------------------------------------------------ extra heads
+
+        /// <summary>Whether head <paramref name="head"/> (<see cref="HeadRef"/> numbering) exists on the gantry.</summary>
+        public static bool HeadExists(Gantry g, int head)
+        {
+            if (g == null || head < 0)
+            {
+                return false;
+            }
+
+            lock (Lock)
+            {
+                return HeadRef.IsExtra(head) ? HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head)) >= 0 : head < g.Lanes.Count;
+            }
+        }
+
+        /// <summary>Whether the gantry can take another extra head.</summary>
+        public static bool CanAddExtraHead(Gantry g)
+        {
+            lock (Lock)
+            {
+                return g.ExtraHeads.Count < HeadRef.MaxExtraHeads;
+            }
+        }
+
+        /// <summary>
+        /// Adds an unlinked head with blank faces at <paramref name="along"/> (clamped to the beam). Returns its head
+        /// number, or -1 when the gantry already has the most extra heads allowed.
+        /// </summary>
+        public static int AddExtraHead(Gantry g, float along)
+        {
+            int head;
+            UndoStack.PushModified(g, "add sign", coalesce: false);
+            lock (Lock)
+            {
+                if (g.ExtraHeads.Count >= HeadRef.MaxExtraHeads)
+                {
+                    return -1;
+                }
+
+                byte id = 1;
+                foreach (ExtraHead e in g.ExtraHeads)
+                {
+                    if (e.Id >= id)
+                    {
+                        id = (byte)(e.Id + 1);
+                    }
+                }
+
+                g.ExtraHeads.Add(new ExtraHead
+                {
+                    Id = id,
+                    Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)),
+                    Minus = SignalSymbol.Blank,
+                    Plus = SignalSymbol.Blank
+                });
+                g.SignalsDirty = true;
+                head = HeadRef.Of(id);
+            }
+
+            Log.Info("Added sign " + head + " to gantry #" + g.Id);
+            return head;
+        }
+
+        /// <summary>Sets both faces of an extra head as one undo step (Reset signs).</summary>
+        public static void SetExtraFaces(Gantry g, int head, FaceSign minus, FaceSign plus)
+        {
+            UndoStack.PushModified(g, "sign", coalesce: false);
+            UpdateExtra(g, head, h =>
+            {
+                h.Minus = minus.Symbol;
+                h.MinusValue = HasValue(minus.Symbol) ? minus.Value : (ushort)0;
+                h.Plus = plus.Symbol;
+                h.PlusValue = HasValue(plus.Symbol) ? plus.Value : (ushort)0;
+                return h;
+            });
+            UndoStack.DiscardIfUnchanged(g);
+        }
+
+        /// <summary>Where a head is along the beam right now (metres from the start post).</summary>
+        public static float HeadAlong(Gantry g, int head)
+        {
+            float along, size;
+            lock (Lock)
+            {
+                Render.SignalMeshBuilder.HeadLayout(g.Lanes, g.Overrides, g.ExtraHeads, head, g.SignalSize, g.BeamDepth, g.Span,
+                    out along, out size);
+            }
+
+            return along;
+        }
+
+        /// <summary>Deletes an extra head (undoable).</summary>
+        public static void RemoveExtraHead(Gantry g, int head)
+        {
+            UndoStack.PushModified(g, "delete sign", coalesce: false);
+            lock (Lock)
+            {
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                if (e >= 0)
+                {
+                    g.ExtraHeads.RemoveAt(e);
+                    g.SignalsDirty = true;
+                }
+            }
+
+            UndoStack.DiscardIfUnchanged(g);
+        }
+
+        /// <summary>
+        /// Links an extra head to lane <paramref name="laneIndex"/> (or unlinks it with -1) without moving it. Unlinking
+        /// turns Auto and Road speed faces blank, since there is no lane left to read.
+        /// </summary>
+        public static void LinkExtraHead(Gantry g, int head, int laneIndex)
+        {
+            float along, size;
+            lock (Lock)
+            {
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                if (e < 0)
+                {
+                    return;
+                }
+
+                Render.SignalMeshBuilder.ExtraLayout(g.Lanes, g.ExtraHeads[e], g.SignalSize, g.BeamDepth, g.Span, out along, out size);
+            }
+
+            UndoStack.PushModified(g, "link sign", coalesce: false);
+            UpdateExtra(g, head, h =>
+            {
+                if (laneIndex >= 0 && laneIndex < g.Lanes.Count)
+                {
+                    h.Linked = true;
+                    h.LinkOffset = g.Lanes[laneIndex].Offset;
+                    h.LinkSign = (sbyte)g.Lanes[laneIndex].TravelSign;
+                    h.Nudge = along - g.Lanes[laneIndex].Offset;
+                }
+                else
+                {
+                    h = Unlinked(h, along);
+                }
+
+                return h;
+            });
+            UndoStack.DiscardIfUnchanged(g);
+        }
+
+        /// <summary>
+        /// Keeps linked extra heads on their lanes after a rescan: re-keys each to its lane's current position, and
+        /// unlinks (in place) any whose lane is gone. Main thread, after the lanes were rebuilt.
+        /// </summary>
+        public static void RefreshExtraLinks(Gantry g)
+        {
+            lock (Lock)
+            {
+                for (int k = 0; k < g.ExtraHeads.Count; k++)
+                {
+                    ExtraHead h = g.ExtraHeads[k];
+                    if (!h.Linked)
+                    {
+                        continue;
+                    }
+
+                    int lane = SignalRules.LinkedLane(g.Lanes, h);
+                    if (lane >= 0)
+                    {
+                        h.LinkOffset = g.Lanes[lane].Offset;
+                        h.LinkSign = (sbyte)g.Lanes[lane].TravelSign;
+                        h.Along = Mathf.Clamp(h.LinkOffset + h.Nudge, 0f, Mathf.Max(0f, g.Span));
+                    }
+                    else
+                    {
+                        h = Unlinked(h, h.Along);
+                        Log.Info("Gantry #" + g.Id + ": sign " + HeadRef.Of(h.Id) + " lost its lane; now unlinked");
+                    }
+
+                    g.ExtraHeads[k] = h;
+                }
+            }
+        }
+
+        private static ExtraHead Unlinked(ExtraHead h, float along)
+        {
+            h.Linked = false;
+            h.Along = along;
+            h.Nudge = 0f;
+            if (h.Minus == SignalSymbol.Auto || h.Minus == SignalSymbol.SpeedAuto)
+            {
+                h.Minus = SignalSymbol.Blank;
+                h.MinusValue = 0;
+            }
+
+            if (h.Plus == SignalSymbol.Auto || h.Plus == SignalSymbol.SpeedAuto)
+            {
+                h.Plus = SignalSymbol.Blank;
+                h.PlusValue = 0;
+            }
+
+            return h;
+        }
+
+        /// <summary>Changes one extra head under the lock and schedules a signal rebuild.</summary>
+        private static void UpdateExtra(Gantry g, int head, Func<ExtraHead, ExtraHead> change)
+        {
+            lock (Lock)
+            {
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                if (e < 0)
+                {
+                    return;
+                }
+
+                g.ExtraHeads[e] = change(g.ExtraHeads[e]);
+                g.SignalsDirty = true;
             }
         }
 
@@ -348,6 +692,12 @@ namespace GantryTool.Data
                     {
                         n += (o.Minus == SignalSymbol.Custom && o.MinusValue == id ? 1 : 0) +
                              (o.Plus == SignalSymbol.Custom && o.PlusValue == id ? 1 : 0);
+                    }
+
+                    foreach (ExtraHead h in g.ExtraHeads)
+                    {
+                        n += (h.Minus == SignalSymbol.Custom && h.MinusValue == id ? 1 : 0) +
+                             (h.Plus == SignalSymbol.Custom && h.PlusValue == id ? 1 : 0);
                     }
                 }
             }
@@ -384,6 +734,29 @@ namespace GantryTool.Data
                         }
 
                         g.Overrides[k] = o;
+                    }
+
+                    // Extra heads have no Auto without a lane, so their faces go blank instead.
+                    for (int k = 0; k < g.ExtraHeads.Count; k++)
+                    {
+                        ExtraHead h = g.ExtraHeads[k];
+                        if (h.Minus == SignalSymbol.Custom && h.MinusValue == id)
+                        {
+                            h.Minus = h.Linked ? SignalSymbol.Auto : SignalSymbol.Blank;
+                            h.MinusValue = 0;
+                            changed++;
+                            touched = true;
+                        }
+
+                        if (h.Plus == SignalSymbol.Custom && h.PlusValue == id)
+                        {
+                            h.Plus = h.Linked ? SignalSymbol.Auto : SignalSymbol.Blank;
+                            h.PlusValue = 0;
+                            changed++;
+                            touched = true;
+                        }
+
+                        g.ExtraHeads[k] = h;
                     }
 
                     if (touched)

@@ -332,6 +332,62 @@ namespace GantryTool.Data
             plus = ResolveSpeed(plus, lane);
         }
 
+        /// <summary>The lane an extra head is linked to right now, or -1 (unlinked, or its lane is gone).</summary>
+        public static int LinkedLane(List<GantryLane> lanes, ExtraHead h)
+        {
+            return h.Linked && lanes.Count > 0 ? FindLane(lanes, h.LinkOffset, h.LinkSign) : -1;
+        }
+
+        /// <summary>
+        /// What an extra head's faces show: its own signs, with Auto and Road speed read from the linked lane. Without a
+        /// lane those show blank.
+        /// </summary>
+        public static void ResolveExtra(List<GantryLane> lanes, ExtraHead h, out FaceSign minus, out FaceSign plus,
+            SignStyle style = SignStyle.Europe)
+        {
+            minus = h.MinusFace;
+            plus = h.PlusFace;
+            int lane = LinkedLane(lanes, h);
+            if (lane < 0)
+            {
+                minus = WithoutLane(minus);
+                plus = WithoutLane(plus);
+                return;
+            }
+
+            SignalSymbol am, ap;
+            Auto(lanes[lane].TravelSign, lanes[lane].Restriction, out am, out ap, style);
+            minus = ResolveSpeed(minus.Symbol == SignalSymbol.Auto ? new FaceSign(am, 0) : minus, lanes[lane]);
+            plus = ResolveSpeed(plus.Symbol == SignalSymbol.Auto ? new FaceSign(ap, 0) : plus, lanes[lane]);
+        }
+
+        /// <summary>Faces of any head (<see cref="HeadRef"/> numbering).</summary>
+        public static void ResolveHead(List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, int head,
+            out FaceSign minus, out FaceSign plus, SignStyle style = SignStyle.Europe)
+        {
+            if (HeadRef.IsExtra(head))
+            {
+                int i = extras != null ? HeadRef.IndexOf(extras, HeadRef.ExtraId(head)) : -1;
+                if (i < 0)
+                {
+                    minus = plus = new FaceSign(SignalSymbol.Hidden, 0);
+                    return;
+                }
+
+                ResolveExtra(lanes, extras[i], out minus, out plus, style);
+                return;
+            }
+
+            ResolveFaces(lanes, head, overrides, out minus, out plus, style);
+        }
+
+        private static FaceSign WithoutLane(FaceSign f)
+        {
+            return f.Symbol == SignalSymbol.Auto || f.Symbol == SignalSymbol.SpeedAuto || f.Symbol == SignalSymbol.Hidden
+                ? new FaceSign(SignalSymbol.Blank, 0)
+                : f;
+        }
+
         private static FaceSign ResolveSpeed(FaceSign f, GantryLane lane)
         {
             if (f.Symbol != SignalSymbol.SpeedAuto)

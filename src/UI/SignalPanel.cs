@@ -216,17 +216,19 @@ namespace GantryTool.UI
         {
             try
             {
-                if (g == null || laneIndex < 0 || laneIndex >= g.Lanes.Count)
+                if (!GantryManager.HeadExists(g, laneIndex))
                 {
                     return;
                 }
 
                 bool newHead = g.Id != _gantryId || laneIndex != _laneIndex || !isVisible;
-                GantryLane lane = g.Lanes[laneIndex];
                 _gantryId = g.Id;
                 _laneIndex = laneIndex;
-                _offset = lane.Offset;
-                _sign = lane.TravelSign;
+                if (!HeadRef.IsExtra(laneIndex))
+                {
+                    _offset = g.Lanes[laneIndex].Offset;
+                    _sign = g.Lanes[laneIndex].TravelSign;
+                }
                 if (newHead)
                 {
                     _minusSelected = CameraSeesMinusFace(g);
@@ -302,26 +304,46 @@ namespace GantryTool.UI
                 return;
             }
 
-            GantryLane info = g.Lanes[lane];
+            bool extra = HeadRef.IsExtra(lane);
+            int infoLane = lane;
+            if (extra)
+            {
+                lock (GantryManager.Lock)
+                {
+                    int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(lane));
+                    infoLane = e >= 0 ? SignalRules.LinkedLane(g.Lanes, g.ExtraHeads[e]) : -1;
+                }
+            }
+
+            bool hasLane = infoLane >= 0 && infoLane < g.Lanes.Count;
+            GantryLane info = hasLane ? g.Lanes[infoLane] : default(GantryLane);
             SignStyle style = SignStyles.Resolve(g.Style);
 
             Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
             Vector2 side = new Vector2(-d.y, d.x);
-            string traffic = info.TravelSign == 0 ? "two-way" : "traffic heading " + LaneScanner.Compass(side * info.TravelSign);
-            _info.text = "Gantry #" + g.Id + ", lane " + (lane + 1) + " of " + g.Lanes.Count + ", " + traffic;
+            string traffic = !hasLane ? ""
+                : info.TravelSign == 0 ? ", two-way" : ", traffic heading " + LaneScanner.Compass(side * info.TravelSign);
+            _info.text = !extra ? "Gantry #" + g.Id + ", lane " + (lane + 1) + " of " + g.Lanes.Count + traffic
+                : hasLane ? "Gantry #" + g.Id + ", added sign on lane " + (infoLane + 1) + traffic
+                : "Gantry #" + g.Id + ", added sign (not linked to a lane)";
 
             FaceSign minus, plus, shownMinus, shownPlus;
-            SignalSymbol autoMinus, autoPlus;
+            SignalSymbol autoMinus = SignalSymbol.Blank, autoPlus = SignalSymbol.Blank;
             GantryManager.GetFaces(g, lane, out minus, out plus);
             lock (GantryManager.Lock)
             {
-                SignalRules.ResolveFaces(g.Lanes, lane, g.Overrides, out shownMinus, out shownPlus, style);
+                SignalRules.ResolveHead(g.Lanes, g.Overrides, g.ExtraHeads, lane, out shownMinus, out shownPlus, style);
             }
 
-            SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus, style);
+            if (hasLane)
+            {
+                SignalRules.Auto(info.TravelSign, info.Restriction, out autoMinus, out autoPlus, style);
+            }
+
             bool hidden = SignalRules.IsHidden(minus.Symbol, plus.Symbol);
             bool mph = SignStyles.UsesMph(style);
-            string note = info.Restriction == LaneRestriction.Banned ? " (TM:PE ban)"
+            string note = !hasLane ? ""
+                : info.Restriction == LaneRestriction.Banned ? " (TM:PE ban)"
                 : info.Restriction == LaneRestriction.Reserved ? " (TM:PE bus lane)" : "";
 
             // Minus face has normal -side: it faces -side and is seen by traffic heading +side.
@@ -333,7 +355,7 @@ namespace GantryTool.UI
             FaceSign current = _minusSelected ? minus : plus;
             SignalSymbol auto = _minusSelected ? autoMinus : autoPlus;
             _categoryLabel.text = hidden ? "Pick a sign to restore this head" : "";
-            BuildGrid(style, Items(style, mph, auto, info.SpeedKmh, current.Symbol), current, hidden, mph);
+            BuildGrid(style, Items(style, mph, auto, hasLane ? info.SpeedKmh : 0f, current.Symbol, hasLane), current, hidden, mph);
 
             // Lay out what follows the grid: custom sign maker, Apply row, position and size, then one row of actions.
             float y = _grid.relativePosition.y + _grid.height + 12f;
@@ -367,8 +389,10 @@ namespace GantryTool.UI
             _reset.relativePosition = new Vector3(Margin, y);
             _resetLayout.relativePosition = new Vector3(Margin + ThirdWidth + ButtonGap, y);
             _remove.relativePosition = new Vector3(Margin + 2f * (ThirdWidth + ButtonGap), y);
-            _remove.text = hidden ? "Restore head" : "Remove head";
-            _remove.tooltip = hidden ? "Bring this head back (signs on Auto)" : "Remove this head from the gantry";
+            _remove.text = extra ? "Delete sign" : hidden ? "Restore head" : "Remove head";
+            _remove.tooltip = extra ? "Delete this added sign (Ctrl+Z brings it back)"
+                : hidden ? "Bring this head back (signs on Auto)" : "Remove this head from the gantry";
+            _reset.tooltip = extra && !hasLane ? "Set both faces to blank" : "Set both faces back to Auto";
             _resetLayout.isEnabled = !hidden;
             y += 40f;
 
@@ -409,7 +433,8 @@ namespace GantryTool.UI
         }
 
         /// <summary>The picker's signs for the selected category.</summary>
-        private List<PickItem> Items(SignStyle style, bool mph, SignalSymbol autoLane, float laneKmh, SignalSymbol currentSymbol)
+        private List<PickItem> Items(SignStyle style, bool mph, SignalSymbol autoLane, float laneKmh, SignalSymbol currentSymbol,
+            bool hasLane)
         {
             var items = new List<PickItem>();
             string unit = mph ? " mph" : " km/h";
@@ -431,13 +456,17 @@ namespace GantryTool.UI
             if (_category == SignCategory.Speed)
             {
                 int road = SpeedUnits.Display(Mathf.RoundToInt(laneKmh), mph);
-                items.Add(new PickItem
+                if (hasLane) // "Road" reads the lane underneath; an added sign that isn't linked has none
                 {
-                    Sign = new FaceSign(SignalSymbol.SpeedAuto, 0),
-                    Preview = new FaceSign(SignalSymbol.SpeedLimit, (ushort)Mathf.RoundToInt(laneKmh)),
-                    Label = "Road (" + road + ")",
-                    Tooltip = "The speed limit of the road underneath (now " + road + unit + "); follows changes, including TM:PE"
-                });
+                    items.Add(new PickItem
+                    {
+                        Sign = new FaceSign(SignalSymbol.SpeedAuto, 0),
+                        Preview = new FaceSign(SignalSymbol.SpeedLimit, (ushort)Mathf.RoundToInt(laneKmh)),
+                        Label = "Road (" + road + ")",
+                        Tooltip = "The speed limit of the road underneath (now " + road + unit + "); follows changes, including TM:PE"
+                    });
+                }
+
                 foreach (int v in SpeedUnits.Values(mph))
                 {
                     var sign = new FaceSign(SignalSymbol.SpeedLimit, SpeedUnits.ToKmh(v, mph));
@@ -447,7 +476,7 @@ namespace GantryTool.UI
                 return items;
             }
 
-            if (_category == SignCategory.Lane)
+            if (_category == SignCategory.Lane && hasLane)
             {
                 items.Add(new PickItem
                 {
@@ -571,13 +600,22 @@ namespace GantryTool.UI
             float nudge, size;
             GantryManager.GetHeadLayout(g, lane, out nudge, out size);
             bool ownSize = size > 0f;
+            bool extra = HeadRef.IsExtra(lane);
+            bool linked = extra && IsLinked(g, lane);
+
+            var helper = new UIHelper(_layoutBox);
+            if (extra)
+            {
+                AddLinkDropdown(helper, g, lane);
+            }
 
             var header = _layoutBox.AddUIComponent<UILabel>();
             header.text = "Position and size (or drag the selected head)";
             header.textScale = 0.75f;
 
-            var helper = new UIHelper(_layoutBox);
-            UIUtils.StyledSlider(helper, _layoutBox.width, "Shift along beam", -3f, 3f, 0.05f, nudge, " m", "+0.00;-0.00;0.00", true, v =>
+            bool free = extra && !linked; // an unlinked added sign: position along the whole beam
+            UIUtils.StyledSlider(helper, _layoutBox.width, free ? "Position along beam" : "Shift along beam",
+                free ? 0f : -3f, free ? Mathf.Max(0.5f, g.Span) : 3f, 0.05f, nudge, " m", free ? "0.00" : "+0.00;-0.00;0.00", true, v =>
             {
                 Gantry cur = CurrentGantry();
                 int l = cur != null ? CurrentLane(cur) : -1;
@@ -724,6 +762,50 @@ namespace GantryTool.UI
 
             _customBox.height = 208f;
             RescanFiles();
+        }
+
+        /// <summary>"Link to lane" for an added sign: none (it stays put) or one of the gantry's lanes.</summary>
+        private void AddLinkDropdown(UIHelper helper, Gantry g, int head)
+        {
+            int count = g.Lanes.Count;
+            var names = new string[count + 1];
+            names[0] = "Not linked (stays where it is)";
+            Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
+            Vector2 side = new Vector2(-d.y, d.x);
+            for (int i = 0; i < count; i++)
+            {
+                int t = g.Lanes[i].TravelSign;
+                names[i + 1] = "Lane " + (i + 1) + (t == 0 ? " (two-way)" : " (heading " + LaneScanner.Compass(side * t) + ")");
+            }
+
+            int selected = 0;
+            lock (GantryManager.Lock)
+            {
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                int lane = e >= 0 ? SignalRules.LinkedLane(g.Lanes, g.ExtraHeads[e]) : -1;
+                selected = lane + 1;
+            }
+
+            var drop = (UIDropDown)helper.AddDropdown("Link to lane", names, selected, i =>
+            {
+                Gantry cur = CurrentGantry();
+                int h = cur != null ? CurrentLane(cur) : -1;
+                if (h >= 0 && HeadRef.IsExtra(h))
+                {
+                    GantryManager.LinkExtraHead(cur, h, i - 1);
+                    Refresh(cur);
+                }
+            });
+            if (drop != null)
+            {
+                drop.tooltip = "Linked, this sign follows the lane and can show Auto and Road speed, like the lane's own head";
+                DropdownToggle.Attach(drop);
+                var label = drop.parent.Find<UILabel>("Label");
+                if (label != null)
+                {
+                    label.textScale = 0.8f;
+                }
+            }
         }
 
         private static UIButton CreateButton(UIComponent parent, string text, float w, Action onClick)
@@ -927,7 +1009,9 @@ namespace GantryTool.UI
             int l = g != null ? CurrentLane(g) : -1;
             if (l >= 0)
             {
-                GantryManager.SetHeadLayout(g, l, 0f, 0f, "signal layout");
+                // An added sign that isn't linked keeps its place and only gets the gantry's box size back.
+                bool keepPlace = HeadRef.IsExtra(l) && !IsLinked(g, l);
+                GantryManager.SetHeadLayout(g, l, keepPlace ? GantryManager.HeadAlong(g, l) : 0f, 0f, "signal layout");
                 Refresh(g);
             }
         }
@@ -940,8 +1024,29 @@ namespace GantryTool.UI
                 return;
             }
 
-            GantryManager.SetOverride(g, CurrentLane(g), SignalSymbol.Auto, SignalSymbol.Auto);
+            int head = CurrentLane(g);
+            if (HeadRef.IsExtra(head))
+            {
+                // An added sign goes back to Auto when it reads a lane, otherwise to blank.
+                bool linked = IsLinked(g, head);
+                var face = new FaceSign(linked ? SignalSymbol.Auto : SignalSymbol.Blank, 0);
+                GantryManager.SetExtraFaces(g, head, face, face);
+            }
+            else
+            {
+                GantryManager.SetOverride(g, head, SignalSymbol.Auto, SignalSymbol.Auto);
+            }
+
             Refresh(g);
+        }
+
+        private static bool IsLinked(Gantry g, int head)
+        {
+            lock (GantryManager.Lock)
+            {
+                int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
+                return e >= 0 && SignalRules.LinkedLane(g.Lanes, g.ExtraHeads[e]) >= 0;
+            }
         }
 
         /// <summary>Removes the head (both faces Hidden) or restores a removed head to Auto.</summary>
@@ -956,6 +1061,13 @@ namespace GantryTool.UI
                 }
 
                 int lane = CurrentLane(g);
+                if (HeadRef.IsExtra(lane))
+                {
+                    GantryManager.RemoveExtraHead(g, lane);
+                    Hide();
+                    return;
+                }
+
                 SignalSymbol minus, plus;
                 GantryManager.GetFaces(g, lane, out minus, out plus);
                 SignalSymbol s = SignalRules.IsHidden(minus, plus) ? SignalSymbol.Auto : SignalSymbol.Hidden;
@@ -976,6 +1088,11 @@ namespace GantryTool.UI
         /// </summary>
         private int CurrentLane(Gantry g)
         {
+            if (HeadRef.IsExtra(_laneIndex))
+            {
+                return GantryManager.HeadExists(g, _laneIndex) ? _laneIndex : -1;
+            }
+
             if (_laneIndex >= 0 && _laneIndex < g.Lanes.Count &&
                 Mathf.Abs(g.Lanes[_laneIndex].Offset - _offset) < 0.01f && g.Lanes[_laneIndex].TravelSign == _sign)
             {

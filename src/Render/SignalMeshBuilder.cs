@@ -56,6 +56,53 @@ namespace GantryTool.Render
             along = span > size ? Mathf.Clamp(lanes[laneIndex].Offset + nudge, half, span - half) : span * 0.5f;
         }
 
+        /// <summary>Where an extra head sits along the beam and its box size (see <see cref="ExtraHead"/>).</summary>
+        public static void ExtraLayout(List<GantryLane> lanes, ExtraHead h, float gantrySignalSize, float beamDepth, float span,
+            out float along, out float size)
+        {
+            size = h.Size > 0f ? Mathf.Max(0.3f, h.Size + Frame) : HeadSize(gantrySignalSize, beamDepth);
+            int lane = SignalRules.LinkedLane(lanes, h);
+            float target = lane >= 0 ? lanes[lane].Offset + h.Nudge : h.Along;
+            float half = size * 0.5f;
+            along = span > size ? Mathf.Clamp(target, half, span - half) : span * 0.5f;
+        }
+
+        /// <summary>Layout of any head (<see cref="HeadRef"/> numbering).</summary>
+        public static void HeadLayout(List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, int head,
+            float gantrySignalSize, float beamDepth, float span, out float along, out float size)
+        {
+            if (!HeadRef.IsExtra(head))
+            {
+                HeadLayout(lanes, head, overrides, gantrySignalSize, beamDepth, span, out along, out size);
+                return;
+            }
+
+            int i = extras != null ? HeadRef.IndexOf(extras, HeadRef.ExtraId(head)) : -1;
+            if (i < 0)
+            {
+                size = HeadSize(gantrySignalSize, beamDepth);
+                along = span * 0.5f;
+                return;
+            }
+
+            ExtraLayout(lanes, extras[i], gantrySignalSize, beamDepth, span, out along, out size);
+        }
+
+        /// <summary>The road speed (km/h) under a head, for the Canadian beacon; 0 for an unlinked extra head.</summary>
+        private static float HeadLaneKmh(List<GantryLane> lanes, List<ExtraHead> extras, int head)
+        {
+            int lane = head;
+            if (HeadRef.IsExtra(head))
+            {
+                int i = extras != null ? HeadRef.IndexOf(extras, HeadRef.ExtraId(head)) : -1;
+                lane = i >= 0 ? SignalRules.LinkedLane(lanes, extras[i]) : -1;
+            }
+
+            return lane >= 0 && lane < lanes.Count ? lanes[lane].SpeedKmh : 0f;
+        }
+
+        private static readonly List<int> Heads = new List<int>();
+
         public static float HeadSize(float signalSize, float beamDepth)
         {
             return Mathf.Min(signalSize + Frame, beamDepth - 0.1f);
@@ -99,8 +146,8 @@ namespace GantryTool.Render
         /// With it true: only the blinking faces, lifted slightly in front, no housings.
         /// </summary>
         public static Mesh Build(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
-            List<GantryLane> lanes, List<SignalOverride> overrides, float signalSize, Mesh mesh, SignAtlas atlas,
-            bool blinkLayer = false)
+            List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, Mesh mesh,
+            SignAtlas atlas, bool blinkLayer = false)
         {
             Verts.Clear();
             Normals.Clear();
@@ -117,7 +164,7 @@ namespace GantryTool.Render
                 mesh.Clear();
             }
 
-            if (lanes == null || lanes.Count == 0)
+            if (lanes == null)
             {
                 return mesh;
             }
@@ -130,17 +177,20 @@ namespace GantryTool.Render
 
             Rect housing = Inset(atlas.TileRect(SignAtlas.HousingTile), 0.25f);
 
-            for (int i = 0; i < lanes.Count; i++)
+            // Lane heads, then the heads the player added (those stay even with no road underneath).
+            HeadRef.All(lanes, extras, Heads);
+            foreach (int head in Heads)
             {
                 FaceSign minus, plus;
-                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus, atlas.Style);
+                SignalRules.ResolveHead(lanes, overrides, extras, head, out minus, out plus, atlas.Style);
                 if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue; // head removed by the player
                 }
 
                 float along, size;
-                HeadLayout(lanes, i, overrides, signalSize, beamDepth, span, out along, out size);
+                HeadLayout(lanes, overrides, extras, head, signalSize, beamDepth, span, out along, out size);
+                float laneKmh = HeadLaneKmh(lanes, extras, head);
                 Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along, size) - origin;
                 Vector3 r = dir * (size * 0.5f);
                 Vector3 u = Vector3.up * (size * 0.5f);
@@ -159,12 +209,12 @@ namespace GantryTool.Render
                         AddFace(c + s + lift, side, r, u, atlas.TileRect(atlas.TileOf(plus)));
                     }
 
-                    if (Lowered(minus, lanes[i], atlas))
+                    if (Lowered(minus, laneKmh, atlas))
                     {
                         AddBeacon(c, -side, dir, size, atlas, true);
                     }
 
-                    if (Lowered(plus, lanes[i], atlas))
+                    if (Lowered(plus, laneKmh, atlas))
                     {
                         AddBeacon(c, side, dir, size, atlas, true);
                     }
@@ -223,7 +273,8 @@ namespace GantryTool.Render
         /// meshes in <paramref name="beacons"/>. Main thread only.
         /// </summary>
         public static void BuildRampBeacons(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
-            List<GantryLane> lanes, List<SignalOverride> overrides, float signalSize, SignAtlas atlas, List<RampBeacon> beacons)
+            List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, SignAtlas atlas,
+            List<RampBeacon> beacons)
         {
             for (int i = 0; i < beacons.Count; i++)
             {
@@ -231,7 +282,7 @@ namespace GantryTool.Render
             }
 
             beacons.Clear();
-            if (lanes == null || lanes.Count == 0)
+            if (lanes == null)
             {
                 return;
             }
@@ -242,17 +293,18 @@ namespace GantryTool.Render
             Vector3 dir = span > 0.01f ? flat / span : Vector3.right;
             Vector3 side = new Vector3(-dir.z, 0f, dir.x);
 
-            for (int i = 0; i < lanes.Count; i++)
+            HeadRef.All(lanes, extras, Heads);
+            foreach (int head in Heads)
             {
                 FaceSign minus, plus;
-                SignalRules.ResolveFaces(lanes, i, overrides, out minus, out plus, atlas.Style);
+                SignalRules.ResolveHead(lanes, overrides, extras, head, out minus, out plus, atlas.Style);
                 if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue;
                 }
 
                 float along, size;
-                HeadLayout(lanes, i, overrides, signalSize, beamDepth, span, out along, out size);
+                HeadLayout(lanes, overrides, extras, head, signalSize, beamDepth, span, out along, out size);
                 Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along, size) - origin;
                 if (minus.Symbol == SignalSymbol.RampMetered && minus.Value != 0)
                 {
@@ -298,14 +350,14 @@ namespace GantryTool.Render
         }
 
         /// <summary>The beacon flashes while the sign shows less than the road's own limit.</summary>
-        private static bool Lowered(FaceSign face, GantryLane lane, SignAtlas atlas)
+        private static bool Lowered(FaceSign face, float laneKmh, SignAtlas atlas)
         {
-            if (!HasBeacon(face, atlas) || lane.SpeedKmh <= 0f)
+            if (!HasBeacon(face, atlas) || laneKmh <= 0f)
             {
                 return false;
             }
 
-            return SpeedUnits.Display(face.Value, atlas.Mph) < SpeedUnits.Display(Mathf.RoundToInt(lane.SpeedKmh), atlas.Mph);
+            return SpeedUnits.Display(face.Value, atlas.Mph) < SpeedUnits.Display(Mathf.RoundToInt(laneKmh), atlas.Mph);
         }
 
         /// <summary>

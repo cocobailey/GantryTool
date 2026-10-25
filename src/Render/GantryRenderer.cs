@@ -234,8 +234,9 @@ namespace GantryTool.Render
                 lock (GantryManager.Lock)
                 {
                     g.SignalsDirty = false;
+                    GantryManager.RefreshExtraLinks(g);
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.SignalSize, g.SignalMesh, atlas);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas);
                     if (g.SignalMesh != null && g.SignalMesh.vertexCount > 0 && g.Mesh != null)
                     {
                         Bounds b = g.Mesh.bounds;
@@ -245,9 +246,9 @@ namespace GantryTool.Render
                     }
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.SignalSize, g.BlinkMesh, atlas, blinkLayer: true);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, blinkLayer: true);
                     SignalMeshBuilder.BuildRampBeacons(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.SignalSize, atlas, g.RampBeacons);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, atlas, g.RampBeacons);
                 }
 
                 if (Settings.Current.DebugLogging)

@@ -39,9 +39,11 @@ namespace GantryTool.Tool
             return best;
         }
 
+        private static readonly List<int> Heads = new List<int>();
+
         /// <summary>
-        /// Nearest signal head hit by the ray. Returns false if none; heads are tested slightly inflated.
-        /// Main thread (reads Gantry.Lanes).
+        /// Nearest signal head hit by the ray: its gantry and head number (<see cref="HeadRef"/>). Returns false if
+        /// none; heads are tested slightly inflated. Main thread (reads Gantry.Lanes).
         /// </summary>
         public static bool PickHead(Ray ray, float maxDistance, out int gantryId, out int laneIndex)
         {
@@ -52,7 +54,7 @@ namespace GantryTool.Tool
             for (int i = 0; i < Scratch.Count; i++)
             {
                 Gantry g = Scratch[i];
-                if (g.Mesh == null || g.Lanes.Count == 0)
+                if (g.Mesh == null || (g.Lanes.Count == 0 && g.ExtraHeads.Count == 0))
                 {
                     continue;
                 }
@@ -69,12 +71,18 @@ namespace GantryTool.Tool
                 Vector3 side = new Vector3(-dir.z, 0f, dir.x);
                 float halfDepth = SignalMeshBuilder.HeadDepth * 0.5f + 0.1f;
 
-                for (int k = 0; k < g.Lanes.Count; k++)
+                lock (GantryManager.Lock)
+                {
+                    HeadRef.All(g.Lanes, g.ExtraHeads, Heads);
+                }
+
+                foreach (int k in Heads)
                 {
                     float off, size;
                     lock (GantryManager.Lock)
                     {
-                        SignalMeshBuilder.HeadLayout(g.Lanes, k, g.Overrides, g.SignalSize, g.BeamDepth, span, out off, out size);
+                        SignalMeshBuilder.HeadLayout(g.Lanes, g.Overrides, g.ExtraHeads, k, g.SignalSize, g.BeamDepth, span,
+                            out off, out size);
                     }
 
                     float half = size * 0.5f + 0.1f;

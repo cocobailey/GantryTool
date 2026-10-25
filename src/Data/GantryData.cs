@@ -323,7 +323,7 @@ namespace GantryTool.Data
         }
 
         /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
-        private static SignalSymbol ExtSymbol(ushort v)
+        internal static SignalSymbol ExtSymbol(ushort v)
         {
             return v <= (ushort)SignalSymbol.RampMetered ? (SignalSymbol)v : SignalSymbol.Auto;
         }
@@ -384,7 +384,7 @@ namespace GantryTool.Data
             }
         }
 
-        private static bool Same(Vector3 a, Vector3 b)
+        internal static bool Same(Vector3 a, Vector3 b)
         {
             return Mathf.Abs(a.x - b.x) < 0.01f && Mathf.Abs(a.y - b.y) < 0.01f && Mathf.Abs(a.z - b.z) < 0.01f;
         }
@@ -407,14 +407,14 @@ namespace GantryTool.Data
             return b <= (ushort)SignalSymbol.Hidden ? (SignalSymbol)b : SignalSymbol.Auto;
         }
 
-        private static void WriteVector(BinaryWriter w, Vector3 v)
+        internal static void WriteVector(BinaryWriter w, Vector3 v)
         {
             w.Write(v.x);
             w.Write(v.y);
             w.Write(v.z);
         }
 
-        private static Vector3 ReadVector(BinaryReader r)
+        internal static Vector3 ReadVector(BinaryReader r)
         {
             float x = r.ReadSingle();
             float y = r.ReadSingle();

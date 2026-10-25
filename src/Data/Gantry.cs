@@ -48,6 +48,9 @@ namespace GantryTool.Data
         /// <summary>Manual per-lane symbol choices. Guarded by GantryManager.Lock (saved on the sim thread).</summary>
         public readonly List<SignalOverride> Overrides = new List<SignalOverride>();
 
+        /// <summary>Heads the player added (<see cref="ExtraHead"/>). Guarded by GantryManager.Lock.</summary>
+        public readonly List<ExtraHead> ExtraHeads = new List<ExtraHead>();
+
         /// <summary>Only the signal faces changed (override edit); the truss and lanes are still valid.</summary>
         public bool SignalsDirty;
 

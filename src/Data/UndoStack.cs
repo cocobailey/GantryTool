@@ -17,6 +17,7 @@ namespace GantryTool.Data
         public float HeightAboveRoad;
         public byte Style;
         public readonly List<SignalOverride> Overrides = new List<SignalOverride>();
+        public readonly List<ExtraHead> ExtraHeads = new List<ExtraHead>();
 
         /// <summary>Call under GantryManager.Lock.</summary>
         public static GantryState Capture(Gantry g)
@@ -34,6 +35,7 @@ namespace GantryTool.Data
                 Style = g.Style
             };
             s.Overrides.AddRange(g.Overrides);
+            s.ExtraHeads.AddRange(g.ExtraHeads);
             return s;
         }
 
@@ -50,6 +52,8 @@ namespace GantryTool.Data
             g.Style = Style;
             g.Overrides.Clear();
             g.Overrides.AddRange(Overrides);
+            g.ExtraHeads.Clear();
+            g.ExtraHeads.AddRange(ExtraHeads);
             g.MeshDirty = true;
         }
 
@@ -57,7 +61,7 @@ namespace GantryTool.Data
         {
             if (g.Start != Start || g.End != End || g.BeamDepth != BeamDepth ||
                 !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
-                g.Style != Style || g.Overrides.Count != Overrides.Count)
+                g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count)
             {
                 return false;
             }
@@ -67,6 +71,17 @@ namespace GantryTool.Data
                 SignalOverride a = Overrides[i], b = g.Overrides[i];
                 if (a.Offset != b.Offset || a.Minus != b.Minus || a.Plus != b.Plus || a.Sign != b.Sign ||
                     a.Nudge != b.Nudge || a.Size != b.Size || a.MinusValue != b.MinusValue || a.PlusValue != b.PlusValue)
+                {
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < ExtraHeads.Count; i++)
+            {
+                ExtraHead a = ExtraHeads[i], b = g.ExtraHeads[i];
+                if (a.Id != b.Id || a.Along != b.Along || a.Size != b.Size || a.Linked != b.Linked || a.Nudge != b.Nudge ||
+                    a.LinkOffset != b.LinkOffset || a.LinkSign != b.LinkSign || a.Minus != b.Minus || a.Plus != b.Plus ||
+                    a.MinusValue != b.MinusValue || a.PlusValue != b.PlusValue)
                 {
                     return false;
                 }

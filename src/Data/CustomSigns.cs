@@ -248,6 +248,19 @@ namespace GantryTool.Data
                             used.Add(o.PlusValue);
                         }
                     }
+
+                    foreach (ExtraHead h in g.ExtraHeads)
+                    {
+                        if (h.Minus == SignalSymbol.Custom)
+                        {
+                            used.Add(h.MinusValue);
+                        }
+
+                        if (h.Plus == SignalSymbol.Custom)
+                        {
+                            used.Add(h.PlusValue);
+                        }
+                    }
                 }
             }
 

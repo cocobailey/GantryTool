@@ -53,6 +53,12 @@ namespace GantryTool.Tests
             Run("custom signs: bad or cut-short data never throws", CustomCorrupt);
             Run("custom signs: text is cleaned; duplicates reused; library capped", CustomLibraryRules);
             Run("custom signs: a full library still fits every style's texture", CustomAtlasFits);
+            Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
+            Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
+            Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
+            Run("extra heads: unlinked shows only its own signs; linked reads its lane", ExtraHeadsResolve);
+            Run("extra heads: position and size", ExtraHeadsLayout);
+            Run("extra heads: their custom signs are saved", ExtraHeadsKeepCustomSigns);
 
             Console.WriteLine();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
@@ -641,6 +647,181 @@ namespace GantryTool.Tests
             }
 
             CustomSigns.Clear();
+        }
+
+        private static ExtraHead Extra(byte id, float along, SignalSymbol minus, SignalSymbol plus)
+        {
+            return new ExtraHead { Id = id, Along = along, Minus = minus, Plus = plus };
+        }
+
+        private static void ExtraHeadsRoundTrip()
+        {
+            List<Gantry> gantries = Sample();
+            ExtraHead first = Extra(1, 12.5f, SignalSymbol.Custom, SignalSymbol.Roadworks);
+            first.MinusValue = 4;
+            gantries[0].ExtraHeads.Add(first);
+            ExtraHead linked = Extra(3, 20f, SignalSymbol.SpeedAuto, SignalSymbol.Auto);
+            linked.Linked = true;
+            linked.LinkOffset = 6.32f;
+            linked.LinkSign = 1;
+            linked.Nudge = -0.5f;
+            linked.Size = 1.6f;
+            gantries[0].ExtraHeads.Add(linked);
+
+            byte[] bytes = ExtraHeadData.Write(gantries, new object());
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            string err;
+            int added = ExtraHeadData.Apply(bytes, loaded, out err);
+            Check(err == null && added == 2, "2 heads, no error: " + err);
+            ExtraHead a = loaded[0].ExtraHeads[0], b = loaded[0].ExtraHeads[1];
+            Check(a.Id == 1 && a.Along == 12.5f && a.Minus == SignalSymbol.Custom && a.MinusValue == 4 &&
+                  a.Plus == SignalSymbol.Roadworks && !a.Linked, "unlinked head");
+            Check(b.Id == 3 && b.Linked && b.LinkOffset == 6.32f && b.LinkSign == 1 && b.Nudge == -0.5f && b.Size == 1.6f &&
+                  b.Minus == SignalSymbol.SpeedAuto && b.Plus == SignalSymbol.Auto, "linked head");
+            Check(loaded[1].ExtraHeads.Count == 0 && loaded[2].ExtraHeads.Count == 0, "other gantries untouched");
+        }
+
+        private static void ExtraHeadsBadData()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[0].ExtraHeads.Add(Extra(1, 5f, SignalSymbol.Arrow, SignalSymbol.Auto));   // Auto without a lane
+            gantries[0].ExtraHeads.Add(Extra(1, 6f, SignalSymbol.Cross, SignalSymbol.Cross));  // duplicate id
+            gantries[0].ExtraHeads.Add(Extra(2, float.NaN, SignalSymbol.Hidden, (SignalSymbol)500));
+            for (byte i = 10; i < 20; i++)
+            {
+                gantries[1].ExtraHeads.Add(Extra(i, 3f, SignalSymbol.Blank, SignalSymbol.Blank)); // over the limit
+            }
+
+            byte[] bytes = ExtraHeadData.Write(gantries, new object());
+            List<Gantry> target = SaveAndLoad(gantries, true);
+            string err;
+            ExtraHeadData.Apply(bytes, target, out err);
+            Check(err == null, "no error: " + err);
+            Check(target[0].ExtraHeads.Count == 2, "duplicate id dropped (" + target[0].ExtraHeads.Count + ")");
+            Check(target[0].ExtraHeads[0].Plus == SignalSymbol.Blank, "Auto without a lane becomes blank");
+            ExtraHead repaired = target[0].ExtraHeads[1];
+            Check(!float.IsNaN(repaired.Along), "NaN position repaired");
+            Check(repaired.Minus == SignalSymbol.Blank && repaired.Plus == SignalSymbol.Blank, "Hidden and unknown signs become blank");
+            Check(target[1].ExtraHeads.Count == HeadRef.MaxExtraHeads, "capped at " + HeadRef.MaxExtraHeads);
+
+            // A gantry moved or recreated in an older version: its heads are not attached to the new one.
+            List<Gantry> moved = Sample();
+            moved[0].End = moved[0].End + new Vector3(5f, 0f, 0f);
+            ExtraHeadData.Apply(bytes, moved, out err);
+            Check(moved[0].ExtraHeads.Count == 0, "stale heads ignored");
+
+            for (int cut = 0; cut < bytes.Length; cut += 5)
+            {
+                var part = new byte[cut];
+                Array.Copy(bytes, part, cut);
+                ExtraHeadData.Apply(part, Sample(), out err); // must not throw
+            }
+
+            var garbage = new byte[80];
+            new System.Random(9).NextBytes(garbage);
+            ExtraHeadData.Apply(garbage, Sample(), out err);
+            Check(err != null, "garbage reported, not thrown");
+        }
+
+        private static void ExtraHeadsLeaveOldBlocksAlone()
+        {
+            List<Gantry> plain = Sample();
+            List<Gantry> withHeads = Sample();
+            withHeads[0].ExtraHeads.Add(Extra(1, 8f, SignalSymbol.Cross, SignalSymbol.Cross));
+            Check(SameBytes(GantryData.WriteLegacy(plain, new object()), GantryData.WriteLegacy(withHeads, new object())),
+                  "legacy block identical (1.0 reads it as before)");
+            Check(SameBytes(GantryData.WriteExt(plain), GantryData.WriteExt(withHeads)),
+                  "extension block identical (1.1.0 reads it as before)");
+        }
+
+        private static bool SameBytes(byte[] a, byte[] b)
+        {
+            if (a.Length != b.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static List<GantryTool.Detect.GantryLane> TwoLanes()
+        {
+            return new List<GantryTool.Detect.GantryLane>
+            {
+                new GantryTool.Detect.GantryLane { Offset = 4f, TravelSign = 1, SpeedKmh = 100f },
+                new GantryTool.Detect.GantryLane { Offset = 8f, TravelSign = -1, SpeedKmh = 80f }
+            };
+        }
+
+        private static void ExtraHeadsResolve()
+        {
+            var lanes = TwoLanes();
+            FaceSign m, p;
+            ExtraHead free = Extra(1, 6f, SignalSymbol.Auto, SignalSymbol.SpeedAuto);
+            SignalRules.ResolveExtra(lanes, free, out m, out p);
+            Check(m.Symbol == SignalSymbol.Blank && p.Symbol == SignalSymbol.Blank, "unlinked: Auto and Road speed show blank");
+
+            ExtraHead linked = free;
+            linked.Linked = true;
+            linked.LinkOffset = 8.3f; // lane 2 has moved a little
+            linked.LinkSign = -1;
+            Check(SignalRules.LinkedLane(lanes, linked) == 1, "finds its lane");
+            SignalRules.ResolveExtra(lanes, linked, out m, out p);
+            Check(m.Symbol == SignalSymbol.Cross && p.Symbol == SignalSymbol.SpeedLimit && p.Value == 80,
+                  "linked: Auto reads the lane's direction, Road speed its limit");
+
+            linked.LinkOffset = 30f;
+            Check(SignalRules.LinkedLane(lanes, linked) == -1, "lane gone: no link");
+            SignalRules.ResolveExtra(lanes, linked, out m, out p);
+            Check(m.Symbol == SignalSymbol.Blank, "lane gone: blank");
+
+            ExtraHead own = Extra(2, 6f, SignalSymbol.Roadworks, SignalSymbol.Custom);
+            own.PlusValue = 3;
+            SignalRules.ResolveExtra(lanes, own, out m, out p);
+            Check(m.Symbol == SignalSymbol.Roadworks && p.Symbol == SignalSymbol.Custom && p.Value == 3, "own signs kept");
+
+            SignalRules.ResolveHead(lanes, new List<SignalOverride>(), new List<ExtraHead> { own }, HeadRef.Of(2), out m, out p);
+            Check(m.Symbol == SignalSymbol.Roadworks, "resolved by head number");
+            SignalRules.ResolveHead(lanes, new List<SignalOverride>(), new List<ExtraHead>(), HeadRef.Of(9), out m, out p);
+            Check(SignalRules.IsHidden(m.Symbol, p.Symbol), "missing head draws nothing");
+        }
+
+        private static void ExtraHeadsLayout()
+        {
+            var lanes = TwoLanes();
+            float along, size;
+            GantryTool.Render.SignalMeshBuilder.ExtraLayout(lanes, Extra(1, 6f, SignalSymbol.Blank, SignalSymbol.Blank),
+                1.2f, 1.5f, 20f, out along, out size);
+            Check(along == 6f && Mathf.Abs(size - 1.4f) < 0.001f, "unlinked: its own position, gantry box size (" + along + ", " + size + ")");
+            GantryTool.Render.SignalMeshBuilder.ExtraLayout(lanes, Extra(1, 50f, SignalSymbol.Blank, SignalSymbol.Blank),
+                1.2f, 1.5f, 20f, out along, out size);
+            Check(along <= 20f - size * 0.5f + 0.001f, "kept on the beam");
+            ExtraHead linked = Extra(1, 0f, SignalSymbol.Blank, SignalSymbol.Blank);
+            linked.Linked = true;
+            linked.LinkOffset = 4f;
+            linked.LinkSign = 1;
+            linked.Nudge = 1.5f;
+            linked.Size = 2f;
+            GantryTool.Render.SignalMeshBuilder.ExtraLayout(lanes, linked, 1.2f, 1.5f, 20f, out along, out size);
+            Check(along == 5.5f && Mathf.Abs(size - 2.2f) < 0.001f, "linked: lane + nudge, own size (" + along + ", " + size + ")");
+            Check(HeadRef.IsExtra(HeadRef.Of(1)) && !HeadRef.IsExtra(7) && HeadRef.ExtraId(HeadRef.Of(5)) == 5, "head numbering");
+        }
+
+        private static void ExtraHeadsKeepCustomSigns()
+        {
+            List<Gantry> gantries = Sample();
+            ExtraHead h = Extra(1, 5f, SignalSymbol.Custom, SignalSymbol.Blank);
+            h.MinusValue = 7;
+            gantries[2].ExtraHeads.Add(h);
+            Check(CustomSigns.UsedIds(gantries, new object()).Contains(7), "custom sign on an added head counts as used");
         }
 
         // ------------------------------------------------------------------------------ helpers

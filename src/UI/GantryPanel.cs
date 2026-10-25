@@ -123,6 +123,34 @@ namespace GantryTool.UI
                     Rebuild();
                 });
 
+                // Extra signal heads, placed anywhere on the beam.
+                int extras;
+                lock (GantryManager.Lock)
+                {
+                    extras = g.ExtraHeads.Count;
+                }
+
+                var addRow = _content.AddUIComponent<UIPanel>();
+                addRow.size = new Vector2(_content.width, 34f);
+                bool canAdd = extras < HeadRef.MaxExtraHeads;
+                RowButton(addRow, 0, _content.width, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + " added)",
+                    canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
+                           : "This gantry has the most added signs allowed", () =>
+                    {
+                        Gantry cur = GantryManager.Find(_gantryId);
+                        if (cur == null || Tool == null)
+                        {
+                            return;
+                        }
+
+                        int head = GantryManager.AddExtraHead(cur, cur.Span * 0.5f);
+                        if (head >= 0)
+                        {
+                            Tool.EditHead(cur, head);
+                        }
+                    });
+                addRow.components[0].isEnabled = canAdd;
+
                 // One row of equal buttons, like the signal panel.
                 var row = _content.AddUIComponent<UIPanel>();
                 row.size = new Vector2(_content.width, 34f);

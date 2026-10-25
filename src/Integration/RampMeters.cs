@@ -120,7 +120,7 @@ namespace GantryTool.Integration
         {
             NodeList list = _getMeteredNodes;
             NodeTest metered = _isMetered;
-            if (list == null || metered == null || g == null || laneIndex < 0 || laneIndex >= g.Lanes.Count)
+            if (list == null || metered == null || !GantryManager.HeadExists(g, laneIndex))
             {
                 return 0;
             }
@@ -131,7 +131,7 @@ namespace GantryTool.Integration
                 flat.y = 0f;
                 Vector3 dir = flat.sqrMagnitude > 1e-4f ? flat.normalized : Vector3.right;
                 Vector3 side = new Vector3(-dir.z, 0f, dir.x);
-                Vector3 head = g.Start + dir * g.Lanes[laneIndex].Offset;
+                Vector3 head = g.Start + dir * GantryManager.HeadAlong(g, laneIndex); // lane or extra head
 
                 // The minus face is seen by traffic heading +side, so downstream of it is +side.
                 Vector3 travel = minusFace ? side : -side;
