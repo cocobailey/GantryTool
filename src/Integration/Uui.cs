@@ -121,7 +121,7 @@ namespace GantryTool.Integration
         private static UIComponent Register(ToolBase tool, Texture2D icon)
         {
             // No UUI hotkey: Ctrl+Shift+G is handled by HotkeyListener so it works with or without UUI.
-            return UUIHelpers.RegisterToolButton("GantryTool", null, "Gantry Tool (Ctrl+Shift+G)", tool, icon);
+            return UUIHelpers.RegisterToolButton("GantryTool", null, "Gantry and Signs Tool (Ctrl+Shift+G)", tool, icon);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

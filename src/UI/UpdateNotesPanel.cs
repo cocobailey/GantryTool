@@ -61,7 +61,7 @@ namespace GantryTool.UI
             backgroundSprite = "MenuPanel2";
             width = PanelWidth;
 
-            var title = UIUtils.CreateLabel(this, "Gantry Tool " + NotesVersion, 1.1f);
+            var title = UIUtils.CreateLabel(this, "Gantry and Signs Tool " + NotesVersion, 1.1f);
             title.relativePosition = new Vector3(Margin, 12f);
 
             var drag = AddUIComponent<UIDragHandle>();

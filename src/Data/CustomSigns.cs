@@ -18,13 +18,32 @@ namespace GantryTool.Data
         public CustomKind Kind;
         public string Line1 = "";
         public string Line2 = "";
+        public string Line3 = "";
         public byte Colour;          // CustomSigns.Colours index (text)
         public string FileName = ""; // image: the file it came from (shown in the picker only)
         public byte[] Image;         // image: PNG/JPG bytes, stored in the save so the sign travels with it
         public bool LedLook;         // image: redraw as LED dots instead of showing the picture as is
 
+        /// <summary>The text lines in use.</summary>
+        public string[] Lines
+        {
+            get
+            {
+                var lines = new List<string>();
+                foreach (string l in new[] { Line1, Line2, Line3 })
+                {
+                    if (!string.IsNullOrEmpty(l))
+                    {
+                        lines.Add(l);
+                    }
+                }
+
+                return lines.ToArray();
+            }
+        }
+
         public string Label => Kind == CustomKind.Text
-            ? (Line2.Length > 0 ? Line1 + " " + Line2 : Line1)
+            ? string.Join(" ", Lines)
             : Path.GetFileNameWithoutExtension(FileName);
     }
 
@@ -33,14 +52,17 @@ namespace GantryTool.Data
     /// id as its value. Saved under its own key: only signs some face uses are written, so unused ones drop out.
     /// 1.0 never reads the key (those faces show Auto there).
     ///
-    /// Format, key "GantryTool.Custom": int version(=1), int count, then per sign: ushort id, byte kind,
-    /// string line1, string line2, byte colour, string fileName, bool ledLook, int imageLength, imageLength bytes.
+    /// Format, key "GantryTool.Custom": int version, int count, then per sign: ushort id, byte kind, string line1,
+    /// string line2, (v2: string line3), byte colour, string fileName, bool ledLook, int imageLength, imageLength bytes.
+    /// v1 is still written unless a sign has a third line, so such saves keep working in 1.1, which only reads v1
+    /// (it shortens lines over 7 characters).
     /// </summary>
     public static class CustomSigns
     {
         public const string Key = "GantryTool.Custom";
-        public const int Version = 1;
-        public const int MaxChars = 7;
+        public const int Version = 2;
+        public const int MaxLines = 3;
+        public const int MaxChars = 10;
         public const int MaxImageBytes = 64 * 1024;
         public const int MaxSigns = 24; // keeps each style's sign texture at 2048 x 2048 or less
 
@@ -113,33 +135,40 @@ namespace GantryTool.Data
         /// A text sign (an identical existing one is reused). Returns its id, or 0 if the text is empty or the
         /// library is full.
         /// </summary>
-        public static ushort AddText(string line1, string line2, byte colour)
+        public static ushort AddText(string line1, string line2, byte colour, string line3 = "")
         {
-            line1 = CleanLine(line1);
-            line2 = CleanLine(line2);
-            if (line1.Length == 0)
+            // Empty lines close up, so a sign never has a gap at the top.
+            var lines = new List<string>();
+            foreach (string l in new[] { line1, line2, line3 })
             {
-                line1 = line2;
-                line2 = "";
+                string clean = CleanLine(l);
+                if (clean.Length > 0)
+                {
+                    lines.Add(clean);
+                }
             }
 
-            if (line1.Length == 0)
+            if (lines.Count == 0)
             {
                 return 0;
             }
+
+            line1 = lines[0];
+            line2 = lines.Count > 1 ? lines[1] : "";
+            line3 = lines.Count > 2 ? lines[2] : "";
 
             colour = (byte)Math.Min(colour, ColourNames.Length - 1);
             lock (Sync)
             {
                 foreach (CustomSign s in Signs.Values)
                 {
-                    if (s.Kind == CustomKind.Text && s.Line1 == line1 && s.Line2 == line2 && s.Colour == colour)
+                    if (s.Kind == CustomKind.Text && s.Line1 == line1 && s.Line2 == line2 && s.Line3 == line3 && s.Colour == colour)
                     {
                         return s.Id;
                     }
                 }
 
-                return Add(new CustomSign { Kind = CustomKind.Text, Line1 = line1, Line2 = line2, Colour = colour });
+                return Add(new CustomSign { Kind = CustomKind.Text, Line1 = line1, Line2 = line2, Line3 = line3, Colour = colour });
             }
         }
 
@@ -281,7 +310,8 @@ namespace GantryTool.Data
                     }
                 }
 
-                w.Write(Version);
+                bool thirdLines = keep.Exists(s => !string.IsNullOrEmpty(s.Line3));
+                w.Write(thirdLines ? Version : 1);
                 w.Write(keep.Count);
                 foreach (CustomSign s in keep)
                 {
@@ -289,6 +319,11 @@ namespace GantryTool.Data
                     w.Write((byte)s.Kind);
                     w.Write(s.Line1 ?? "");
                     w.Write(s.Line2 ?? "");
+                    if (thirdLines)
+                    {
+                        w.Write(s.Line3 ?? "");
+                    }
+
                     w.Write(s.Colour);
                     w.Write(s.FileName ?? "");
                     w.Write(s.LedLook);
@@ -340,6 +375,7 @@ namespace GantryTool.Data
                             Kind = (CustomKind)r.ReadByte(),
                             Line1 = CleanLine(r.ReadString()),
                             Line2 = CleanLine(r.ReadString()),
+                            Line3 = version >= 2 ? CleanLine(r.ReadString()) : "",
                             Colour = r.ReadByte(),
                             FileName = r.ReadString(),
                             LedLook = r.ReadBoolean()

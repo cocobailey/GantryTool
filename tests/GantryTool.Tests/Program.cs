@@ -53,6 +53,9 @@ namespace GantryTool.Tests
             Run("custom signs: bad or cut-short data never throws", CustomCorrupt);
             Run("custom signs: text is cleaned; duplicates reused; library capped", CustomLibraryRules);
             Run("custom signs: a full library still fits every style's texture", CustomAtlasFits);
+            Run("custom text: three lines round-trip; saves stay v1 without a third line", CustomThreeLines);
+            Run("custom text: 10 wide letters fit the fine grid", CustomTextFits);
+            Run("exit arrows: saved, have tiles, 1.0 sees Auto", ExitArrows);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
             Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
@@ -609,7 +612,7 @@ namespace GantryTool.Tests
         private static void CustomLibraryRules()
         {
             CustomSigns.Clear();
-            Check(CustomSigns.CleanLine("hello world") == "HELLO W", "upper-case, 7 characters");
+            Check(CustomSigns.CleanLine("hello worlds") == "HELLO WORL", "upper-case, 10 characters");
             Check(CustomSigns.CleanLine("a{b}c") == "ABC", "unknown characters dropped");
             Check(CustomSigns.AddText("", "  ", 0) == 0, "empty text refused");
             ushort x = CustomSigns.AddText("exit", "12", 2);
@@ -647,6 +650,57 @@ namespace GantryTool.Tests
             }
 
             CustomSigns.Clear();
+        }
+
+        private static void CustomThreeLines()
+        {
+            CustomSigns.Clear();
+            ushort two = CustomSigns.AddText("left lane", "closed", 1);
+            byte[] v1 = CustomSigns.Write(CustomSigns.All(), null);
+            Check(BitConverter.ToInt32(v1, 0) == 1, "no third line: still v1, so 1.1 can read it");
+            string err;
+            List<CustomSign> read = CustomSigns.Read(v1, out err);
+            Check(err == null && read[0].Line1 == "LEFT LANE" && read[0].Line2 == "CLOSED" && read[0].Line3 == "", "v1 reads back");
+
+            ushort three = CustomSigns.AddText("accident", "ahead", 2, "slow down");
+            byte[] v2 = CustomSigns.Write(CustomSigns.All(), null);
+            Check(BitConverter.ToInt32(v2, 0) == 2, "third line: v2");
+            read = CustomSigns.Read(v2, out err);
+            CustomSign t = read.Find(x => x.Id == three);
+            Check(err == null && read.Count == 2 && t.Line1 == "ACCIDENT" && t.Line2 == "AHEAD" && t.Line3 == "SLOW DOWN" && t.Colour == 2, "v2 reads back");
+            Check(read.Find(x => x.Id == two).Line3 == "", "other signs unaffected");
+            Check(t.Lines.Length == 3 && t.Label == "ACCIDENT AHEAD SLOW DOWN", "lines and label");
+
+            Check(CustomSigns.AddText("accident", "ahead", 2, "slow down") == three, "duplicate reused");
+            ushort gap = CustomSigns.AddText("", "only", 0, "this");
+            CustomSign g = CustomSigns.Get(gap);
+            Check(g.Line1 == "ONLY" && g.Line2 == "THIS" && g.Line3 == "", "empty lines close up");
+            CustomSigns.Clear();
+        }
+
+        private static void CustomTextFits()
+        {
+            int wide = GantryTool.Render.LedFont.Width("WWWWWWWWWW");
+            Check(wide <= 62, "10 wide letters are " + wide + " dots on a 64-dot grid");
+            Check(3 * GantryTool.Render.LedFont.Height + 2 * 3 <= 38, "3 lines fit the normal grid's height");
+        }
+
+        private static void ExitArrows()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[1].Overrides.Add(new SignalOverride { Offset = 4f, Minus = SignalSymbol.ExitLeft, Plus = SignalSymbol.ExitRight, Sign = 1 });
+            List<Gantry> loaded = SaveAndLoad(gantries, true);
+            Check(loaded[1].Overrides[0].Minus == SignalSymbol.ExitLeft && loaded[1].Overrides[0].Plus == SignalSymbol.ExitRight, "round-trip");
+            string err;
+            List<Gantry> by10 = Old10.Read(GantryData.WriteLegacy(gantries, new object()), out err);
+            Check(err == null && by10[1].Overrides[0].Minus == SignalSymbol.Auto && by10[1].Overrides[0].Plus == SignalSymbol.Auto, "1.0 sees Auto");
+            foreach (SignStyle style in SignStyles.Available)
+            {
+                GantryTool.Render.SignAtlas atlas = GantryTool.Render.SignAtlas.For(style);
+                int l = atlas.TileOf(new FaceSign(SignalSymbol.ExitLeft, 0)), r = atlas.TileOf(new FaceSign(SignalSymbol.ExitRight, 0));
+                Check(l != 5 && r != 5 && l != r, style + ": own tiles");
+                Check(atlas.TileOf(new FaceSign(SignalSymbol.Arrow, 0)) == 0, style + ": row 1 unchanged");
+            }
         }
 
         private static ExtraHead Extra(byte id, float along, SignalSymbol minus, SignalSymbol plus)

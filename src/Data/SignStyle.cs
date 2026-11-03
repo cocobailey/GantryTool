@@ -141,6 +141,8 @@ namespace GantryTool.Data
             new SignDef { Symbol = SignalSymbol.YellowCross, Category = SignCategory.Lane, GridName = "Closing", Styles = NorthAmerica },
             new SignDef { Symbol = SignalSymbol.MergeLeft, Category = SignCategory.Lane, GridName = "Merge left" },
             new SignDef { Symbol = SignalSymbol.MergeRight, Category = SignCategory.Lane, GridName = "Merge right" },
+            new SignDef { Symbol = SignalSymbol.ExitLeft, Category = SignCategory.Lane, GridName = "Exit left" },
+            new SignDef { Symbol = SignalSymbol.ExitRight, Category = SignCategory.Lane, GridName = "Exit right" },
             new SignDef { Symbol = SignalSymbol.Reserved, Category = SignCategory.Lane, GridName = "Reserved" },
             new SignDef { Symbol = SignalSymbol.Blank, Category = SignCategory.Lane, GridName = "Blank" },
 

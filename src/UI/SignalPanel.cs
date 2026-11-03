@@ -49,6 +49,7 @@ namespace GantryTool.UI
         private UIPanel _customBox;
         private UITextField _line1;
         private UITextField _line2;
+        private UITextField _line3;
         private UIDropDown _colourDrop;
         private UIDropDown _fileDrop;
         private UILabel _customNote;
@@ -710,27 +711,31 @@ namespace GantryTool.UI
             _customBox.width = ContentWidth;
             _customBox.isVisible = false;
 
-            var textLabel = UIUtils.CreateLabel(_customBox, "Text: up to two lines of " + CustomSigns.MaxChars + " letters", 0.75f);
+            var textLabel = UIUtils.CreateLabel(_customBox, "Text: up to " + CustomSigns.MaxLines + " lines of " + CustomSigns.MaxChars +
+                " letters (long text uses smaller dots)", 0.75f);
             textLabel.relativePosition = Vector3.zero;
 
-            _line1 = UIUtils.CreateTextField(_customBox, 150f, CustomSigns.MaxChars);
+            _line1 = UIUtils.CreateTextField(_customBox, ThirdWidth, CustomSigns.MaxChars);
             _line1.relativePosition = new Vector3(0f, 18f);
             _line1.tooltip = "First line";
-            _line2 = UIUtils.CreateTextField(_customBox, 150f, CustomSigns.MaxChars);
-            _line2.relativePosition = new Vector3(156f, 18f);
+            _line2 = UIUtils.CreateTextField(_customBox, ThirdWidth, CustomSigns.MaxChars);
+            _line2.relativePosition = new Vector3(ThirdWidth + ButtonGap, 18f);
             _line2.tooltip = "Second line (optional)";
-            _colourDrop = UIUtils.CreateDropDown(_customBox, ContentWidth - 312f);
-            _colourDrop.relativePosition = new Vector3(312f, 18f);
+            _line3 = UIUtils.CreateTextField(_customBox, ThirdWidth, CustomSigns.MaxChars);
+            _line3.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 18f);
+            _line3.tooltip = "Third line (optional)";
+            _colourDrop = UIUtils.CreateDropDown(_customBox, ThirdWidth);
+            _colourDrop.relativePosition = new Vector3(0f, 53f);
             _colourDrop.items = CustomSigns.ColourNames;
             _colourDrop.selectedIndex = 0;
             _colourDrop.tooltip = "LED colour";
             DropdownToggle.Attach(_colourDrop);
 
-            UIButton addText = CreateButton(_customBox, "Add text sign", HalfWidth, AddTextSign);
-            addText.relativePosition = new Vector3(0f, 54f);
+            UIButton addText = CreateButton(_customBox, "Add text sign", ThirdWidth, AddTextSign);
+            addText.relativePosition = new Vector3(ThirdWidth + ButtonGap, 54f);
             addText.tooltip = "Make this text sign and put it on the selected face";
-            _deleteCustom = CreateButton(_customBox, "Delete this sign", HalfWidth, DeleteCustomSign);
-            _deleteCustom.relativePosition = new Vector3(HalfWidth + ButtonGap, 54f);
+            _deleteCustom = CreateButton(_customBox, "Delete this sign", ThirdWidth, DeleteCustomSign);
+            _deleteCustom.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 54f);
 
             var picLabel = UIUtils.CreateLabel(_customBox, "Picture (PNG or JPG) from the Signs folder", 0.75f);
             picLabel.relativePosition = new Vector3(0f, 92f);
@@ -859,7 +864,7 @@ namespace GantryTool.UI
                 _deleteArmedId = 0;
             }
 
-            _deleteCustom.text = armed ? "Click again to delete" : "Delete this sign";
+            _deleteCustom.text = armed ? "Click to confirm" : "Delete this sign";
             _deleteCustom.tooltip = custom
                 ? "Remove the custom sign this face shows from the city; every face using it goes back to Auto"
                 : "Select a face showing a custom sign to delete it";
@@ -888,7 +893,7 @@ namespace GantryTool.UI
             {
                 _deleteArmedId = face.Value;
                 _deleteArmedUntil = Time.realtimeSinceStartup + 4f;
-                _deleteCustom.text = "Click again to delete";
+                _deleteCustom.text = "Click to confirm";
                 SetCustomNote("This sign is on " + uses + " faces. Click Delete again within a few seconds to remove it; " +
                               "those faces go back to Auto.");
                 return;
@@ -902,13 +907,14 @@ namespace GantryTool.UI
 
         private void AddTextSign()
         {
-            if (CustomSigns.CleanLine(_line1.text).Length == 0 && CustomSigns.CleanLine(_line2.text).Length == 0)
+            if (CustomSigns.CleanLine(_line1.text).Length == 0 && CustomSigns.CleanLine(_line2.text).Length == 0 &&
+                CustomSigns.CleanLine(_line3.text).Length == 0)
             {
                 SetCustomNote("Type some text first (letters, numbers, - / . !).");
                 return;
             }
 
-            ushort id = CustomSigns.AddText(_line1.text, _line2.text, (byte)Mathf.Max(0, _colourDrop.selectedIndex));
+            ushort id = CustomSigns.AddText(_line1.text, _line2.text, (byte)Mathf.Max(0, _colourDrop.selectedIndex), _line3.text);
             UseCustom(id);
         }
 
@@ -945,6 +951,7 @@ namespace GantryTool.UI
             SetCustomNote(null);
             _line1.Unfocus();
             _line2.Unfocus();
+            _line3.Unfocus();
             Pick(new FaceSign(SignalSymbol.Custom, id));
         }
 

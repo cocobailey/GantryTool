@@ -9,11 +9,11 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.2.0-dev1";
+        public const string Version = "1.2.0-dev2";
 
-        public string Name => "Gantry Tool";
+        public string Name => "Gantry and Signs Tool";
 
-        public string Description => "Place overhead gantries with lane control signals over roads.";
+        public string Description => "Place overhead gantries with LED lane signals, speed limits, warnings and your own signs.";
 
         public void OnEnabled()
         {

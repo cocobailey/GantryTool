@@ -325,7 +325,7 @@ namespace GantryTool.Data
         /// <summary>Unknown symbols (from a newer version) become Auto.</summary>
         internal static SignalSymbol ExtSymbol(ushort v)
         {
-            return v <= (ushort)SignalSymbol.RampMetered ? (SignalSymbol)v : SignalSymbol.Auto;
+            return v <= (ushort)SignalSymbol.ExitRight ? (SignalSymbol)v : SignalSymbol.Auto;
         }
 
         /// <summary>

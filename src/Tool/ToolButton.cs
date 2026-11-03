@@ -32,7 +32,7 @@ namespace GantryTool.Tool
             textScale = 1.6f;
             textVerticalAlignment = UIVerticalAlignment.Middle;
             textHorizontalAlignment = UIHorizontalAlignment.Center;
-            tooltip = "Gantry Tool (Ctrl+Shift+G)";
+            tooltip = "Gantry and Signs Tool (Ctrl+Shift+G)";
 
             _drag = AddUIComponent<UIDragHandle>();
             _drag.width = width;

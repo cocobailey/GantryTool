@@ -38,7 +38,10 @@ namespace GantryTool.Data
 
         Custom = 20,             // player-made sign; value = CustomSigns id
 
-        RampMetered = 21         // RAMP METERED WHEN FLASHING; value = Ramp Meter node it follows (0 = none)
+        RampMetered = 21,        // RAMP METERED WHEN FLASHING; value = Ramp Meter node it follows (0 = none)
+
+        ExitLeft = 22,           // green arrow up-left
+        ExitRight = 23           // green arrow up-right
     }
 
     /// <summary>A face's sign plus its value (km/h for speed limits, 0 otherwise).</summary>
@@ -122,6 +125,8 @@ namespace GantryTool.Data
                 case SignalSymbol.YellowCross: return "Y";
                 case SignalSymbol.Custom: return "C";
                 case SignalSymbol.RampMetered: return "RM";
+                case SignalSymbol.ExitLeft: return "XL";
+                case SignalSymbol.ExitRight: return "XR";
                 default: return "?";
             }
         }
@@ -152,6 +157,8 @@ namespace GantryTool.Data
                 case SignalSymbol.YellowCross: return "Yellow X";
                 case SignalSymbol.Custom: return "Custom sign";
                 case SignalSymbol.RampMetered: return "Ramp metered";
+                case SignalSymbol.ExitLeft: return "Exit left";
+                case SignalSymbol.ExitRight: return "Exit right";
                 default: return "Auto";
             }
         }
@@ -179,6 +186,8 @@ namespace GantryTool.Data
                 case SignalSymbol.EndRestrictions: return "End of all restrictions";
                 case SignalSymbol.YellowCross: return "Yellow X (lane closing ahead)";
                 case SignalSymbol.RampMetered: return "RAMP METERED WHEN FLASHING (beacons follow the nearest ramp meter ahead)";
+                case SignalSymbol.ExitLeft: return "Green arrow up-left (exit)";
+                case SignalSymbol.ExitRight: return "Green arrow up-right (exit)";
                 default: return PlainName(s);
             }
         }

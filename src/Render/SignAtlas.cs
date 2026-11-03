@@ -93,6 +93,12 @@ namespace GantryTool.Render
                 Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = SignalSymbol.YellowCross });
             }
 
+            foreach (SignalSymbol exit in new[] { SignalSymbol.ExitLeft, SignalSymbol.ExitRight })
+            {
+                _extraLaneTile[exit] = Tiles.Count;
+                Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = exit });
+            }
+
             // Speed limits in the style's units.
             foreach (int v in SpeedUnits.Values(Mph))
             {

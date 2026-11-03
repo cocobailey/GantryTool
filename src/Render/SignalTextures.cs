@@ -16,6 +16,7 @@ namespace GantryTool.Render
 
         private const int LaneDots = 18;         // 1.0 grid, unchanged
         private const int SpeedDots = 40;
+        private const int FineDots = 64;         // custom text too long for the normal grid
         private const float FaceMin = 0.08f;     // LED area inside the frame, tile-normalised
         private const float FaceMax = 0.92f;
         private const float FrameWidth = 0.035f; // grey frame around the black face
@@ -128,7 +129,7 @@ namespace GantryTool.Render
             }
 
             // Decide once per LED which ones are lit and in what colour.
-            int dots = spec.Kind == TileKind.Lane ? LaneDots : SpeedDots;
+            int dots = DotsFor(spec);
             var led = new Color[dots, dots];
             for (int dy = 0; dy < dots; dy++)
             {
@@ -228,6 +229,11 @@ namespace GantryTool.Render
             if (s == SignalSymbol.YellowCross)
             {
                 return Yellow;
+            }
+
+            if (s == SignalSymbol.ExitLeft || s == SignalSymbol.ExitRight)
+            {
+                return Green;
             }
 
             if ((s == SignalSymbol.MergeLeft || s == SignalSymbol.MergeRight) && SignStyles.WhiteMergeArrows(style))
@@ -475,37 +481,48 @@ namespace GantryTool.Render
             return new Color(c.r / peak, c.g / peak, c.b / peak, 1f);
         }
 
-        /// <summary>Text laid out as large as it fits: double size for very short text, else normal, else tight.</summary>
-        private static bool CustomTextLit(CustomSign sign, int col, int row, int dots)
+        /// <summary>LED grid of a tile. Only custom text too wide for the normal grid gets the finer one.</summary>
+        private static int DotsFor(TileSpec spec)
         {
-            string[] lines = sign.Line2.Length > 0 ? new[] { sign.Line1, sign.Line2 } : new[] { sign.Line1 };
+            if (spec.Kind == TileKind.Lane)
+            {
+                return LaneDots;
+            }
+
+            if (spec.Kind == TileKind.Custom)
+            {
+                CustomSign sign = CustomSigns.Get((ushort)spec.Shown);
+                if (sign != null && sign.Kind == CustomKind.Text && WidestLine(sign.Lines) > SpeedDots - 2)
+                {
+                    return FineDots;
+                }
+            }
+
+            return SpeedDots;
+        }
+
+        private static int WidestLine(string[] lines)
+        {
             int widest = 0;
             foreach (string l in lines)
             {
                 widest = Mathf.Max(widest, LedFont.Width(l));
             }
 
+            return widest;
+        }
+
+        /// <summary>Text laid out as large as it fits: double size for very short text, otherwise normal size.</summary>
+        private static bool CustomTextLit(CustomSign sign, int col, int row, int dots)
+        {
+            string[] lines = sign.Lines;
             int room = dots - 2;
-            if (widest * 2 + 1 <= room && lines.Length * LedFont.Height * 2 + (lines.Length - 1) * 3 <= room)
+            if (WidestLine(lines) * 2 + 1 <= room && lines.Length * LedFont.Height * 2 + (lines.Length - 1) * 3 <= room)
             {
                 return LedFont.LitBlock(lines, col, row, dots, 0, dots, 2, 3);
             }
 
-            int spacing = widest <= room ? 1 : 0;
-            int gap = 4;
-            int blockHeight = lines.Length * LedFont.Height + (lines.Length - 1) * gap;
-            int top = (dots - blockHeight) / 2;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (LedFont.Lit(lines[i], col, row, dots / 2f, top, 1, spacing))
-                {
-                    return true;
-                }
-
-                top += LedFont.Height + gap;
-            }
-
-            return false;
+            return LedFont.LitBlock(lines, col, row, dots, 0, dots, 1, lines.Length > 2 ? 3 : 4);
         }
 
         /// <summary>A picture shown as it is on the sign face (letterboxed on black), lit like a screen at night.</summary>
@@ -1081,6 +1098,10 @@ namespace GantryTool.Render
                     return MergeLeftArrow(u, v);
                 case SignalSymbol.MergeRight:
                     return MergeLeftArrow(1f - u, v); // mirror image
+                case SignalSymbol.ExitLeft:
+                    return MergeLeftArrow(u, 1f - v); // merge arrow turned to point up
+                case SignalSymbol.ExitRight:
+                    return MergeLeftArrow(1f - u, 1f - v);
                 case SignalSymbol.Reserved:
                     // Tall, narrow diamond outline like real reserved-lane signs.
                     return Stroke1(u, v, 0.5f, 0.92f, 0.76f, 0.5f) || Stroke1(u, v, 0.76f, 0.5f, 0.5f, 0.08f) ||
