@@ -25,7 +25,7 @@ namespace GantryTool.Render
 
     /// <summary>
     /// Layout of one style's sign atlas: 8 columns of 256 px tiles, row by row from the bottom of the texture.
-    /// Row 1 is always the 1.0 layout (Open, Closed, Merge left, Merge right, Reserved, Blank, housing, empty), so
+    /// Row 1 is the 1.0 layout (Open, Closed, Merge left, Merge right, Reserved, Blank, housing) plus one newer sign, so
     /// the 1.0 signs keep their exact pixels; the style's speed limits follow.
     /// </summary>
     public sealed class SignAtlas
@@ -84,7 +84,10 @@ namespace GantryTool.Render
             }
 
             Tiles.Add(new TileSpec { Kind = TileKind.Housing });
-            Tiles.Add(new TileSpec { Kind = TileKind.Empty });
+
+            // The last slot of row 1 was never used; it keeps the texture a size smaller for most styles.
+            _extraLaneTile[SignalSymbol.ExitLeft] = Tiles.Count;
+            Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = SignalSymbol.ExitLeft });
 
             // Lane signs only some styles have.
             if (SignCatalog.IsAvailable(style, SignalSymbol.YellowCross))
@@ -93,11 +96,8 @@ namespace GantryTool.Render
                 Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = SignalSymbol.YellowCross });
             }
 
-            foreach (SignalSymbol exit in new[] { SignalSymbol.ExitLeft, SignalSymbol.ExitRight })
-            {
-                _extraLaneTile[exit] = Tiles.Count;
-                Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = exit });
-            }
+            _extraLaneTile[SignalSymbol.ExitRight] = Tiles.Count;
+            Tiles.Add(new TileSpec { Kind = TileKind.Lane, Symbol = SignalSymbol.ExitRight });
 
             // Speed limits in the style's units.
             foreach (int v in SpeedUnits.Values(Mph))
