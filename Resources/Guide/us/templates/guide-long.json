@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "guide-long",
+  "name": "Downtown",
+  "scheme": "green",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "TO",
+          "height": 12,
+          "font": "RG2014D"
+        },
+        {
+          "type": "shield",
+          "network": "I",
+          "number": "495",
+          "height": 36
+        },
+        {
+          "type": "shield",
+          "network": "STATE",
+          "number": "128",
+          "height": 36
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Downtown Springfield"
+    },
+    {
+      "type": "text",
+      "text": "Convention Center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up",
+          "height": 24
+        },
+        {
+          "type": "text",
+          "text": "1/2 MILE",
+          "height": 12,
+          "font": "RG2014D"
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "guide-exit-only",
+  "name": "Exit only",
+  "scheme": "green",
+  "align": "center",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 44",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "US",
+          "number": "1",
+          "height": 36
+        },
+        {
+          "type": "text",
+          "text": "SOUTH",
+          "height": 15,
+          "font": "RG2014D"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Saugus"
+    },
+    {
+      "type": "panel",
+      "scheme": "yellow",
+      "align": "center",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 18
+        },
+        {
+          "type": "text",
+          "text": "EXIT ONLY",
+          "height": 12,
+          "font": "RG2014E"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 18
+        }
+      ]
+    }
+  ]
+}

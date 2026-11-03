@@ -56,6 +56,10 @@ namespace GantryTool.Tests
             Run("custom text: three lines round-trip; saves stay v1 without a third line", CustomThreeLines);
             Run("custom text: 10 wide letters fit the fine grid", CustomTextFits);
             Run("exit arrows: saved, have tiles, 1.0 sees Auto", ExitArrows);
+            Run("guide signs: JSON reads and writes back", GuideJson);
+            Run("guide signs: every template renders", GuideTemplates);
+            Run("guide signs: layout grows with its content", GuideLayout);
+            Run("guide signs: bad designs never throw", GuideBadDesigns);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
             Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
@@ -700,6 +704,93 @@ namespace GantryTool.Tests
                 int l = atlas.TileOf(new FaceSign(SignalSymbol.ExitLeft, 0)), r = atlas.TileOf(new FaceSign(SignalSymbol.ExitRight, 0));
                 Check(l != 5 && r != 5 && l != r, style + ": own tiles");
                 Check(atlas.TileOf(new FaceSign(SignalSymbol.Arrow, 0)) == 0, style + ": row 1 unchanged");
+            }
+        }
+
+        private static void GuideJson()
+        {
+            string text = "{\"a\":[1,2.5,-3e2,true,false,null],\"b\":{\"c\":\"x\\n\\\"y\\u00e9\"},\"d\":[]}";
+            var o = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(text);
+            var a = (List<object>)o["a"];
+            Check((double)a[1] == 2.5 && (double)a[2] == -300.0 && (bool)a[3] && a[5] == null, "values");
+            Check(GantryTool.Guide.Json.Str((Dictionary<string, object>)o["b"], "c") == "x\n\"y\u00e9", "escapes");
+            var again = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(GantryTool.Guide.Json.Write(o));
+            Check(GantryTool.Guide.Json.Write(again) == GantryTool.Guide.Json.Write(o), "round-trip");
+            foreach (string bad in new[] { "", "{", "[1,", "{\"a\"}", "tru", "\"x", "[1 2]", "{}x" })
+            {
+                bool threw = false;
+                try
+                {
+                    GantryTool.Guide.Json.Parse(bad);
+                }
+                catch (FormatException)
+                {
+                    threw = true;
+                }
+
+                Check(threw, "rejects: " + bad);
+            }
+        }
+
+        private static void GuideTemplates()
+        {
+            List<string> names = GantryTool.Guide.GuideAssets.TemplateNames("us");
+            Check(names.Count >= 13, names.Count + " templates");
+            foreach (string name in names)
+            {
+                GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(GantryTool.Guide.GuideAssets.Template("us", name));
+                Check(s.Width > 10f && s.Height > 10f, name + " has a size");
+                Check(s.PixelWidth <= 1024 && s.PixelHeight <= 1024, name + " fits the texture limit");
+                int solid = 0;
+                foreach (Color32 c in s.Pixels)
+                {
+                    solid += c.a == 255 ? 1 : 0;
+                }
+
+                Check(solid > s.Pixels.Length / 2, name + " is mostly solid");
+            }
+        }
+
+        private static Dictionary<string, object> GuideText(string text)
+        {
+            var item = new Dictionary<string, object> { { "type", "text" }, { "text", text } };
+            return new Dictionary<string, object> { { "theme", "us" }, { "items", new List<object> { item } } };
+        }
+
+        private static void GuideLayout()
+        {
+            GantryTool.Guide.GuideSign small = GantryTool.Guide.GuideRenderer.Render(GuideText("Bo"));
+            GantryTool.Guide.GuideSign big = GantryTool.Guide.GuideRenderer.Render(GuideText("Boston Downtown"));
+            Check(big.Width > small.Width * 2f && big.Height == small.Height, "longer text is wider, not taller");
+            Dictionary<string, object> doc = GuideText("Boston");
+            doc["minWidth"] = 400.0;
+            Check(GantryTool.Guide.GuideRenderer.Render(doc).Width == 400f, "minimum width");
+            var tab = new Dictionary<string, object> { { "type", "tab" }, { "items", new List<object> { new Dictionary<string, object> { { "type", "text" }, { "text", "EXIT 1" }, { "height", 10.0 } } } } };
+            Dictionary<string, object> withTab = GuideText("Boston");
+            ((List<object>)withTab["items"]).Insert(0, tab);
+            GantryTool.Guide.GuideSign t = GantryTool.Guide.GuideRenderer.Render(withTab);
+            Check(t.TabHeight > 0f && t.Height > small.Height, "a tab adds height on top");
+            Check(t.Pixels[0].a == 0, "the corner beside a right tab is transparent");
+        }
+
+        private static void GuideBadDesigns()
+        {
+            var r = new System.Random(3);
+            var designs = new List<Dictionary<string, object>>
+            {
+                new Dictionary<string, object>(),
+                new Dictionary<string, object> { { "theme", "nosuchtheme" }, { "items", new List<object> { 5.0, null, "x" } } },
+                new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "shield" }, { "network", "NOPE" }, { "number", 12.0 } } } } },
+                new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "arrow" }, { "direction", "sideways" }, { "height", 0.0 } } } } },
+                new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "text" }, { "text", "\u2603\u00e9" }, { "font", "NoSuchFont" } } } } },
+                new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "panel" } }, new Dictionary<string, object> { { "type", "row" }, { "items", 7.0 } }, new Dictionary<string, object> { { "type", "diagram" } } } } },
+                new Dictionary<string, object> { { "minWidth", 99999.0 }, { "height", 99999.0 }, { "items", new List<object>() } },
+                new Dictionary<string, object> { { "minWidth", -5.0 }, { "border", -3.0 }, { "cornerRadius", -2.0 }, { "margin", -9.0 } }
+            };
+            foreach (Dictionary<string, object> d in designs)
+            {
+                GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(d, 256);
+                Check(s.PixelWidth >= 1 && s.PixelHeight >= 1 && s.PixelWidth <= 256 && s.PixelHeight <= 256, "bad design still draws inside the limit");
             }
         }
 

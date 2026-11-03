@@ -65,6 +65,9 @@
   <ItemGroup>
     <!-- Unified UI toolbar icon, loaded from the DLL at runtime -->
     <EmbeddedResource Include="Resources\uui_icon.png" LogicalName="GantryTool.uui_icon.png" />
+    <!-- Guide signs: theme, templates, baked fonts and shields (tools\guide\make_assets.py) -->
+    <EmbeddedResource Include="Resources\Guide\us\*" LogicalName="GantryTool.Guide.us.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\us\templates\*.json" LogicalName="GantryTool.Guide.us.templates.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Copy the mod DLL + CitiesHarmony.API into the game's local mods folder after every build -->

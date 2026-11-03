@@ -1,0 +1,21 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "services-blue",
+  "name": "Services",
+  "scheme": "blue",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "GAS  FOOD  LODGING",
+      "height": 13
+    },
+    {
+      "type": "text",
+      "text": "NEXT RIGHT",
+      "height": 13,
+      "font": "RG2014D"
+    }
+  ]
+}
