@@ -110,8 +110,8 @@ namespace GantryTool.UI
                 StyleDropdown(helper, g);
 
                 string heightLabel = float.IsNaN(g.RoadTopY) ? "Height above ground" : "Height above road";
-                float height = float.IsNaN(g.HeightAboveRoad) ? s.HeightAboveRoad : g.HeightAboveRoad;
-                Slider(helper, heightLabel, 2f, 15f, 0.1f, height, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
+                float aboveRoad = float.IsNaN(g.HeightAboveRoad) ? s.HeightAboveRoad : g.HeightAboveRoad;
+                Slider(helper, heightLabel, 2f, 15f, 0.1f, aboveRoad, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
                 Slider(helper, "Truss depth", 1f, 2.5f, 0.1f, g.BeamDepth, " m", true, v => Change(g, "truss depth", () => g.BeamDepth = v));
 
                 bool sizeDefault = float.IsNaN(g.SignalSizeOverride);
