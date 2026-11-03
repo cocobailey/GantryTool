@@ -70,9 +70,6 @@ namespace GantryTool.UI
             _content = AddUIComponent<UIPanel>();
             _content.relativePosition = new Vector3(Margin, 68f);
             _content.width = PanelWidth - 2f * Margin;
-            _content.autoLayout = true;
-            _content.autoLayoutDirection = LayoutDirection.Vertical;
-            _content.autoLayoutPadding = new RectOffset(0, 0, 0, 4);
         }
 
         public override void Start()
@@ -99,9 +96,12 @@ namespace GantryTool.UI
                 _title.text = "Gantry #" + g.Id;
                 _info.text = "Span " + g.Span.ToString("F1") + " m, " + g.Lanes.Count + " lanes. Drag the handles to move it.";
 
+                // Detach before destroying: Destroy only happens at the end of the frame, and the rows are measured below.
                 for (int i = _content.components.Count - 1; i >= 0; i--)
                 {
-                    UnityEngine.Object.Destroy(_content.components[i].gameObject);
+                    UIComponent old = _content.components[i];
+                    _content.RemoveUIComponent(old);
+                    UnityEngine.Object.Destroy(old.gameObject);
                 }
 
                 var helper = new UIHelper(_content);
@@ -180,11 +180,12 @@ namespace GantryTool.UI
                     }
                 });
 
-                // Size the panel to its last row (FitChildrenVertically can leave a gap with template controls).
+                // Stack the rows ourselves so the panel's height never depends on when auto layout runs.
                 float bottom = 0f;
                 foreach (UIComponent child in _content.components)
                 {
-                    bottom = Mathf.Max(bottom, child.relativePosition.y + child.height);
+                    child.relativePosition = new Vector3(0f, bottom);
+                    bottom += child.height + 4f;
                 }
 
                 _content.height = bottom;
