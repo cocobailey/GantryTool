@@ -130,10 +130,16 @@ namespace GantryTool.UI
                     extras = g.ExtraHeads.Count;
                 }
 
+                Checkbox(helper, "Automatic lane signals", g.LaneHeads, on =>
+                {
+                    Change(g, "lane signals", () => g.LaneHeads = on);
+                });
+
                 var addRow = _content.AddUIComponent<UIPanel>();
                 addRow.size = new Vector2(_content.width, 34f);
                 bool canAdd = extras < HeadRef.MaxExtraHeads;
-                RowButton(addRow, 0, _content.width, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + " added)",
+                float halfRow = (_content.width - 6f) / 2f;
+                RowButton(addRow, 0, halfRow, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
                     canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
                            : "This gantry has the most added signs allowed", () =>
                     {
@@ -150,6 +156,32 @@ namespace GantryTool.UI
                         }
                     });
                 addRow.components[0].isEnabled = canAdd;
+
+                int guides;
+                lock (GantryManager.Lock)
+                {
+                    guides = g.GuideSigns.Count;
+                }
+
+                bool canGuide = guides < GuideData.MaxSigns;
+                RowButton(addRow, 1, halfRow, "Add guide sign (" + guides + " of " + GuideData.MaxSigns + ")",
+                    canGuide ? "Add a big printed highway sign to this gantry" : "This gantry has the most guide signs allowed", () =>
+                    {
+                        Gantry cur = GantryManager.Find(_gantryId);
+                        if (cur == null || Tool == null)
+                        {
+                            return;
+                        }
+
+                        string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab"));
+                        sbyte facing = SignalPanel.CameraSeesMinusFace(cur) ? (sbyte)-1 : (sbyte)1;
+                        int head = GantryManager.AddGuideSign(cur, cur.Span * 0.5f, facing, design);
+                        if (head >= 0)
+                        {
+                            Tool.EditHead(cur, head);
+                        }
+                    });
+                addRow.components[1].isEnabled = canGuide;
 
                 // One row of equal buttons, like the signal panel.
                 var row = _content.AddUIComponent<UIPanel>();

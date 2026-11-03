@@ -12,6 +12,15 @@ namespace GantryTool.Guide
         public Color32[] Pixels;
         public float Width, Height;   // theme units, roughly inches of a full-size sign
         public float TabHeight;       // how much of the top is the tab row (the panel starts below it)
+        public float Radius;          // corner radius
+        public bool SquareLeft, SquareRight;   // the panel's top corner under a tab at that edge is square
+        public List<GuideTab> Tabs = new List<GuideTab>();
+    }
+
+    /// <summary>A tab on top of a sign, in sign units.</summary>
+    public struct GuideTab
+    {
+        public float X, Width, Height;
     }
 
     /// <summary>
@@ -1063,10 +1072,12 @@ namespace GantryTool.Guide
             }
 
             // Tabs sit on the panel's top edge.
+            var tabShapes = new List<GuideTab>();
             float lx = 0f;
             foreach (TabLayout tab in left)
             {
                 DrawTab(canvas, tab, lx, tabsH, radius, border, ppu);
+                tabShapes.Add(new GuideTab { X = lx, Width = tab.W, Height = tab.H });
                 lx += tab.W;
             }
 
@@ -1080,6 +1091,7 @@ namespace GantryTool.Guide
             foreach (TabLayout tab in centre)
             {
                 DrawTab(canvas, tab, cx, tabsH, radius, border, ppu);
+                tabShapes.Add(new GuideTab { X = cx, Width = tab.W, Height = tab.H });
                 cx += tab.W;
             }
 
@@ -1088,9 +1100,22 @@ namespace GantryTool.Guide
             {
                 rx -= right[k].W;
                 DrawTab(canvas, right[k], rx, tabsH, radius, border, ppu);
+                tabShapes.Add(new GuideTab { X = rx, Width = right[k].W, Height = right[k].H });
             }
 
-            return new GuideSign { PixelWidth = pw, PixelHeight = ph, Pixels = canvas.Pixels, Width = width, Height = height, TabHeight = tabsH };
+            return new GuideSign
+            {
+                PixelWidth = pw,
+                PixelHeight = ph,
+                Pixels = canvas.Pixels,
+                Width = width,
+                Height = height,
+                TabHeight = tabsH,
+                Radius = Mathf.Max(0f, radius),
+                SquareLeft = left.Count > 0,
+                SquareRight = right.Count > 0,
+                Tabs = tabShapes
+            };
         }
 
         private static TabLayout BuildTab(Theme t, Dictionary<string, object> item, Ctx ctx, string font, Color32 bg, Color32 fg, float border)

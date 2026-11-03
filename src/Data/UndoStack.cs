@@ -18,6 +18,8 @@ namespace GantryTool.Data
         public byte Style;
         public readonly List<SignalOverride> Overrides = new List<SignalOverride>();
         public readonly List<ExtraHead> ExtraHeads = new List<ExtraHead>();
+        public readonly List<GuideHead> GuideSigns = new List<GuideHead>();
+        public bool LaneHeads = true;
 
         /// <summary>Call under GantryManager.Lock.</summary>
         public static GantryState Capture(Gantry g)
@@ -36,6 +38,8 @@ namespace GantryTool.Data
             };
             s.Overrides.AddRange(g.Overrides);
             s.ExtraHeads.AddRange(g.ExtraHeads);
+            s.GuideSigns.AddRange(g.GuideSigns);
+            s.LaneHeads = g.LaneHeads;
             return s;
         }
 
@@ -54,6 +58,9 @@ namespace GantryTool.Data
             g.Overrides.AddRange(Overrides);
             g.ExtraHeads.Clear();
             g.ExtraHeads.AddRange(ExtraHeads);
+            g.GuideSigns.Clear();
+            g.GuideSigns.AddRange(GuideSigns);
+            g.LaneHeads = LaneHeads;
             g.MeshDirty = true;
         }
 
@@ -61,7 +68,8 @@ namespace GantryTool.Data
         {
             if (g.Start != Start || g.End != End || g.BeamDepth != BeamDepth ||
                 !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
-                g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count)
+                g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count ||
+                g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads)
             {
                 return false;
             }
@@ -82,6 +90,15 @@ namespace GantryTool.Data
                 if (a.Id != b.Id || a.Along != b.Along || a.Size != b.Size || a.Linked != b.Linked || a.Nudge != b.Nudge ||
                     a.LinkOffset != b.LinkOffset || a.LinkSign != b.LinkSign || a.Minus != b.Minus || a.Plus != b.Plus ||
                     a.MinusValue != b.MinusValue || a.PlusValue != b.PlusValue)
+                {
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < GuideSigns.Count; i++)
+            {
+                GuideHead a = GuideSigns[i], b = g.GuideSigns[i];
+                if (a.Id != b.Id || a.Along != b.Along || a.Scale != b.Scale || a.Side != b.Side || a.Design != b.Design)
                 {
                     return false;
                 }

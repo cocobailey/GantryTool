@@ -335,6 +335,18 @@ namespace GantryTool.Data
         /// </summary>
         public static void SetHeadLayout(Gantry g, int laneIndex, float nudge, float size, string undoKey)
         {
+            if (HeadRef.IsGuide(laneIndex))
+            {
+                // Guide signs: "nudge" is the position along the beam; their size has its own slider.
+                float along = Mathf.Clamp(nudge, 0f, Mathf.Max(0f, g.Span));
+                UpdateGuideSign(g, laneIndex, undoKey, h =>
+                {
+                    h.Along = along;
+                    return h;
+                });
+                return;
+            }
+
             if (HeadRef.IsExtra(laneIndex))
             {
                 // Extra heads: "nudge" is the offset from the linked lane, or the position along the beam when unlinked.
@@ -423,6 +435,13 @@ namespace GantryTool.Data
             size = 0f;
             lock (Lock)
             {
+                if (HeadRef.IsGuide(laneIndex))
+                {
+                    int s = GuideData.IndexOf(g.GuideSigns, HeadRef.GuideId(laneIndex));
+                    nudge = s >= 0 ? g.GuideSigns[s].Along : 0f;
+                    return;
+                }
+
                 if (HeadRef.IsExtra(laneIndex))
                 {
                     int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(laneIndex));
@@ -463,6 +482,97 @@ namespace GantryTool.Data
             }
         }
 
+        // ------------------------------------------------------------------------------ guide signs
+
+        public static bool CanAddGuideSign(Gantry g)
+        {
+            lock (Lock)
+            {
+                return g.GuideSigns.Count < GuideData.MaxSigns;
+            }
+        }
+
+        /// <summary>Adds a guide sign; returns its head number, or -1 when the gantry is full.</summary>
+        public static int AddGuideSign(Gantry g, float along, sbyte side, string design)
+        {
+            UndoStack.PushModified(g, "add guide sign", coalesce: false);
+            int head;
+            lock (Lock)
+            {
+                if (g.GuideSigns.Count >= GuideData.MaxSigns)
+                {
+                    return -1;
+                }
+
+                byte id = 1;
+                foreach (GuideHead e in g.GuideSigns)
+                {
+                    if (e.Id >= id)
+                    {
+                        id = (byte)(e.Id + 1);
+                    }
+                }
+
+                g.GuideSigns.Add(new GuideHead { Id = id, Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)), Scale = 1f, Side = side, Design = design });
+                g.SignalsDirty = true;
+                head = HeadRef.OfGuide(id);
+            }
+
+            Log.Info("Added guide sign " + head + " to gantry #" + g.Id);
+            return head;
+        }
+
+        public static bool GetGuideSign(Gantry g, int head, out GuideHead sign)
+        {
+            sign = default(GuideHead);
+            lock (Lock)
+            {
+                int i = GuideData.IndexOf(g.GuideSigns, HeadRef.GuideId(head));
+                if (i < 0)
+                {
+                    return false;
+                }
+
+                sign = g.GuideSigns[i];
+                return true;
+            }
+        }
+
+        /// <summary>Changes one guide sign. <paramref name="undoKey"/> null = no undo step (the caller records one).</summary>
+        public static void UpdateGuideSign(Gantry g, int head, string undoKey, Func<GuideHead, GuideHead> change)
+        {
+            if (undoKey != null)
+            {
+                UndoStack.PushModified(g, undoKey);
+            }
+
+            lock (Lock)
+            {
+                int i = GuideData.IndexOf(g.GuideSigns, HeadRef.GuideId(head));
+                if (i >= 0)
+                {
+                    g.GuideSigns[i] = change(g.GuideSigns[i]);
+                    g.SignalsDirty = true;
+                }
+            }
+        }
+
+        public static void RemoveGuideSign(Gantry g, int head)
+        {
+            UndoStack.PushModified(g, "delete guide sign", coalesce: false);
+            lock (Lock)
+            {
+                int i = GuideData.IndexOf(g.GuideSigns, HeadRef.GuideId(head));
+                if (i >= 0)
+                {
+                    g.GuideSigns.RemoveAt(i);
+                    g.SignalsDirty = true;
+                }
+            }
+
+            UndoStack.DiscardIfUnchanged(g);
+        }
+
         // ------------------------------------------------------------------------------ extra heads
 
         /// <summary>Whether head <paramref name="head"/> (<see cref="HeadRef"/> numbering) exists on the gantry.</summary>
@@ -475,7 +585,12 @@ namespace GantryTool.Data
 
             lock (Lock)
             {
-                return HeadRef.IsExtra(head) ? HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head)) >= 0 : head < g.Lanes.Count;
+                if (HeadRef.IsGuide(head))
+                {
+                    return GuideData.IndexOf(g.GuideSigns, HeadRef.GuideId(head)) >= 0;
+                }
+
+                return HeadRef.IsExtra(head) ? HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head)) >= 0 : g.LaneHeads && head < g.Lanes.Count;
             }
         }
 
@@ -907,6 +1022,18 @@ namespace GantryTool.Data
                 }
 
                 gantry.RampBeacons.Clear();
+
+                foreach (GuideDraw d in gantry.GuideDraws)
+                {
+                    UnityEngine.Object.Destroy(d.Mesh);
+                }
+
+                gantry.GuideDraws.Clear();
+                if (gantry.GuideBackMesh != null)
+                {
+                    UnityEngine.Object.Destroy(gantry.GuideBackMesh);
+                    gantry.GuideBackMesh = null;
+                }
             }
             catch (Exception e)
             {

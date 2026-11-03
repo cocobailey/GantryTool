@@ -57,6 +57,12 @@ namespace GantryTool.Tool
         /// <summary>Per-gantry settings; set by Loading.</summary>
         public GantryPanel GantryPanel;
 
+        /// <summary>Editor for guide signs; hides itself when the selected head isn't its sign.</summary>
+        public GuidePanel GuidePanel;
+
+        public int SelectedHeadGantry => _selHeadGantry;
+        public int SelectedHead => _selHeadLane;
+
         private Ray _mouseRay;
         private float _mouseRayLength;
         private volatile bool _mouseRayValid;
@@ -260,7 +266,7 @@ namespace GantryTool.Tool
             }
 
             // 1. The selected head's resize handle (its top-right corner, which pokes out of the head a little).
-            if (_selHeadLane >= 0)
+            if (_selHeadLane >= 0 && !HeadRef.IsGuide(_selHeadLane))
             {
                 Gantry hg = GantryManager.Find(_selHeadGantry);
                 float along, size, midY, pa, py;
@@ -449,11 +455,8 @@ namespace GantryTool.Tool
                     Select(edited, openPanel: false);
                     _selHeadGantry = edited.Id;
                     _selHeadLane = _headLane;
-                    if (Panel != null)
-                    {
-                        Log.Debug("Editing signal: gantry #" + edited.Id + " lane " + _headLane);
-                        Panel.ShowFor(edited, _headLane);
-                    }
+                    Log.Debug("Editing signal: gantry #" + edited.Id + " head " + _headLane);
+                    ShowHeadPanel(edited, _headLane);
 
                     BeginHeadPress(edited, _headLane, sameHead && _hoverHeadResize ? HeadDrag.Resize : HeadDrag.Move);
                 }
@@ -612,10 +615,34 @@ namespace GantryTool.Tool
             Select(g, openPanel: false);
             _selHeadGantry = g.Id;
             _selHeadLane = head;
-            if (Panel != null)
+            ShowHeadPanel(g, head);
+        }
+
+        /// <summary>Opens the right editor for a head: guide signs have their own.</summary>
+        private void ShowHeadPanel(Gantry g, int head)
+        {
+            if (HeadRef.IsGuide(head))
+            {
+                if (Panel != null)
+                {
+                    Panel.Hide();
+                }
+
+                if (GuidePanel != null)
+                {
+                    GuidePanel.ShowFor(g, head);
+                }
+            }
+            else if (Panel != null)
             {
                 Panel.ShowFor(g, head);
             }
+        }
+
+        public void ClearHeadSelection()
+        {
+            _selHeadGantry = 0;
+            _selHeadLane = -1;
         }
 
         public void Deselect()
@@ -910,6 +937,19 @@ namespace GantryTool.Tool
                 return false;
             }
 
+            if (HeadRef.IsGuide(lane))
+            {
+                GuideHead sign;
+                float w;
+                if (!GantryManager.GetGuideSign(g, lane, out sign) || !GuideMeshBuilder.Layout(sign, g.Span, out along, out w, out size))
+                {
+                    return false;
+                }
+
+                midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size);
+                return true;
+            }
+
             lock (GantryManager.Lock)
             {
                 SignalMeshBuilder.HeadLayout(g.Lanes, g.Overrides, g.ExtraHeads, lane, g.SignalSize, g.BeamDepth, g.Span,
@@ -1033,12 +1073,9 @@ namespace GantryTool.Tool
             UndoStack.DiscardIfUnchanged(g);
             float nudge, size;
             GantryManager.GetHeadLayout(g, _selHeadLane, out nudge, out size);
-            Log.Info("Signal head on gantry #" + g.Id + " lane " + (_selHeadLane + 1) + ": shift " + nudge.ToString("0.00") +
+            Log.Info("Signal head on gantry #" + g.Id + " head " + _selHeadLane + ": shift " + nudge.ToString("0.00") +
                      " m, size " + (size > 0f ? size.ToString("0.00") + " m" : "gantry default"));
-            if (Panel != null && Panel.IsShowing(g.Id))
-            {
-                Panel.ShowFor(g, _selHeadLane);
-            }
+            ShowHeadPanel(g, _selHeadLane);
         }
 
         private void CancelHeadDrag()
@@ -1285,6 +1322,11 @@ namespace GantryTool.Tool
             bool resizing = _headDrag == HeadDrag.Resize && _headDragStarted;
             rm.OverlayEffect.DrawCircle(cameraInfo, moving ? HandleHotColor : HandleColor, c, size * 1.3f,
                 c.y - half - 0.05f, c.y + half + 0.05f, false, true);
+
+            if (HeadRef.IsGuide(_selHeadLane))
+            {
+                return; // guide signs are sized with their panel's slider
+            }
 
             Vector3 corner = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + half, size);
             corner.y = c.y + half;

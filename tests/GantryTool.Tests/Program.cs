@@ -60,6 +60,7 @@ namespace GantryTool.Tests
             Run("guide signs: every template renders", GuideTemplates);
             Run("guide signs: layout grows with its content", GuideLayout);
             Run("guide signs: bad designs never throw", GuideBadDesigns);
+            Run("guide signs: save data round-trips; old blocks unchanged; bad data is safe", GuideSaveData);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
             Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
@@ -792,6 +793,51 @@ namespace GantryTool.Tests
                 GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(d, 256);
                 Check(s.PixelWidth >= 1 && s.PixelHeight >= 1 && s.PixelWidth <= 256 && s.PixelHeight <= 256, "bad design still draws inside the limit");
             }
+        }
+
+        private static void GuideSaveData()
+        {
+            List<Gantry> gantries = Sample();
+            gantries[0].LaneHeads = false;
+            gantries[1].GuideSigns.Add(new GuideHead { Id = 2, Along = 7.5f, Scale = 1.25f, Side = -1, Design = "{\"id\":\"x\"}" });
+            gantries[1].GuideSigns.Add(new GuideHead { Id = 2, Along = 1f, Scale = 1f, Side = 1, Design = "{}" });   // duplicate id
+            gantries[1].GuideSigns.Add(new GuideHead { Id = 3, Along = 1e9f, Scale = 99f, Side = 5, Design = "{}" }); // out of range
+            gantries[1].GuideSigns.Add(new GuideHead { Id = 4, Along = 1f, Scale = 1f, Side = 1, Design = "" });     // empty
+
+            List<Gantry> plain = Sample();
+            Check(SameBytes(GantryData.WriteLegacy(plain, new object()), GantryData.WriteLegacy(gantries, new object())), "legacy block unchanged");
+            Check(SameBytes(GantryData.WriteExt(plain), GantryData.WriteExt(gantries)), "extension block unchanged");
+            Check(SameBytes(ExtraHeadData.Write(plain, new object()), ExtraHeadData.Write(gantries, new object())), "added signs block unchanged");
+
+            byte[] bytes = GuideData.Write(gantries, new object());
+            List<Gantry> loaded = Sample();
+            string err;
+            GuideData.Apply(bytes, loaded, out err);
+            Check(err == null, "no error: " + err);
+            Check(!loaded[0].LaneHeads && loaded[1].LaneHeads && loaded[2].LaneHeads, "lane signals switch");
+            Check(loaded[1].GuideSigns.Count == 2, "duplicate and empty dropped (" + loaded[1].GuideSigns.Count + ")");
+            GuideHead a = loaded[1].GuideSigns[0], b = loaded[1].GuideSigns[1];
+            Check(a.Id == 2 && a.Along == 7.5f && a.Scale == 1.25f && a.Side == -1 && a.Design == "{\"id\":\"x\"}", "sign kept");
+            Check(b.Along <= loaded[1].Span && b.Scale == GuideData.MaxScale && b.Side == 1, "values repaired");
+
+            List<Gantry> moved = Sample();
+            moved[0].End = moved[0].End + new Vector3(5f, 0f, 0f);
+            GuideData.Apply(bytes, moved, out err);
+            Check(moved[0].LaneHeads, "stale data ignored");
+
+            for (int cut = 0; cut < bytes.Length; cut += 3)
+            {
+                var part = new byte[cut];
+                Array.Copy(bytes, part, cut);
+                GuideData.Apply(part, Sample(), out err); // must not throw
+            }
+
+            var garbage = new byte[64];
+            new System.Random(4).NextBytes(garbage);
+            GuideData.Apply(garbage, Sample(), out err);
+            Check(err != null, "garbage reported, not thrown");
+            Check(GuideData.Write(Sample(), new object()).Length == 8, "nothing to store for ordinary gantries");
+            Check(HeadRef.IsGuide(HeadRef.OfGuide(3)) && !HeadRef.IsExtra(HeadRef.OfGuide(3)) && HeadRef.GuideId(HeadRef.OfGuide(3)) == 3, "numbering");
         }
 
         private static ExtraHead Extra(byte id, float along, SignalSymbol minus, SignalSymbol plus)

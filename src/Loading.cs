@@ -15,6 +15,7 @@ namespace GantryTool
         private ToolButton _button;
         private SignalPanel _panel;
         private GantryPanel _gantryPanel;
+        private GuidePanel _guidePanel;
         private HotkeyListener _hotkey;
 
         public override void OnLevelLoaded(LoadMode mode)
@@ -50,6 +51,10 @@ namespace GantryTool
                 _gantryPanel = GantryPanel.Create();
                 _gantryPanel.Tool = _tool;
                 _tool.GantryPanel = _gantryPanel;
+
+                _guidePanel = GuidePanel.Create();
+                _guidePanel.Tool = _tool;
+                _tool.GuidePanel = _guidePanel;
 
                 _hotkey = HotkeyListener.Create(_tool);
 
@@ -101,6 +106,12 @@ namespace GantryTool
                 {
                     UnityEngine.Object.Destroy(_gantryPanel.gameObject);
                     _gantryPanel = null;
+                }
+
+                if (_guidePanel != null)
+                {
+                    UnityEngine.Object.Destroy(_guidePanel.gameObject);
+                    _guidePanel = null;
                 }
 
                 if (_button != null)

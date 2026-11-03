@@ -40,6 +40,7 @@ namespace GantryTool.Tool
         }
 
         private static readonly List<int> Heads = new List<int>();
+        private static readonly List<GuideHead> Guides = new List<GuideHead>();
 
         /// <summary>
         /// Nearest signal head hit by the ray: its gantry and head number (<see cref="HeadRef"/>). Returns false if
@@ -54,7 +55,7 @@ namespace GantryTool.Tool
             for (int i = 0; i < Scratch.Count; i++)
             {
                 Gantry g = Scratch[i];
-                if (g.Mesh == null || (g.Lanes.Count == 0 && g.ExtraHeads.Count == 0))
+                if (g.Mesh == null || (g.Lanes.Count == 0 && g.ExtraHeads.Count == 0 && g.GuideSigns.Count == 0))
                 {
                     continue;
                 }
@@ -73,7 +74,29 @@ namespace GantryTool.Tool
 
                 lock (GantryManager.Lock)
                 {
-                    HeadRef.All(g.Lanes, g.ExtraHeads, Heads);
+                    HeadRef.All(g.Lanes, g.ExtraHeads, Heads, g.LaneHeads);
+                    Guides.Clear();
+                    Guides.AddRange(g.GuideSigns);
+                }
+
+                // Guide signs: wide panels on one side of the truss.
+                foreach (GuideHead sign in Guides)
+                {
+                    float along, w, h;
+                    if (!GuideMeshBuilder.Layout(sign, span, out along, out w, out h))
+                    {
+                        continue;
+                    }
+
+                    float midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, h);
+                    float depth = SignalMeshBuilder.HeadDepth * 0.5f + 0.25f;
+                    float t;
+                    if (RayBox(ray, g.Start, dir, side, along - w * 0.5f, along + w * 0.5f, midY - h * 0.5f, midY + h * 0.5f, depth, out t) && t < bestT)
+                    {
+                        bestT = t;
+                        gantryId = g.Id;
+                        laneIndex = HeadRef.OfGuide(sign.Id);
+                    }
                 }
 
                 foreach (int k in Heads)

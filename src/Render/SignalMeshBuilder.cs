@@ -147,7 +147,7 @@ namespace GantryTool.Render
         /// </summary>
         public static Mesh Build(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
             List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, Mesh mesh,
-            SignAtlas atlas, bool blinkLayer = false)
+            SignAtlas atlas, bool blinkLayer = false, bool laneHeads = true)
         {
             Verts.Clear();
             Normals.Clear();
@@ -178,7 +178,7 @@ namespace GantryTool.Render
             Rect housing = Inset(atlas.TileRect(SignAtlas.HousingTile), 0.25f);
 
             // Lane heads, then the heads the player added (those stay even with no road underneath).
-            HeadRef.All(lanes, extras, Heads);
+            HeadRef.All(lanes, extras, Heads, laneHeads);
             foreach (int head in Heads)
             {
                 FaceSign minus, plus;
@@ -274,7 +274,7 @@ namespace GantryTool.Render
         /// </summary>
         public static void BuildRampBeacons(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
             List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, SignAtlas atlas,
-            List<RampBeacon> beacons)
+            List<RampBeacon> beacons, bool laneHeads = true)
         {
             for (int i = 0; i < beacons.Count; i++)
             {
@@ -293,7 +293,7 @@ namespace GantryTool.Render
             Vector3 dir = span > 0.01f ? flat / span : Vector3.right;
             Vector3 side = new Vector3(-dir.z, 0f, dir.x);
 
-            HeadRef.All(lanes, extras, Heads);
+            HeadRef.All(lanes, extras, Heads, laneHeads);
             foreach (int head in Heads)
             {
                 FaceSign minus, plus;

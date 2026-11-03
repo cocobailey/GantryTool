@@ -29,16 +29,32 @@ namespace GantryTool.Data
 
     /// <summary>
     /// Heads are numbered so one int names any head: a lane's own head is its lane index, an extra head is
-    /// <see cref="ExtraBase"/> + its id.
+    /// <see cref="ExtraBase"/> + its id, a guide sign <see cref="GuideBase"/> + its id.
     /// </summary>
     public static class HeadRef
     {
         public const int ExtraBase = 1000;
+        public const int GuideBase = 2000;
         public const int MaxExtraHeads = 8;
 
         public static bool IsExtra(int head)
         {
-            return head >= ExtraBase;
+            return head >= ExtraBase && head < GuideBase;
+        }
+
+        public static bool IsGuide(int head)
+        {
+            return head >= GuideBase;
+        }
+
+        public static byte GuideId(int head)
+        {
+            return (byte)(head - GuideBase);
+        }
+
+        public static int OfGuide(byte id)
+        {
+            return GuideBase + id;
         }
 
         public static byte ExtraId(int head)
@@ -65,11 +81,11 @@ namespace GantryTool.Data
             return -1;
         }
 
-        /// <summary>Every head of a gantry: lane heads in lane order, then extra heads.</summary>
-        public static void All(List<GantryLane> lanes, List<ExtraHead> extras, List<int> output)
+        /// <summary>Every signal head of a gantry: lane heads in lane order (when on), then extra heads.</summary>
+        public static void All(List<GantryLane> lanes, List<ExtraHead> extras, List<int> output, bool laneHeads = true)
         {
             output.Clear();
-            for (int i = 0; i < lanes.Count; i++)
+            for (int i = 0; laneHeads && i < lanes.Count; i++)
             {
                 output.Add(i);
             }

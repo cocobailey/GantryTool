@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "1.2.0";
+        public const string Version = "2.0.0-dev1";
 
         public string Name => "Gantry and Signs Tool";
 

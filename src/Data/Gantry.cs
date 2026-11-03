@@ -51,6 +51,16 @@ namespace GantryTool.Data
         /// <summary>Heads the player added (<see cref="ExtraHead"/>). Guarded by GantryManager.Lock.</summary>
         public readonly List<ExtraHead> ExtraHeads = new List<ExtraHead>();
 
+        /// <summary>Guide signs on this gantry (<see cref="GuideHead"/>). Guarded by GantryManager.Lock.</summary>
+        public readonly List<GuideHead> GuideSigns = new List<GuideHead>();
+
+        /// <summary>Automatic lane signals on. Off makes a pure sign gantry: only added signs and guide signs show.</summary>
+        public bool LaneHeads = true;
+
+        // Guide sign meshes: one per face (its material shows that sign) and one for all the plain backs.
+        public readonly List<GuideDraw> GuideDraws = new List<GuideDraw>();
+        public Mesh GuideBackMesh;
+
         /// <summary>Only the signal faces changed (override edit); the truss and lanes are still valid.</summary>
         public bool SignalsDirty;
 
@@ -71,6 +81,12 @@ namespace GantryTool.Data
     }
 
     /// <summary>The two lit beacon lenses of one ramp metering face (submeshes 0 and 1) and the meter they follow.</summary>
+    public sealed class GuideDraw
+    {
+        public Mesh Mesh;
+        public Material Material;
+    }
+
     public sealed class RampBeacon
     {
         public ushort Node;

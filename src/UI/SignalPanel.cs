@@ -1116,7 +1116,7 @@ namespace GantryTool.UI
         }
 
         /// <summary>The face pointing at the camera: the one the player is looking at.</summary>
-        private static bool CameraSeesMinusFace(Gantry g)
+        internal static bool CameraSeesMinusFace(Gantry g)
         {
             try
             {

@@ -101,6 +101,16 @@ namespace GantryTool.Render
                     DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : Color.white);
                     SignStyle style = SignStyles.Resolve(g.Style);
                     DrawSignals(g.SignalMesh, g.Origin, style);
+                    if (g.GuideBackMesh != null)
+                    {
+                        DrawStructure(g.GuideBackMesh, g.Origin, Color.white);
+                    }
+
+                    foreach (GuideDraw d in g.GuideDraws)
+                    {
+                        DrawGuide(d, g.Origin);
+                    }
+
                     if (blinkOn)
                     {
                         DrawSignals(g.BlinkMesh, g.Origin, style);
@@ -162,6 +172,24 @@ namespace GantryTool.Render
             block.SetVector(_instance._idObjectIndex, index);
             Graphics.DrawMesh(mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one),
                 material, GantryMaterials.Layer, null, submesh, block);
+            _instance._drawCallData.m_defaultCalls++;
+        }
+
+        /// <summary>Draws a guide sign face, lit like the signal faces so it reads at night.</summary>
+        private static void DrawGuide(GuideDraw d, Vector3 origin)
+        {
+            if (_instance == null || d.Material == null || d.Mesh == null)
+            {
+                return;
+            }
+
+            MaterialPropertyBlock block = _instance._block;
+            block.Clear();
+            block.SetColor(_instance._idColor, Color.white);
+            Vector4 index = RenderManager.DefaultColorLocation;
+            index.z = 1f;
+            block.SetVector(_instance._idObjectIndex, index);
+            Graphics.DrawMesh(d.Mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one), d.Material, GantryMaterials.Layer, null, 0, block);
             _instance._drawCallData.m_defaultCalls++;
         }
 
@@ -236,19 +264,29 @@ namespace GantryTool.Render
                     g.SignalsDirty = false;
                     GantryManager.RefreshExtraLinks(g);
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas);
-                    if (g.SignalMesh != null && g.SignalMesh.vertexCount > 0 && g.Mesh != null)
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas, false, g.LaneHeads);
+                    GuideMeshBuilder.Build(g);
+                    if (g.Mesh != null)
                     {
                         Bounds b = g.Mesh.bounds;
-                        b.Encapsulate(g.SignalMesh.bounds);
+                        if (g.SignalMesh != null && g.SignalMesh.vertexCount > 0)
+                        {
+                            b.Encapsulate(g.SignalMesh.bounds);
+                        }
+
+                        foreach (GuideDraw d in g.GuideDraws)
+                        {
+                            b.Encapsulate(d.Mesh.bounds);
+                        }
+
                         b.center += g.Origin;
                         g.Bounds = b;
                     }
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, blinkLayer: true);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, true, g.LaneHeads);
                     SignalMeshBuilder.BuildRampBeacons(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, atlas, g.RampBeacons);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, atlas, g.RampBeacons, g.LaneHeads);
                 }
 
                 if (Settings.Current.DebugLogging)

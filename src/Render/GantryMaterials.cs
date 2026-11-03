@@ -25,6 +25,7 @@ namespace GantryTool.Render
         private static Texture2D _mainTex;
         private static Texture2D _xysTex;
         private static Texture2D _aciTex;
+        private static Texture2D _guideAci;
         private static Shader _shader;
 
         /// <summary>Sign textures, material and picker previews of one style; built when first used.</summary>
@@ -185,6 +186,22 @@ namespace GantryTool.Render
             return a;
         }
 
+        /// <summary>A material showing a printed guide sign (reads as a reflective sign at night, like the Canada sign).</summary>
+        public static Material CreateGuideMaterial(Texture2D face)
+        {
+            if (_guideAci == null)
+            {
+                _guideAci = SolidTexture("GantryGuideACI", new Color(0f, 0f, 0.32f, 1f));
+            }
+
+            var m = new Material(_shader) { name = "GantryGuideSign" };
+            m.SetTexture("_MainTex", face);
+            m.SetTexture("_XYSMap", _xysTex);
+            m.SetTexture("_ACIMap", _guideAci);
+            m.SetColor("_Color", Color.white);
+            return m;
+        }
+
         private static void Release(StyleAssets a)
         {
             foreach (var kv in Styles)
@@ -239,6 +256,9 @@ namespace GantryTool.Render
         public static void Release()
         {
             Ready = false;
+            GuideCache.Release();
+            DestroySafe(_guideAci);
+            _guideAci = null;
             DestroySafe(Structure);
             DestroySafe(_mainTex);
             DestroySafe(_xysTex);

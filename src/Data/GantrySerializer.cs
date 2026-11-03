@@ -26,6 +26,7 @@ namespace GantryTool.Data
                 serializableDataManager.SaveData(GantryData.LegacyKey, legacy);
                 serializableDataManager.SaveData(GantryData.ExtKey, ext);
                 SaveExtraHeads(gantries);
+                SaveGuideSigns(gantries);
                 SaveCustomSigns(gantries);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +
                          GantryData.LegacyVersion + " + ext v" + GantryData.ExtVersion + ")");
@@ -66,6 +67,40 @@ namespace GantryTool.Data
             catch (Exception e)
             {
                 Log.Error("Saving extra signal heads failed", e);
+            }
+        }
+
+        private void SaveGuideSigns(List<Gantry> gantries)
+        {
+            try
+            {
+                serializableDataManager.SaveData(GuideData.Key, GuideData.Write(gantries, GantryManager.Lock));
+            }
+            catch (Exception e)
+            {
+                Log.Error("Saving guide signs failed", e);
+            }
+        }
+
+        private void LoadGuideSigns(List<Gantry> loaded)
+        {
+            try
+            {
+                string error;
+                int added = GuideData.Apply(serializableDataManager.LoadData(GuideData.Key), loaded, out error);
+                if (error != null)
+                {
+                    Log.Warn("Guide signs: " + error);
+                }
+
+                if (added > 0)
+                {
+                    Log.Info("Loaded " + added + " guide signs");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Loading guide signs failed; the gantries load without them", e);
             }
         }
 
@@ -154,6 +189,7 @@ namespace GantryTool.Data
                     }
 
                     LoadExtraHeads(loaded);
+                    LoadGuideSigns(loaded);
                 }
             }
             catch (Exception e)
