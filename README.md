@@ -1,4 +1,4 @@
-# Gantry Tool
+# Gantry and Signs Tool
 
 A Cities: Skylines 1 mod for placing overhead truss gantries with LED lane signals, speed limits, warnings
 and your own signs, in six regional styles. Each signal head sits over its lane and has two faces, one for
@@ -31,8 +31,8 @@ Requires the **Harmony** workshop item (CitiesHarmony, 2040656402).
 
 The two faces of the head are at the top; click one to edit it. Pick a sign from a category:
 
-- **Lane signals**: Auto, open (green ↓), closed (red ✕), merge left / right (blinking), reserved (◇),
-  blank, and the yellow ✕ (lane closing ahead) in North American styles.
+- **Lane signals**: Auto, open (green ↓), closed (red ✕), merge left / right (blinking), exit left / right
+  (green ↖ ↗), reserved (◇), blank, and the yellow ✕ (lane closing ahead) in North American styles.
 - **Speed limits**: a fixed number in the style's units (km/h 30–130, mph 20–80), or **Road**, which
   shows the lane's actual limit and follows changes, including TM:PE speed limits.
 - **Warnings**: roadworks, queue ahead, accident, slippery road, fog, general danger.
@@ -45,6 +45,17 @@ and can remove it (removed heads still highlight on hover, so they can be restor
 
 Signs are tied to the lane's position on the gantry, so they survive the road being upgraded or reversed
 with the same layout.
+
+### Added signs
+
+**Add sign** in the Gantry panel adds a head beyond the automatic one per lane (up to 8 per gantry). Drag it anywhere
+along the beam, resize it, and pick signs for both faces as usual; **Delete sign** removes it.
+
+- **Not linked** (the default): it stays where you put it whatever the road does, and shows only signs you pick.
+- **Linked** (**Link to lane** in its panel): it follows that lane and can also show Auto and Road speed, for
+  example a speed box beside each lane's arrow. If the lane goes away, the sign unlinks where it stands.
+
+**Apply this sign to** also changes the linked signs of those lanes; unlinked signs are left alone.
 
 ### Regional styles
 
@@ -64,7 +75,8 @@ back shows it again.
 
 In the **Custom** category:
 
-- **Text**: up to two lines of 7 letters (A–Z, 0–9, `- / . !`) in white, amber, red, green or yellow.
+- **Text**: up to three lines of 10 letters (A–Z, 0–9, `- / . !`) in white, amber, red, green or yellow. Short text
+  is drawn large; only lines too wide for the normal LED grid use smaller dots.
 - **Pictures**: PNG or JPG files from
   `%LOCALAPPDATA%\Colossal Order\Cities_Skylines\GantryTool\Signs` (**Open folder**, then **Rescan**),
   shown as they are or redrawn as LED dots.
@@ -160,6 +172,6 @@ In short:
   shader's illumination channel, with mip levels biased towards lit dots so signs stay bright at a distance.
 - **Save data:** three keys. `GantryTool` is the 1.0 format (v3), so 1.0 can still read it.
   `GantryTool.Ext` holds everything added since (v4), matched to gantries by id and post positions.
-  `GantryTool.Custom` holds the custom sign library. Lanes and meshes are always recomputed on load.
+  `GantryTool.Custom` holds the custom sign library. `GantryTool.Heads` holds added signs. Lanes and meshes are always recomputed on load.
 
 Logs are prefixed `[GantryTool]`.
