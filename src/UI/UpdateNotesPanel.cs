@@ -13,7 +13,7 @@ namespace GantryTool.UI
     public sealed class UpdateNotesPanel : UIPanel
     {
         /// <summary>The feature release these notes describe; bump it with new notes.</summary>
-        public const string NotesVersion = "1.1";
+        public const string NotesVersion = "1.2";
 
         private const string ChangeNotesUrl = "https://steamcommunity.com/sharedfiles/filedetails/changelog/3814479293";
         private const float PanelWidth = 460f;
@@ -21,12 +21,9 @@ namespace GantryTool.UI
 
         private static readonly string[][] Notes =
         {
-            new[] { "Edit gantries", "click one to move it, change its height and size, or delete it. Ctrl+Z undoes." },
-            new[] { "Edit single signals", "move and resize any head, pick its signs face by face." },
-            new[] { "Speed limits", "set a number or follow the road's own limit (works with TM:PE)." },
-            new[] { "Warnings and restrictions", "roadworks, queue, accident, slippery road, fog, no overtaking and more." },
-            new[] { "Regional styles", "Europe, Netherlands, UK, United States, Canada and Australia/NZ." },
-            new[] { "Custom signs", "your own text or pictures." }
+            new[] { "Add signs anywhere", "add up to 8 extra signs to a gantry and drag them anywhere on the beam, or link one to a lane so it follows that lane. Find it in the gantry's panel." },
+            new[] { "Longer custom text", "up to 3 lines of 10 letters." },
+            new[] { "Exit arrows", "green up-left and up-right arrows." }
         };
 
         /// <summary>Shows the notes if this player hasn't seen them yet. Call after the city has loaded.</summary>
@@ -80,7 +77,9 @@ namespace GantryTool.UI
                 label.autoHeight = true;
                 label.text = "<color #ffcc66>" + note[0] + ":</color> " + note[1];
                 label.relativePosition = new Vector3(Margin, y);
-                y += Mathf.Max(label.height, 18f) + 8f;
+                // At least the lines the text needs at about 60 characters each, in case it isn't measured yet.
+                int lines = (note[0].Length + note[1].Length + 2 + 59) / 60;
+                y += Mathf.Max(label.height, lines * 16f) + 8f;
             }
 
             y += 8f;
