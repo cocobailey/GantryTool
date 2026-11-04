@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ColossalFramework.UI;
 using GantryTool.Data;
 using GantryTool.Tool;
@@ -333,7 +334,6 @@ namespace GantryTool.UI
                 return;
             }
 
-            string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab"));
             sbyte facing = SignalPanel.CameraSeesMinusFace(g) ? (sbyte)-1 : (sbyte)1;
             byte first, last;
             lock (GantryManager.Lock)
@@ -341,6 +341,14 @@ namespace GantryTool.UI
                 GantryTool.Guide.GuideFit.DefaultRange(g.Lanes, g.GuideSigns, facing, out first, out last);
             }
 
+            Dictionary<string, object> template = GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab");
+            if (Settings.Current.AutoFillSigns)
+            {
+                var placing = new GuideHead { Along = g.Span * 0.5f, Side = facing, FitFirst = first, FitLast = last };
+                GantryTool.Guide.GuideAutoFill.Fill(template, GantryTool.Detect.RoadFinder.Find(g, placing, template));
+            }
+
+            string design = GantryTool.Guide.Json.Write(template);
             int head = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, design, first, last);
             if (head >= 0)
             {

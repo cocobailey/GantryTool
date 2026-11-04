@@ -26,6 +26,7 @@ namespace GantryTool
         public byte NewGantries;               // what a newly placed gantry starts with: Start* below
         public byte NewGantryType;             // GantryShape of a newly placed gantry
         public byte NewGantryLook;             // and what it's built from
+        public bool AutoFillSigns = true;      // new guide signs start with the road's name and the next exit's
         public string LastSeenNotes = "";      // "what's new" release the player has closed
 
         public const byte StartAsk = 0;        // bare, with the gantry panel open to choose

@@ -20,6 +20,9 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("guide signs: on the truss unless a signal is in the way", GuideClearOfSignals);
+            Run("guide signs: filled in from the road", GuideAutoFillParts);
+            Run("guide signs: finding the next exit", GuideNextExit);
             Run("guide signs: default size, matching heights and the player's own size", GuideSizes);
             Run("guide signs: can be drawn on several threads at once", GuideThreads);
             Run("v2 save (overrides without direction) loads", V2Loads);
@@ -1095,6 +1098,162 @@ namespace GantryTool.Tests
 
                 Check(same, "a sign drawn alongside others comes out the same");
             }
+        }
+
+        private static string TemplateText(Dictionary<string, object> doc)
+        {
+            return GantryTool.Guide.Json.Write(doc);
+        }
+
+        private static void GuideAutoFillParts()
+        {
+            Func<string, Dictionary<string, object>> t = n => GantryTool.Guide.GuideAssets.Template("us", n);
+            Dictionary<string, object> doc = t("pull-through");
+            Check(GantryTool.Guide.GuideAutoFill.Fill(doc, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Highway 47", Heading = new Vector2(0f, 1f) } }), "a numbered road fills in");
+            string s = TemplateText(doc);
+            Check(s.Contains("\"47\"") && s.Contains("NORTH") && !s.Contains("Albany") && !s.Contains("Highway"), "the number goes on the shield, and the sample town goes");
+
+            doc = t("pull-through");
+            GantryTool.Guide.GuideAutoFill.Fill(doc, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Oak Street", Heading = new Vector2(-1f, 0.2f) } });
+            s = TemplateText(doc);
+            Check(s.Contains("Oak Street") && s.Contains("WEST") && !s.Contains("shield"), "a road with no number has its name and no shield");
+            Check(GantryTool.Guide.GuideRenderer.Render(doc, 1024, 1f).Parts.Count > 0, "it still draws");
+
+            doc = t("guide-exit-tab");
+            GantryTool.Guide.GuideAutoFill.Fill(doc, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "12th Street", Heading = Vector2.zero }, new GantryTool.Guide.RoadFacts { Name = "Elm Avenue", Heading = new Vector2(1f, 0f) } });
+            s = TemplateText(doc);
+            Check(s.Contains("12th Street") && s.Contains("Elm Avenue") && !s.Contains("Portsmouth") && !s.Contains("NORTH"), "two destinations; no direction when it goes both ways");
+
+            doc = t("guide-exit-tab");
+            string before = TemplateText(doc);
+            Check(!GantryTool.Guide.GuideAutoFill.Fill(doc, new List<GantryTool.Guide.RoadFacts>()) && TemplateText(doc) == before, "nothing found leaves the sign alone");
+            Check(!GantryTool.Guide.GuideAutoFill.Fill(doc, null) && TemplateText(doc) == before, "nor does no answer at all");
+            Check(!GantryTool.Guide.GuideAutoFill.Fill(doc, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "\u041c\u0438\u0440\u0430" } }) && TemplateText(doc) == before, "letters the sign can't draw leave it alone");
+
+            Dictionary<string, object> plain = t("junction");
+            Check(!GantryTool.Guide.GuideAutoFill.Fill(plain, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Highway 1" } }), "a sign with nothing marked isn't touched");
+            foreach (string name in GantryTool.Guide.GuideAssets.TemplateNames("us"))
+            {
+                Check(GantryTool.Guide.GuideRenderer.Render(t(name), 1024, 1f) != null, name);
+            }
+        }
+
+        private sealed class FakeRoads : GantryTool.Guide.IRoadNetwork
+        {
+            public readonly Dictionary<ushort, Vector3> Nodes = new Dictionary<ushort, Vector3>();
+            private readonly Dictionary<ushort, ushort[]> _segments = new Dictionary<ushort, ushort[]>();
+            private readonly Dictionary<ushort, string> _names = new Dictionary<ushort, string>();
+            private readonly HashSet<ushort> _ramps = new HashSet<ushort>();
+
+            public void Road(ushort seg, ushort a, ushort b, string name, bool ramp = false)
+            {
+                _segments[seg] = new[] { a, b };
+                _names[seg] = name;
+                if (ramp)
+                {
+                    _ramps.Add(seg);
+                }
+            }
+
+            public List<ushort> Out(ushort node)
+            {
+                var list = new List<ushort>();
+                foreach (KeyValuePair<ushort, ushort[]> s in _segments)
+                {
+                    if (s.Value[0] == node)
+                    {
+                        list.Add(s.Key);
+                    }
+                }
+
+                return list;
+            }
+
+            public ushort OtherNode(ushort segment, ushort node)
+            {
+                return _segments[segment][0] == node ? _segments[segment][1] : _segments[segment][0];
+            }
+
+            public Vector3 Position(ushort node) { return Nodes[node]; }
+            public string Name(ushort segment) { return _names[segment]; }
+            public bool SameName(ushort a, ushort b) { return _names[a] == _names[b]; }
+            public bool IsRamp(ushort segment) { return _ramps.Contains(segment); }
+        }
+
+        private static void GuideNextExit()
+        {
+            // A highway running north: an on-ramp joins at node 2 (no way out there), then at node 3 an off-ramp leaves,
+            // and splits at node 5 onto a street going both ways and a second road.
+            var net = new FakeRoads();
+            net.Nodes[1] = new Vector3(0f, 0f, 0f);
+            net.Nodes[2] = new Vector3(0f, 0f, 300f);
+            net.Nodes[3] = new Vector3(0f, 0f, 600f);
+            net.Nodes[4] = new Vector3(0f, 0f, 900f);
+            net.Nodes[5] = new Vector3(100f, 0f, 700f);
+            net.Nodes[6] = new Vector3(300f, 0f, 700f);
+            net.Nodes[7] = new Vector3(-300f, 0f, 700f);
+            net.Nodes[8] = new Vector3(100f, 0f, 1000f);
+            net.Road(1, 1, 2, "Highway 90");
+            net.Road(2, 2, 3, "Highway 90");
+            net.Road(3, 3, 4, "Highway 90");
+            net.Road(4, 3, 5, "Ramp", true);
+            net.Road(5, 5, 6, "Oak Street");
+            net.Road(6, 5, 7, "Oak Street");
+            net.Road(7, 5, 8, "Route 12");
+            List<GantryTool.Guide.RoadFacts> found = GantryTool.Guide.RoadWalk.NextExit(net, 1, 2);
+            Check(found.Count == 2, "the ramp's split gives both roads: " + found.Count);
+            GantryTool.Guide.RoadFacts oak = found.Find(r => r.Name == "Oak Street"), route = found.Find(r => r.Name == "Route 12");
+            Check(oak != null && oak.Heading == Vector2.zero, "a road going both ways from the ramp has no one direction");
+            Check(route != null && GantryTool.Guide.GuideAutoFill.Cardinal(route.Heading) == "NORTH" && route.Number == "12", "the other has its direction and number");
+
+            // Nothing leaves it before the road ends, or within reach.
+            var plain = new FakeRoads();
+            plain.Nodes[1] = new Vector3(0f, 0f, 0f);
+            plain.Nodes[2] = new Vector3(0f, 0f, 300f);
+            plain.Nodes[3] = new Vector3(0f, 0f, 600f);
+            plain.Road(1, 1, 2, "Highway 90");
+            plain.Road(2, 2, 3, "Highway 90");
+            Check(GantryTool.Guide.RoadWalk.NextExit(plain, 1, 2).Count == 0, "no exit on a road that just ends");
+
+            // A loop must not trap it.
+            var loop = new FakeRoads();
+            loop.Nodes[1] = new Vector3(0f, 0f, 0f);
+            loop.Nodes[2] = new Vector3(0f, 0f, 10f);
+            loop.Road(1, 1, 2, "Ring");
+            loop.Road(2, 2, 1, "Ring");
+            Check(GantryTool.Guide.RoadWalk.NextExit(loop, 1, 2).Count == 0, "a loop with no exit ends");
+
+            Check(new GantryTool.Guide.RoadFacts { Name = "12th Street" }.Number == null, "12th Street has no route number");
+            Check(new GantryTool.Guide.RoadFacts { Name = "Highway 47" }.Number == "47", "Highway 47 has");
+            Check(GantryTool.Guide.GuideAutoFill.Cardinal(new Vector2(0f, -1f)) == "SOUTH" && GantryTool.Guide.GuideAutoFill.Cardinal(new Vector2(1f, 0.1f)) == "EAST", "compass");
+        }
+
+        private static void GuideClearOfSignals()
+        {
+            var g = new Gantry { Start = new Vector3(0f, 0f, 0f), End = new Vector3(30f, 0f, 0f), BeamBottomY = 8f, BeamDepth = 1.5f };
+            g.Lanes.Add(new GantryTool.Detect.GantryLane { Offset = 5f, Width = 3.6f, TravelSign = 1 });
+            g.Lanes.Add(new GantryTool.Detect.GantryLane { Offset = 25f, Width = 3.6f, TravelSign = 1 });
+            GuideHead sign = SizedSign(1, "pull-through");
+            sign.Along = 5f;
+            g.GuideSigns.Add(sign);
+            float over = GantryTool.Render.GuideMeshBuilder.MidY(g, sign);
+
+            g.Overrides.Add(new SignalOverride { Offset = 5f, Minus = SignalSymbol.Hidden, Plus = SignalSymbol.Hidden, Sign = 1 });
+            float clear = GantryTool.Render.GuideMeshBuilder.MidY(g, sign);
+            Check(clear < over - 0.5f, "with the signal under it deleted, a sign comes down onto the truss");
+
+            sign.Along = 25f;
+            g.GuideSigns[0] = sign;
+            Check(Mathf.Abs(GantryTool.Render.GuideMeshBuilder.MidY(g, sign) - over) < 0.01f, "over the other signal, it stands on top");
+
+            GuideHead second = SizedSign(2, "pull-through");
+            second.Along = 5f;
+            g.GuideSigns.Add(second);
+            Check(Mathf.Abs(GantryTool.Render.GuideMeshBuilder.MidY(g, second) - over) < 0.01f, "signs facing the same way stay in line");
+
+            second.Side = 1;
+            g.GuideSigns[1] = second;
+            Check(GantryTool.Render.GuideMeshBuilder.MidY(g, second) < over - 0.5f, "signs facing the other way don't count");
         }
 
         private static void GuideSimpleSigns()

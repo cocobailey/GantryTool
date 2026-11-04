@@ -399,6 +399,7 @@ namespace GantryTool.Render
         private const int CornerSteps = 5;
         private const float OnTopOverlap = 0.15f; // how far a sign on top of the truss comes down over it
         private const float BracketSize = 0.1f;
+        private const float SignalClearance = 0.1f;
         private const float CasterBehind = 0.6f;  // shadow sheet behind the face: more than a shadow map texel at most distances
 
         /// <summary>A sign's size in metres and where its centre is along the beam; false if its design can't be drawn.</summary>
@@ -419,14 +420,55 @@ namespace GantryTool.Render
             return true;
         }
 
+        private static readonly List<int> HeadList = new List<int>();
+
         /// <summary>
-        /// Height of a sign's centre. A sign shares the gantry with signals by standing on top of the truss, clear of them;
-        /// with no signals it is mounted on the truss itself.
+        /// True if any sign facing this way would sit over a signal, along the beam. Signs facing one way stay in line,
+        /// so if one has to stand on top of the truss, they all do.
         /// </summary>
-        public static float CentreY(Gantry g, float height)
+        private static bool Clashes(Gantry g, sbyte side)
         {
-            bool signals = (g.LaneHeads && g.Lanes.Count > 0) || g.ExtraHeads.Count > 0;
-            return signals
+            lock (GantryManager.Lock)
+            {
+                SignStyle style = SignStyles.Resolve(g.Style);
+                HeadRef.All(g.Lanes, g.ExtraHeads, HeadList, g.LaneHeads);
+                foreach (int head in HeadList)
+                {
+                    FaceSign minus, plus;
+                    SignalRules.ResolveHead(g.Lanes, g.Overrides, g.ExtraHeads, head, out minus, out plus, style);
+                    if (g.BlankBacks)
+                    {
+                        SignalRules.BlankBack(g.Lanes, g.ExtraHeads, head, ref minus, ref plus);
+                    }
+
+                    if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
+                    {
+                        continue;
+                    }
+
+                    float headAlong, size;
+                    SignalMeshBuilder.HeadLayout(g.Lanes, g.Overrides, g.ExtraHeads, head, g.SignalSize, g.BeamDepth, g.Span, out headAlong, out size);
+                    foreach (GuideHead h in g.GuideSigns)
+                    {
+                        float along, width, height;
+                        if (h.Side == side && Layout(g, h, out along, out width, out height) &&
+                            Mathf.Abs(along - headAlong) < (width + size) * 0.5f + SignalClearance)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Height of a panel's centre: mounted on the truss, or standing on top of it to stay clear of a signal.
+        /// </summary>
+        private static float CentreY(Gantry g, float height, bool clear)
+        {
+            return clear
                 ? g.BeamBottomY + g.BeamDepth - OnTopOverlap + height * 0.5f
                 : SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, height);
         }
@@ -435,7 +477,7 @@ namespace GantryTool.Render
         public static float MidY(Gantry g, GuideHead h)
         {
             GuidePlacement p = Place(g, h);
-            return CentreY(g, p.PanelMetres) + (p.HeightMetres - p.PanelMetres) * 0.5f;
+            return CentreY(g, p.PanelMetres, Clashes(g, h.Side)) + (p.HeightMetres - p.PanelMetres) * 0.5f;
         }
 
         /// <summary>A sign's placement; all of a gantry's are remembered until a sign, or the lanes, change. Main thread.</summary>

@@ -77,6 +77,11 @@ namespace GantryTool.Guide
             return g;
         }
 
+        public bool Has(char c)
+        {
+            return _glyphs.ContainsKey(c);
+        }
+
         public float Kern(char a, char b)
         {
             float k;

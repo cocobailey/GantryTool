@@ -14,19 +14,22 @@
           "type": "shield",
           "network": "I",
           "number": "90",
-          "height": 36
+          "height": 36,
+          "auto": "shield"
         },
         {
           "type": "text",
           "text": "WEST",
           "height": 15,
-          "font": "RG2014D"
+          "font": "RG2014D",
+          "auto": "direction"
         }
       ]
     },
     {
       "type": "text",
-      "text": "Albany"
+      "text": "Albany",
+      "auto": "name"
     },
     {
       "type": "row",
@@ -44,5 +47,6 @@
       ],
       "justify": "between"
     }
-  ]
+  ],
+  "autoRoad": "here"
 }

@@ -24,23 +24,28 @@
           "type": "shield",
           "network": "I",
           "number": "95",
-          "height": 36
+          "height": 36,
+          "auto": "shield"
         },
         {
           "type": "text",
           "text": "NORTH",
           "height": 15,
-          "font": "RG2014D"
+          "font": "RG2014D",
+          "auto": "direction"
         }
       ]
     },
     {
       "type": "text",
-      "text": "Boston"
+      "text": "Boston",
+      "auto": "name"
     },
     {
       "type": "text",
-      "text": "Portsmouth NH"
+      "text": "Portsmouth NH",
+      "auto": "name2"
     }
-  ]
+  ],
+  "autoRoad": "exit"
 }

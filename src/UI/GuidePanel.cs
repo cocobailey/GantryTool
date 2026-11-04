@@ -27,6 +27,7 @@ namespace GantryTool.UI
         private const float MinPartSize = 10f;
         private const float DragStart = 6f;
         private const float RowHeight = 34f;
+        private const float SliderSlack = 0.06f;   // a slider moves in steps of 0.1 m
         private const float MaxSignWidth = 12f, MaxSignHeight = 6f;
         private const float TextCommitDelay = 0.05f;   // just enough to take in keys pressed together
         private const string Theme = "us";
@@ -54,6 +55,7 @@ namespace GantryTool.UI
         private bool _rebuild;
         private float _commitAt = -1f;
         private GuideHead _shown;
+        private UISlider _widthSlider, _heightSlider;
         private Dictionary<string, object> _doc;
         private bool _placementPage;
         private bool _picking;
@@ -160,6 +162,30 @@ namespace GantryTool.UI
 
             DragPart(g);
             UpdatePreview(g, now);
+            FollowSize(g, now);
+        }
+
+        /// <summary>Keeps the size sliders true when something else resizes the sign, like dragging it over more lanes.</summary>
+        private void FollowSize(Gantry g, GuideHead sign)
+        {
+            if (_widthSlider == null || (Input.GetMouseButton(0) && (_widthSlider.containsMouse || _heightSlider.containsMouse)))
+            {
+                return;
+            }
+
+            GuidePlacement placed = GuideMeshBuilder.Place(g, sign);
+            _building = true;
+            if (Mathf.Abs(_widthSlider.value - placed.WidthMetres) > SliderSlack)
+            {
+                _widthSlider.value = placed.WidthMetres;
+            }
+
+            if (Mathf.Abs(_heightSlider.value - placed.PanelMetres) > SliderSlack)
+            {
+                _heightSlider.value = placed.PanelMetres;
+            }
+
+            _building = false;
         }
 
         /// <summary>Shows the sign as it stands now, as big as fits, keeping its shape.</summary>
@@ -499,6 +525,7 @@ namespace GantryTool.UI
             }
 
             _preview = null;
+            _widthSlider = _heightSlider = null;
             PreviewBox(g, sign);
             PageButtons();
             if (_placementPage)
@@ -644,6 +671,12 @@ namespace GantryTool.UI
                 _rebuild = true;
             });
             SchemeDropdown(top, 2f * (third + 6f), third, g);
+            if (Json.Has(_doc, GuideAutoFill.RoadKey))
+            {
+                var fill = _content.AddUIComponent<UIPanel>();
+                fill.size = new Vector2(_content.width, RowHeight);
+                RowButton(fill, 0f, _content.width, "Fill in from the road", "Write in the road this sign is about, from the map; useful after turning the sign round or renaming a road (Ctrl+Z undoes it)", () => FillFromRoad(g));
+            }
 
             if (_saving)
             {
@@ -655,6 +688,26 @@ namespace GantryTool.UI
             }
 
             AddButtons(g);
+        }
+
+        private void FillFromRoad(Gantry g)
+        {
+            CommitText();
+            bool exit = Json.Str(_doc, GuideAutoFill.RoadKey) == GuideAutoFill.RoadExit;
+            _selected = null;
+            _selectedPath = null;
+            _saving = false;
+            if (GuideAutoFill.Fill(_doc, RoadFinder.Find(g, _shown, _doc)))
+            {
+                _notice = null;
+                Commit(g, "sign content");
+            }
+            else
+            {
+                _notice = exit ? "No exit found on the road ahead, so this sign wasn't changed." : "No road with a usable name found below this sign, so it wasn't changed.";
+            }
+
+            _rebuild = true;
         }
 
         /// <summary>Asks for a name in place of the part controls.</summary>
@@ -860,7 +913,13 @@ namespace GantryTool.UI
 
         private void UseTemplate(Gantry g, string name)
         {
-            UseDesign(g, GuideAssets.Template(Theme, name));
+            Dictionary<string, object> template = GuideAssets.Template(Theme, name);
+            if (Settings.Current.AutoFillSigns)
+            {
+                GuideAutoFill.Fill(template, RoadFinder.Find(g, _shown, template));
+            }
+
+            UseDesign(g, template);
         }
 
         private void UseDesign(Gantry g, Dictionary<string, object> template)
@@ -899,8 +958,8 @@ namespace GantryTool.UI
         private void SizeControls(UIHelper helper, Gantry g, GuideHead sign)
         {
             GuidePlacement placed = GuideMeshBuilder.Place(g, sign);
-            UIUtils.StyledSlider(helper, _content.width, "Width", 1f, Mathf.Max(MaxSignWidth, g.Span), 0.1f, placed.WidthMetres, " m", "0.0", true, v => SetSize(g, GuideFit.WidthKey, v));
-            UIUtils.StyledSlider(helper, _content.width, "Height", 1f, MaxSignHeight, 0.1f, placed.PanelMetres, " m", "0.0", true, v => SetSize(g, GuideFit.HeightKey, v));
+            _widthSlider = UIUtils.StyledSlider(helper, _content.width, "Width", 1f, Mathf.Max(MaxSignWidth, g.Span), 0.1f, placed.WidthMetres, " m", "0.0", true, v => SetSize(g, GuideFit.WidthKey, v));
+            _heightSlider = UIUtils.StyledSlider(helper, _content.width, "Height", 1f, MaxSignHeight, 0.1f, placed.PanelMetres, " m", "0.0", true, v => SetSize(g, GuideFit.HeightKey, v));
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, RowHeight);
             RowButton(row, 0f, _content.width, "Reset to default size", "Go back to the default size, matching the signs beside it (Ctrl+Z brings yours back)", () =>

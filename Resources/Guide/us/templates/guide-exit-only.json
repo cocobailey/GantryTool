@@ -25,19 +25,22 @@
           "type": "shield",
           "network": "US",
           "number": "1",
-          "height": 36
+          "height": 36,
+          "auto": "shield"
         },
         {
           "type": "text",
           "text": "SOUTH",
           "height": 15,
-          "font": "RG2014D"
+          "font": "RG2014D",
+          "auto": "direction"
         }
       ]
     },
     {
       "type": "text",
-      "text": "Saugus"
+      "text": "Saugus",
+      "auto": "name"
     },
     {
       "type": "panel",
@@ -62,5 +65,6 @@
         }
       ]
     }
-  ]
+  ],
+  "autoRoad": "exit"
 }

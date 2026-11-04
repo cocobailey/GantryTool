@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev23";
+        public const string Version = "2.0.0-dev25";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -57,6 +57,9 @@ namespace GantryTool
                     }
                 });
                 GantryTool.UI.DropdownToggle.Attach(startDrop);
+                AddCheckbox(newGroup, "Fill in road names on new guide signs", s.AutoFillSigns,
+                    "New guide signs start with the name of the road below them, or of the road the next exit leads to. You can change any of it.",
+                    v => s.AutoFillSigns = v);
                 var typeDrop = (UIDropDown)newGroup.AddDropdown("New gantry type", GantryShape.Names, GantryShape.Valid(s.NewGantryType), index =>
                 {
                     if (index >= 0 && index < GantryShape.Count)

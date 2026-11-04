@@ -1,0 +1,134 @@
+using System;
+using System.Collections.Generic;
+using ColossalFramework;
+using GantryTool.Data;
+using GantryTool.Guide;
+using UnityEngine;
+
+namespace GantryTool.Detect
+{
+    /// <summary>Works out which road a sign on a gantry is about, from the game's road network. Main thread.</summary>
+    public static class RoadFinder
+    {
+        private sealed class GameNetwork : IRoadNetwork
+        {
+            public List<ushort> Out(ushort node)
+            {
+                NetManager nm = Singleton<NetManager>.instance;
+                var list = new List<ushort>();
+                for (int i = 0; i < 8; i++)
+                {
+                    ushort s = nm.m_nodes.m_buffer[node].GetSegment(i);
+                    if (s != 0 && LeavesBy(ref nm.m_segments.m_buffer[s], node))
+                    {
+                        list.Add(s);
+                    }
+                }
+
+                return list;
+            }
+
+            private static bool LeavesBy(ref NetSegment seg, ushort node)
+            {
+                NetInfo info = seg.Info;
+                if (info == null || !(info.m_netAI is RoadBaseAI))
+                {
+                    return false;
+                }
+
+                bool invert = (seg.m_flags & NetSegment.Flags.Invert) != 0;
+                return (seg.m_startNode == node) != invert ? info.m_forwardVehicleLaneCount > 0 : info.m_backwardVehicleLaneCount > 0;
+            }
+
+            public ushort OtherNode(ushort segment, ushort node)
+            {
+                NetSegment[] segs = Singleton<NetManager>.instance.m_segments.m_buffer;
+                return segs[segment].m_startNode == node ? segs[segment].m_endNode : segs[segment].m_startNode;
+            }
+
+            public Vector3 Position(ushort node)
+            {
+                return Singleton<NetManager>.instance.m_nodes.m_buffer[node].m_position;
+            }
+
+            public string Name(ushort segment)
+            {
+                return Singleton<NetManager>.instance.GetSegmentName(segment);
+            }
+
+            public bool SameName(ushort a, ushort b)
+            {
+                return a == b || Singleton<NetManager>.instance.IsSameName(a, b);
+            }
+
+            public bool IsRamp(ushort segment)
+            {
+                NetInfo info = Singleton<NetManager>.instance.m_segments.m_buffer[segment].Info;
+                return info != null && info.name != null && info.name.IndexOf("ramp", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+
+        /// <summary>The roads a sign like this should name; null if it doesn't say, or none can be found.</summary>
+        public static List<RoadFacts> Find(Gantry g, GuideHead sign, Dictionary<string, object> design)
+        {
+            string which = Json.Str(design, GuideAutoFill.RoadKey);
+            if (which == null)
+            {
+                return null;
+            }
+
+            List<GantryLane> lanes;
+            lock (GantryManager.Lock)
+            {
+                lanes = GuideFit.FaceLanes(g.Lanes, sign.Side);
+            }
+
+            if (lanes.Count == 0)
+            {
+                return null;
+            }
+
+            GantryLane lane = LaneUnder(lanes, sign);
+            var net = new GameNetwork();
+            Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
+            Vector2 heading = new Vector2(-d.y, d.x) * -sign.Side;
+
+            List<RoadFacts> found;
+            if (which == GuideAutoFill.RoadExit)
+            {
+                NetSegment seg = Singleton<NetManager>.instance.m_segments.m_buffer[lane.Segment];
+                Vector3 a = net.Position(seg.m_startNode), b = net.Position(seg.m_endNode);
+                ushort ahead = Vector2.Dot(new Vector2(b.x - a.x, b.z - a.z), heading) >= 0f ? seg.m_endNode : seg.m_startNode;
+                found = RoadWalk.NextExit(net, lane.Segment, ahead);
+            }
+            else
+            {
+                found = new List<RoadFacts> { new RoadFacts { Name = net.Name(lane.Segment), Heading = heading } };
+            }
+
+            Log.Debug("Road for a guide sign (" + which + "): " + (found.Count > 0 ? found[0].Name : "none found") + (found.Count > 1 ? ", " + found[1].Name : ""));
+            return found;
+        }
+
+        private static GantryLane LaneUnder(List<GantryLane> lanes, GuideHead sign)
+        {
+            if (sign.FitFirst > 0)
+            {
+                int first = Mathf.Clamp(sign.FitFirst - 1, 0, lanes.Count - 1);
+                int last = Mathf.Clamp(sign.FitLast - 1, first, lanes.Count - 1);
+                return lanes[(first + last) / 2];
+            }
+
+            GantryLane best = lanes[0];
+            foreach (GantryLane l in lanes)
+            {
+                if (Mathf.Abs(l.Offset - sign.Along) < Mathf.Abs(best.Offset - sign.Along))
+                {
+                    best = l;
+                }
+            }
+
+            return best;
+        }
+    }
+}

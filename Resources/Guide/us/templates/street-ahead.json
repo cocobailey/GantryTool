@@ -21,7 +21,8 @@
     {
       "type": "text",
       "text": "Main St",
-      "height": 16
+      "height": 16,
+      "auto": "name"
     },
     {
       "type": "row",
@@ -40,5 +41,6 @@
         }
       ]
     }
-  ]
+  ],
+  "autoRoad": "exit"
 }

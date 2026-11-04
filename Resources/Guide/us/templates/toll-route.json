@@ -29,7 +29,8 @@
               "type": "shield",
               "network": "I",
               "number": "90",
-              "height": 32
+              "height": 32,
+              "auto": "shield"
             }
           ]
         },
@@ -41,16 +42,19 @@
               "type": "text",
               "text": "EAST",
               "height": 14,
-              "font": "RG2014D"
+              "font": "RG2014D",
+              "auto": "direction"
             },
             {
               "type": "text",
-              "text": "Boston"
+              "text": "Boston",
+              "auto": "name"
             }
           ]
         }
       ],
       "align": "center"
     }
-  ]
+  ],
+  "autoRoad": "here"
 }
