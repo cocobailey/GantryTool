@@ -20,6 +20,7 @@ namespace GantryTool.Data
         public readonly List<ExtraHead> ExtraHeads = new List<ExtraHead>();
         public readonly List<GuideHead> GuideSigns = new List<GuideHead>();
         public bool LaneHeads = true;
+        public bool BlankBacks;
 
         /// <summary>Call under GantryManager.Lock.</summary>
         public static GantryState Capture(Gantry g)
@@ -40,6 +41,7 @@ namespace GantryTool.Data
             s.ExtraHeads.AddRange(g.ExtraHeads);
             s.GuideSigns.AddRange(g.GuideSigns);
             s.LaneHeads = g.LaneHeads;
+            s.BlankBacks = g.BlankBacks;
             return s;
         }
 
@@ -61,6 +63,7 @@ namespace GantryTool.Data
             g.GuideSigns.Clear();
             g.GuideSigns.AddRange(GuideSigns);
             g.LaneHeads = LaneHeads;
+            g.BlankBacks = BlankBacks;
             g.MeshDirty = true;
         }
 
@@ -69,7 +72,7 @@ namespace GantryTool.Data
             if (g.Start != Start || g.End != End || g.BeamDepth != BeamDepth ||
                 !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
                 g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count ||
-                g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads)
+                g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads || g.BlankBacks != BlankBacks)
             {
                 return false;
             }
@@ -98,7 +101,8 @@ namespace GantryTool.Data
             for (int i = 0; i < GuideSigns.Count; i++)
             {
                 GuideHead a = GuideSigns[i], b = g.GuideSigns[i];
-                if (a.Id != b.Id || a.Along != b.Along || a.Scale != b.Scale || a.Side != b.Side || a.Design != b.Design)
+                if (a.Id != b.Id || a.Along != b.Along || a.Scale != b.Scale || a.Side != b.Side || a.Design != b.Design ||
+                    a.FitFirst != b.FitFirst || a.FitLast != b.FitLast || a.LaneArrows != b.LaneArrows)
                 {
                     return false;
                 }

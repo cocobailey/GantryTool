@@ -15,9 +15,18 @@ namespace GantryTool.Guide
         public float Radius;          // corner radius
         public bool SquareLeft, SquareRight;   // the panel's top corner under a tab at that edge is square
         public List<GuideTab> Tabs = new List<GuideTab>();
+        public List<GuidePart> Parts = new List<GuidePart>();
     }
 
     /// <summary>A tab on top of a sign, in sign units.</summary>
+    /// <summary>Where one part of a design was drawn, so an editor can tell what was clicked. Sign units, y down.</summary>
+    public struct GuidePart
+    {
+        public string Path;   // indices through "items" from the design's top, like "2/0"
+        public string Type;
+        public float X, Y, W, H;
+    }
+
     public struct GuideTab
     {
         public float X, Width, Height;
@@ -30,6 +39,8 @@ namespace GantryTool.Guide
     /// </summary>
     public static class GuideRenderer
     {
+        private static readonly List<KeyValuePair<Dictionary<string, object>, Node>> Tracked = new List<KeyValuePair<Dictionary<string, object>, Node>>();
+
         private const string DefaultArrow = "M32 0 H68 V88 H100 L50 150 L0 88 H32 Z";
 
         private sealed class Ctx
@@ -141,7 +152,8 @@ namespace GantryTool.Guide
             {
                 case "text": return Json.Num(item, "height", t.TextHeight);
                 case "shield": return Mathf.Min(Json.Num(item, "height", t.ShieldHeight) * 0.45f, t.TextHeight);
-                case "arrow": return Mathf.Min(Json.Num(item, "height", t.ArrowHeight) * 0.6f, t.TextHeight);
+                case "arrow":
+                case "laneArrows": return Mathf.Min(Json.Num(item, "height", t.ArrowHeight) * 0.6f, t.TextHeight);
                 case "row":
                 case "column":
                 case "panel":
@@ -164,7 +176,8 @@ namespace GantryTool.Guide
             {
                 case "text": return Json.Num(item, "height", t.TextHeight);
                 case "shield": return Json.Num(item, "height", t.ShieldHeight);
-                case "arrow": return Json.Num(item, "height", t.ArrowHeight);
+                case "arrow":
+                case "laneArrows": return Json.Num(item, "height", t.ArrowHeight);
                 case "spacer": return Json.Num(item, "height", 0f);
                 case "row":
                 case "column":
@@ -318,6 +331,32 @@ namespace GantryTool.Guide
                 }
 
                 c.FillPolygon(pts, Colour);
+            }
+        }
+
+        /// <summary>Arrows at set distances from the sign's centre, over the lanes they stand for; takes the full width.</summary>
+        private sealed class LaneArrowsNode : Node
+        {
+            public readonly List<Node> Arrows = new List<Node>();
+            public readonly List<float> At = new List<float>();
+
+            public override void Arrange(float x, float y, float w, float h)
+            {
+                base.Arrange(x, y, w, h);
+                for (int i = 0; i < Arrows.Count; i++)
+                {
+                    Node a = Arrows[i];
+                    float left = Mathf.Clamp(x + w * 0.5f + At[i] - a.W * 0.5f, x, Mathf.Max(x, x + w - a.W));
+                    a.Arrange(left, y, a.W, a.H);
+                }
+            }
+
+            public override void Draw(SignCanvas c, float ppi)
+            {
+                foreach (Node a in Arrows)
+                {
+                    a.Draw(c, ppi);
+                }
             }
         }
 
@@ -504,12 +543,69 @@ namespace GantryTool.Guide
 
         private static Node Build(Theme t, Dictionary<string, object> item, Ctx ctx, bool inRow)
         {
+            Node n = BuildNode(t, item, ctx, inRow);
+            string type = Json.Str(item, "type");
+            if (n != null && type != "row" && type != "column" && type != "spacer" && type != "divider")
+            {
+                Track(item, n);
+            }
+
+            return n;
+        }
+
+        private static void Track(Dictionary<string, object> item, Node n)
+        {
+            Tracked.Add(new KeyValuePair<Dictionary<string, object>, Node>(item, n));
+        }
+
+        /// <summary>The parts drawn, in the order built, found in the design's tree to name them by path.</summary>
+        private static List<GuidePart> CollectParts(Dictionary<string, object> doc)
+        {
+            var paths = new Dictionary<Dictionary<string, object>, string>();
+            AddPaths(doc, "", paths);
+            var parts = new List<GuidePart>();
+            foreach (KeyValuePair<Dictionary<string, object>, Node> kv in Tracked)
+            {
+                string path;
+                if (paths.TryGetValue(kv.Key, out path))
+                {
+                    Node n = kv.Value;
+                    parts.Add(new GuidePart { Path = path, Type = Json.Str(kv.Key, "type"), X = n.X, Y = n.Y, W = n.AW, H = n.AH });
+                }
+            }
+
+            return parts;
+        }
+
+        private static void AddPaths(Dictionary<string, object> parent, string prefix, Dictionary<Dictionary<string, object>, string> paths)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                if (item != null)
+                {
+                    string path = prefix + i;
+                    paths[item] = path;
+                    AddPaths(item, path + "/", paths);
+                }
+            }
+        }
+
+        private static Node BuildNode(Theme t, Dictionary<string, object> item, Ctx ctx, bool inRow)
+        {
             switch (Json.Str(item, "type"))
             {
                 case "text": return BuildText(t, Json.Str(item, "text", ""), Json.Num(item, "height", t.TextHeight), Json.Str(item, "font") ?? ctx.Font,
                     ParseColour(Json.Str(item, "color"), ctx.Fg), Json.Num(item, "tracking", 0f));
                 case "shield": return BuildShield(t, item, ctx);
                 case "arrow": return BuildArrow(t, item, ctx);
+                case "laneArrows": return BuildLaneArrows(t, item, ctx);
                 case "row":
                 {
                     StackNode s = BuildStack(t, item, Children(item), ctx, true);
@@ -623,6 +719,25 @@ namespace GantryTool.Guide
 
         private const string TurnPath = "M54 150 V82 A24 24 0 0 0 30 58 V78 L0 46 L30 14 V34 A48 48 0 0 1 78 82 V150 Z";
         private const string SplitPath = "M54 150 V128 A24 24 0 0 0 30 104 V124 L0 92 L30 60 V80 A48 48 0 0 1 54 86.4 V34 H34 L66 0 L98 34 H78 V150 Z";
+
+        private static Node BuildLaneArrows(Theme t, Dictionary<string, object> item, Ctx ctx)
+        {
+            var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight) };
+            List<object> at = Json.Arr(item, "at");
+            if (at != null)
+            {
+                foreach (object o in at)
+                {
+                    if (o is double && node.At.Count < 64)
+                    {
+                        node.At.Add((float)(double)o);
+                        node.Arrows.Add(BuildArrow(t, item, ctx));
+                    }
+                }
+            }
+
+            return node;
+        }
 
         private static Node BuildArrow(Theme t, Dictionary<string, object> item, Ctx ctx)
         {
@@ -929,9 +1044,13 @@ namespace GantryTool.Guide
             public float W, H, Pad, Inner;
         }
 
-        /// <summary>Renders a design; the texture's longest side is at most <paramref name="maxPixels"/>.</summary>
-        public static GuideSign Render(Dictionary<string, object> doc, int maxPixels = 1024, float maxPixelsPerUnit = 4f)
+        /// <summary>
+        /// Renders a design; the texture's longest side is at most <paramref name="maxPixels"/>, and its area at most
+        /// 1024 x 1024. With <paramref name="measureOnly"/> just the sign's size is worked out, with no pixels.
+        /// </summary>
+        public static GuideSign Render(Dictionary<string, object> doc, int maxPixels = 1024, float maxPixelsPerUnit = 4f, bool measureOnly = false)
         {
+            Tracked.Clear();
             var t = new Theme(Json.Str(doc, "theme", "us"));
             Color32 bg, fg;
             t.Scheme(Json.Str(doc, "scheme"), out bg, out fg);
@@ -971,6 +1090,7 @@ namespace GantryTool.Guide
                 }
 
                 TabLayout tab = BuildTab(t, i, ctx, Json.Str(exitTab, "font") ?? ctx.Font, bg, fg, border);
+                Track(i, tab.Row);
                 string side = Json.Str(i, "align");
                 (side == "left" || side == "start" ? left : side == "center" ? centre : right).Add(tab);
             }
@@ -1000,6 +1120,7 @@ namespace GantryTool.Guide
                     flush();
                     BoxNode band = BuildPanel(t, i, ctx);
                     band.Fill = true;
+                    Track(i, band);
                     parts.Add(band);
                 }
                 else
@@ -1034,8 +1155,13 @@ namespace GantryTool.Guide
             float panelH = bodyH + extraH + 4f * border;
             float height = tabsH + panelH;
 
+            if (measureOnly)
+            {
+                return new GuideSign { Width = width, Height = height };
+            }
+
             // Bake size.
-            float ppu = Mathf.Min(maxPixelsPerUnit, maxPixels / Mathf.Max(width, height));
+            float ppu = Mathf.Min(Mathf.Min(maxPixelsPerUnit, maxPixels / Mathf.Max(width, height)), 1024f / Mathf.Sqrt(width * height));
             int pw = Mathf.Max(1, Mathf.CeilToInt(width * ppu)), ph = Mathf.Max(1, Mathf.CeilToInt(height * ppu));
             var canvas = new SignCanvas(pw, ph);
 
@@ -1114,7 +1240,8 @@ namespace GantryTool.Guide
                 Radius = Mathf.Max(0f, radius),
                 SquareLeft = left.Count > 0,
                 SquareRight = right.Count > 0,
-                Tabs = tabShapes
+                Tabs = tabShapes,
+                Parts = CollectParts(doc)
             };
         }
 

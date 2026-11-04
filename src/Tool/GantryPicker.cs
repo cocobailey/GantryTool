@@ -83,12 +83,12 @@ namespace GantryTool.Tool
                 foreach (GuideHead sign in Guides)
                 {
                     float along, w, h;
-                    if (!GuideMeshBuilder.Layout(sign, span, out along, out w, out h))
+                    if (!GuideMeshBuilder.Layout(g, sign, out along, out w, out h))
                     {
                         continue;
                     }
 
-                    float midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, h);
+                    float midY = GuideMeshBuilder.CentreY(g, h);
                     float depth = SignalMeshBuilder.HeadDepth * 0.5f + 0.25f;
                     float t;
                     if (RayBox(ray, g.Start, dir, side, along - w * 0.5f, along + w * 0.5f, midY - h * 0.5f, midY + h * 0.5f, depth, out t) && t < bestT)

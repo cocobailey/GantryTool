@@ -370,6 +370,33 @@ namespace GantryTool.Data
             plus = ResolveSpeed(plus.Symbol == SignalSymbol.Auto ? new FaceSign(ap, 0) : plus, lanes[lane]);
         }
 
+        /// <summary>Turns off the red X a head shows to traffic going the other way along its lane.</summary>
+        public static void BlankBack(List<GantryLane> lanes, List<ExtraHead> extras, int head, ref FaceSign minus, ref FaceSign plus)
+        {
+            int lane = head;
+            if (HeadRef.IsExtra(head))
+            {
+                int i = extras != null ? HeadRef.IndexOf(extras, HeadRef.ExtraId(head)) : -1;
+                lane = i >= 0 ? LinkedLane(lanes, extras[i]) : -1;
+            }
+
+            if (lane < 0 || lane >= lanes.Count)
+            {
+                return;
+            }
+
+            // Traffic heading +side sees the minus face, so its back is the plus face.
+            int travel = lanes[lane].TravelSign;
+            if (travel > 0 && plus.Symbol == SignalSymbol.Cross)
+            {
+                plus = new FaceSign(SignalSymbol.Blank, 0);
+            }
+            else if (travel < 0 && minus.Symbol == SignalSymbol.Cross)
+            {
+                minus = new FaceSign(SignalSymbol.Blank, 0);
+            }
+        }
+
         /// <summary>Faces of any head (<see cref="HeadRef"/> numbering).</summary>
         public static void ResolveHead(List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, int head,
             out FaceSign minus, out FaceSign plus, SignStyle style = SignStyle.Europe)

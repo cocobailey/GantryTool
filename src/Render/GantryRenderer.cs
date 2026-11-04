@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using GantryTool.Data;
 using GantryTool.Detect;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace GantryTool.Render
 {
@@ -101,10 +102,8 @@ namespace GantryTool.Render
                     DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : Color.white);
                     SignStyle style = SignStyles.Resolve(g.Style);
                     DrawSignals(g.SignalMesh, g.Origin, style);
-                    if (g.GuideBackMesh != null)
-                    {
-                        DrawStructure(g.GuideBackMesh, g.Origin, Color.white);
-                    }
+                    DrawGuideSteel(g.GuideBackMesh, g.Origin, ShadowCastingMode.Off);
+                    DrawGuideSteel(g.GuideCasterMesh, g.Origin, ShadowCastingMode.ShadowsOnly);
 
                     foreach (GuideDraw d in g.GuideDraws)
                     {
@@ -175,6 +174,23 @@ namespace GantryTool.Render
             _instance._drawCallData.m_defaultCalls++;
         }
 
+        /// <summary>Draws a guide sign's back, or the sheet that casts its shadow (see <see cref="GuideMeshBuilder"/>).</summary>
+        private static void DrawGuideSteel(Mesh mesh, Vector3 origin, ShadowCastingMode shadows)
+        {
+            if (_instance == null || !GantryMaterials.Ready || mesh == null)
+            {
+                return;
+            }
+
+            MaterialPropertyBlock block = _instance._block;
+            block.Clear();
+            block.SetColor(_instance._idColor, Color.white);
+            block.SetVector(_instance._idObjectIndex, RenderManager.DefaultColorLocation);
+            Graphics.DrawMesh(mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one),
+                GantryMaterials.Structure, GantryMaterials.Layer, null, 0, block, shadows);
+            _instance._drawCallData.m_defaultCalls++;
+        }
+
         /// <summary>Draws a guide sign face, lit like the signal faces so it reads at night.</summary>
         private static void DrawGuide(GuideDraw d, Vector3 origin)
         {
@@ -189,7 +205,7 @@ namespace GantryTool.Render
             Vector4 index = RenderManager.DefaultColorLocation;
             index.z = 1f;
             block.SetVector(_instance._idObjectIndex, index);
-            Graphics.DrawMesh(d.Mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one), d.Material, GantryMaterials.Layer, null, 0, block);
+            Graphics.DrawMesh(d.Mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one), d.Material, GantryMaterials.Layer, null, 0, block, ShadowCastingMode.Off);
             _instance._drawCallData.m_defaultCalls++;
         }
 
@@ -264,7 +280,7 @@ namespace GantryTool.Render
                     g.SignalsDirty = false;
                     GantryManager.RefreshExtraLinks(g);
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas, false, g.LaneHeads);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas, false, g.LaneHeads, g.BlankBacks);
                     GuideMeshBuilder.Build(g);
                     if (g.Mesh != null)
                     {
@@ -284,7 +300,7 @@ namespace GantryTool.Render
                     }
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, true, g.LaneHeads);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, true, g.LaneHeads, g.BlankBacks);
                     SignalMeshBuilder.BuildRampBeacons(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
                         g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, atlas, g.RampBeacons, g.LaneHeads);
                 }

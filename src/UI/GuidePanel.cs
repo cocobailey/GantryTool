@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using ColossalFramework.IO;
 using ColossalFramework.UI;
 using GantryTool.Data;
 using GantryTool.Detect;
@@ -11,14 +13,34 @@ using UnityEngine;
 namespace GantryTool.UI
 {
     /// <summary>
-    /// Editor for a guide sign on a gantry, opened by clicking the sign with the gantry tool: which sign, which way it
-    /// faces, its position and size. It hides itself as soon as the sign is no longer the selected head.
+    /// Editor for a guide sign on a gantry, opened by clicking the sign with the gantry tool. A live picture of the sign
+    /// stays on top, with two pages under it. On Design you click a part of the picture and change just that part; Placement
+    /// says where the sign goes. It hides itself as soon as the sign is no longer the selected head.
     /// </summary>
     public sealed class GuidePanel : UIPanel
     {
-        private const float PanelWidth = 420f;
+        private const float PanelWidth = 680f;
         private const float Margin = 12f;
+        private const float PreviewHeight = 210f;
+        private const float MaxPickerHeight = 370f;
+        private const float InspectorHeight = 118f;
+        private const float MinPartSize = 10f;
+        private const float RowHeight = 34f;
+        private const float TextCommitDelay = 0.35f;
         private const string Theme = "us";
+
+        private static readonly string[] ArrowKeys =
+        {
+            "down", "up", "left", "right", "down-left", "down-right", "up-left", "up-right", "turn-left", "turn-right", "split-left", "split-right"
+        };
+
+        private static readonly string[] ArrowLabels =
+        {
+            "Down", "Up", "Left", "Right", "Down left", "Down right", "Up left", "Up right", "Turn left", "Turn right", "Split left", "Split right"
+        };
+
+        private static readonly string[] SizeLabels = { "Small", "Medium", "Normal", "Large" };
+        private static readonly float[] SizeHeights = { 10f, 12f, 16f, 20f };
 
         public GantryPlaceTool Tool;
 
@@ -27,6 +49,24 @@ namespace GantryTool.UI
         private int _gantryId;
         private int _head;
         private bool _building;
+        private bool _rebuild;
+        private float _commitAt = -1f;
+        private GuideHead _shown;
+        private Dictionary<string, object> _doc;
+        private bool _placementPage;
+        private bool _picking;
+        private UITextureSprite _preview;
+        private GuideCacheEntry _entry;
+        private float _pictureScale;
+        private readonly UISprite[] _selectBox = new UISprite[4];
+        private readonly UISprite[] _hoverBox = new UISprite[4];
+        private Dictionary<string, object> _selected;   // the part being edited, in _doc
+        private string _selectedPath;
+        private UITextField _focus;
+        private bool _saving;
+        private string _notice;
+
+        private static string MySignsFolder => Path.Combine(Path.Combine(DataLocation.localApplicationData, "GantryTool"), "GuideSigns");
 
         public static GuidePanel Create()
         {
@@ -74,33 +114,210 @@ namespace GantryTool.UI
         public override void Start()
         {
             base.Start();
-            relativePosition = new Vector3(120f, 140f);
+            relativePosition = new Vector3(120f, 90f);
         }
 
         public override void Update()
         {
             base.Update();
-            if (isVisible && (Tool == null || !Tool.enabled || Tool.SelectedHeadGantry != _gantryId || Tool.SelectedHead != _head))
+            if (!isVisible)
             {
-                Hide();
+                return;
             }
+
+            if (Tool == null || !Tool.enabled || Tool.SelectedHeadGantry != _gantryId || Tool.SelectedHead != _head)
+            {
+                CommitText();
+                Hide();
+                return;
+            }
+
+            if (_commitAt >= 0f && Time.realtimeSinceStartup >= _commitAt)
+            {
+                CommitText();
+            }
+
+            // A change from elsewhere (Ctrl+Z) or one that changes which controls show.
+            Gantry g = GantryManager.Find(_gantryId);
+            GuideHead now;
+            if (g == null || !GantryManager.GetGuideSign(g, _head, out now))
+            {
+                return;
+            }
+
+            if (_commitAt < 0f && (_rebuild || Differs(now, _shown)))
+            {
+                _rebuild = false;
+                Show(g);
+            }
+
+            UpdatePreview(g, now);
+        }
+
+        /// <summary>Shows the sign as it stands now, as big as fits, keeping its shape.</summary>
+        private void UpdatePreview(Gantry g, GuideHead sign)
+        {
+            if (_preview == null)
+            {
+                return;
+            }
+
+            GuideCacheEntry e = GuideCache.Get(GuideMeshBuilder.Place(g, sign).Design);
+            if (e == null || e == _entry && e.Texture == _preview.texture)
+            {
+                return;
+            }
+
+            _entry = e;
+            _preview.texture = e.Texture;
+            FitPicture(_preview, e.Texture, _content.width - 8f, PreviewHeight - 8f, 4f, 4f);
+            _pictureScale = _preview.width / e.Width;
+            PlaceBox(_selectBox, FindPart(_selectedPath));
+        }
+
+        // ------------------------------------------------------------------------------ clicking on the picture
+
+        private GuidePart? FindPart(string path)
+        {
+            if (_entry != null && _entry.Parts != null && path != null)
+            {
+                foreach (GuidePart p in _entry.Parts)
+                {
+                    if (p.Path == path)
+                    {
+                        return p;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>The smallest part under a point on the picture, so a word wins over the band it sits in.</summary>
+        private GuidePart? PartUnder(Ray ray)
+        {
+            Vector2 at;
+            if (_entry == null || _entry.Parts == null || _pictureScale <= 0f || !_preview.GetHitPosition(ray, out at))
+            {
+                return null;
+            }
+
+            float x = at.x / _pictureScale, y = at.y / _pictureScale, best = float.MaxValue;
+            GuidePart? found = null;
+            foreach (GuidePart p in _entry.Parts)
+            {
+                float w = Mathf.Max(p.W, MinPartSize), h = Mathf.Max(p.H, MinPartSize);
+                float x0 = p.X + (p.W - w) * 0.5f, y0 = p.Y + (p.H - h) * 0.5f;
+                if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h && w * h < best)
+                {
+                    best = w * h;
+                    found = p;
+                }
+            }
+
+            return found;
+        }
+
+        private void ClickPicture(Ray ray)
+        {
+            CommitText();
+            GuidePart? part = PartUnder(ray);
+            _saving = false;
+            _notice = null;
+            _selectedPath = part.HasValue ? part.Value.Path : null;
+            _selected = _selectedPath != null ? ItemAt(_doc, _selectedPath) : null;
+            _rebuild = true;
+        }
+
+        private void AddBox(UIPanel box, UISprite[] sprites, Color32 colour)
+        {
+            for (int i = 0; i < sprites.Length; i++)
+            {
+                UISprite s = box.AddUIComponent<UISprite>();
+                s.spriteName = "EmptySprite";
+                s.color = colour;
+                s.isInteractive = false;
+                s.isVisible = false;
+                sprites[i] = s;
+            }
+        }
+
+        /// <summary>Draws a box around a part on the picture, or hides it.</summary>
+        private void PlaceBox(UISprite[] sprites, GuidePart? part)
+        {
+            if (sprites[0] == null)
+            {
+                return;
+            }
+
+            foreach (UISprite s in sprites)
+            {
+                s.isVisible = part.HasValue;
+            }
+
+            if (!part.HasValue)
+            {
+                return;
+            }
+
+            const float Line = 2f, Pad = 2f;
+            GuidePart p = part.Value;
+            Vector3 origin = _preview.relativePosition;
+            float x = origin.x + p.X * _pictureScale - Pad, y = origin.y + p.Y * _pictureScale - Pad;
+            float w = p.W * _pictureScale + 2f * Pad, h = p.H * _pictureScale + 2f * Pad;
+            sprites[0].size = new Vector2(w, Line);
+            sprites[0].relativePosition = new Vector3(x, y);
+            sprites[1].size = new Vector2(w, Line);
+            sprites[1].relativePosition = new Vector3(x, y + h - Line);
+            sprites[2].size = new Vector2(Line, h);
+            sprites[2].relativePosition = new Vector3(x, y);
+            sprites[3].size = new Vector2(Line, h);
+            sprites[3].relativePosition = new Vector3(x + w - Line, y);
+        }
+
+        private static void FitPicture(UITextureSprite sprite, Texture2D tex, float w, float h, float x, float y)
+        {
+            float scale = Mathf.Min(w / tex.width, h / tex.height);
+            sprite.size = new Vector2(tex.width * scale, tex.height * scale);
+            sprite.relativePosition = new Vector3(x + (w - sprite.width) * 0.5f, y + (h - sprite.height) * 0.5f);
+        }
+
+        private static bool Differs(GuideHead a, GuideHead b)
+        {
+            return a.Design != b.Design || a.Side != b.Side || a.Scale != b.Scale || a.FitFirst != b.FitFirst || a.FitLast != b.FitLast || a.LaneArrows != b.LaneArrows;
         }
 
         public void ShowFor(Gantry g, int head)
         {
+            CommitText();
+            _gantryId = g.Id;
+            _head = head;
+            _picking = false;
+            _saving = false;
+            _notice = null;
+            _selected = null;
+            _selectedPath = null;
+            _title.text = "Guide sign on gantry #" + g.Id;
+            Show(g);
+            Show();
+            BringToFront();
+        }
+
+        private void Show(Gantry g)
+        {
             try
             {
                 _building = true;
-                _gantryId = g.Id;
-                _head = head;
-                _title.text = "Guide sign on gantry #" + g.Id;
+                _focus = null;
                 Rebuild(g);
-                Show();
-                BringToFront();
+                if (_focus != null)
+                {
+                    _focus.Focus();
+                }
             }
             catch (Exception e)
             {
-                Log.Error("GuidePanel.ShowFor failed", e);
+                Log.Error("GuidePanel failed to build", e);
             }
             finally
             {
@@ -123,38 +340,47 @@ namespace GantryTool.UI
                 return;
             }
 
-            var helper = new UIHelper(_content);
-            TemplateDropdown(helper, g, sign);
-            FacingDropdown(helper, g, sign);
+            // The part being edited is found again by where it is, as the design is read afresh.
+            if (_selected != null)
+            {
+                _selectedPath = PathOf(_doc, _selected, "");
+            }
 
-            UIUtils.StyledSlider(helper, _content.width, "Position along beam", 0f, Mathf.Max(0.5f, g.Span), 0.05f, sign.Along, " m", "0.00", true, v =>
+            _shown = sign;
+            _doc = ParseDesign(sign.Design);
+            _selected = _selectedPath != null ? ItemAt(_doc, _selectedPath) : null;
+            if (_selected == null)
             {
-                Change(g, "sign position", h =>
-                {
-                    h.Along = v;
-                    return h;
-                });
-            });
-            UIUtils.StyledSlider(helper, _content.width, "Sign size", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, sign.Scale * 100f, " %", "0", true, v =>
+                _selectedPath = null;
+            }
+
+            _preview = null;
+            PreviewBox(g, sign);
+            PageButtons();
+            if (_placementPage)
             {
-                Change(g, "sign size", h =>
-                {
-                    h.Scale = v / 100f;
-                    return h;
-                });
-            });
+                PlacementPage(g, sign);
+            }
+            else if (_picking)
+            {
+                SignPicker(g);
+            }
+            else
+            {
+                DesignPage(g);
+            }
 
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, 34f);
             float half = (_content.width - 6f) / 2f;
-            RowButton(row, 0, half, "Undo", "Undo the last change (Ctrl+Z)", () =>
+            RowButton(row, 0f, half, "Undo", "Undo the last change (Ctrl+Z)", () =>
             {
                 if (Tool != null)
                 {
                     Tool.UndoLast();
                 }
             });
-            RowButton(row, 1, half, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
+            RowButton(row, half + 6f, half, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
             {
                 Gantry cur = GantryManager.Find(_gantryId);
                 if (cur != null)
@@ -180,45 +406,346 @@ namespace GantryTool.UI
             height = _content.relativePosition.y + bottom + 12f;
         }
 
-        private void TemplateDropdown(UIHelper helper, Gantry g, GuideHead sign)
+        private static Dictionary<string, object> ParseDesign(string design)
         {
-            List<string> names = GuideAssets.TemplateNames(Theme);
-            var labels = new string[names.Count];
-            string current = null;
             try
             {
-                current = Json.Str(Json.Parse(sign.Design) as Dictionary<string, object>, "id");
+                var doc = Json.Parse(design) as Dictionary<string, object>;
+                if (doc != null)
+                {
+                    return doc;
+                }
             }
             catch (FormatException)
             {
             }
 
-            int selected = 0;
-            for (int i = 0; i < names.Count; i++)
+            return new Dictionary<string, object> { { "theme", Theme } };
+        }
+
+        // ------------------------------------------------------------------------------ the sign, its facing and lanes
+
+        private void PreviewBox(Gantry g, GuideHead sign)
+        {
+            var box = _content.AddUIComponent<UIPanel>();
+            box.size = new Vector2(_content.width, PreviewHeight);
+            box.backgroundSprite = "GenericPanel";
+            box.color = new Color32(60, 66, 74, 255);
+            _preview = box.AddUIComponent<UITextureSprite>();
+            _entry = null;
+            AddBox(box, _hoverBox, new Color32(255, 255, 255, 200));
+            AddBox(box, _selectBox, new Color32(255, 210, 40, 255));
+            if (!_placementPage && !_picking)
             {
-                Dictionary<string, object> t = GuideAssets.Template(Theme, names[i]);
-                labels[i] = Json.Str(t, "name", names[i]);
-                if (Json.Str(t, "id") == current)
-                {
-                    selected = i;
-                }
+                _preview.tooltip = "Click part of the sign to change it";
+                _preview.eventMouseMove += (c, p) => PlaceBox(_hoverBox, PartUnder(p.ray));
+                _preview.eventMouseLeave += (c, p) => PlaceBox(_hoverBox, null);
+                _preview.eventClick += (c, p) => ClickPicture(p.ray);
+            }
+            else
+            {
+                _preview.isInteractive = false;
             }
 
-            var drop = (UIDropDown)helper.AddDropdown("Sign", labels, selected, index =>
+            UpdatePreview(g, sign);
+        }
+
+        private void PageButtons()
+        {
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            float half = (_content.width - 6f) / 2f;
+            PageButton(row, 0f, half, "Design", "Which sign this is, and what it says", !_placementPage, false);
+            PageButton(row, half + 6f, half, "Placement", "Which way it faces, the lanes it covers and its size", _placementPage, true);
+        }
+
+        private void PageButton(UIPanel row, float x, float w, string text, string tooltip, bool current, bool placement)
+        {
+            RowButton(row, x, w, text, tooltip, () =>
             {
-                if (index < 0 || index >= names.Count)
+                CommitText();
+                _placementPage = placement;
+                _picking = false;
+                _saving = false;
+                _rebuild = true;
+            });
+            var b = (UIButton)row.components[row.components.Count - 1];
+            b.textScale = 0.85f;
+            if (current)
+            {
+                b.normalBgSprite = "ButtonMenuPressed";
+                b.hoveredBgSprite = "ButtonMenuPressed";
+            }
+        }
+
+        private void DesignPage(Gantry g)
+        {
+            var top = _content.AddUIComponent<UIPanel>();
+            top.size = new Vector2(_content.width, RowHeight);
+            float third = (_content.width - 12f) / 3f;
+            RowButton(top, 0f, third, "Choose a different sign...", "Pick a sign to start from; it replaces this one (Ctrl+Z brings it back)", () =>
+            {
+                CommitText();
+                _picking = true;
+                _saving = false;
+                _rebuild = true;
+            });
+            RowButton(top, third + 6f, third, "Save as my sign...", "Keep this design to reuse on any gantry, in any city", () =>
+            {
+                CommitText();
+                _saving = true;
+                _notice = null;
+                _rebuild = true;
+            });
+            SchemeDropdown(top, 2f * (third + 6f), third, g);
+
+            if (_saving)
+            {
+                SavePrompt(g);
+            }
+            else
+            {
+                Inspector(g);
+            }
+
+            AddButtons(g);
+        }
+
+        /// <summary>Asks for a name in place of the part controls.</summary>
+        private void SavePrompt(Gantry g)
+        {
+            var box = _content.AddUIComponent<UIPanel>();
+            box.size = new Vector2(_content.width, InspectorHeight);
+            UIUtils.CreateLabel(box, "Name for this sign (saving under a name you already used replaces that sign)", 0.8f).relativePosition = Vector3.zero;
+            UITextField name = UIUtils.CreateTextField(box, _content.width, MySigns.MaxNameLength);
+            name.relativePosition = new Vector3(0f, 18f);
+            string id = Json.Str(_doc, "id", "");
+            name.text = id.StartsWith(MySigns.IdPrefix, StringComparison.Ordinal) ? Json.Str(_doc, "name", "") : "";
+            name.selectOnFocus = true;
+            _focus = name;
+
+            float half = (_content.width - 6f) / 2f;
+            RowButton(box, 0f, half, "Save", "Save this sign", () =>
+            {
+                string clean = MySigns.CleanName(name.text);
+                if (clean.Length == 0)
                 {
+                    name.Focus();
                     return;
                 }
 
-                string design = Json.Write(GuideAssets.Template(Theme, names[index]));
-                Change(g, "guide sign", h =>
+                bool saved = MySigns.Save(MySignsFolder, clean, _doc);
+                GuideCache.ForgetThumbnail(MyKey(clean));
+                _notice = saved
+                    ? "Saved \"" + clean + "\". It's under My signs in Choose a different sign."
+                    : "That sign couldn't be saved.";
+                _saving = false;
+                _rebuild = true;
+            });
+            RowButton(box, half + 6f, half, "Cancel", "Go back without saving", () =>
+            {
+                _saving = false;
+                _rebuild = true;
+            });
+            box.components[box.components.Count - 1].relativePosition = new Vector3(half + 6f, InspectorHeight - 34f);
+            box.components[box.components.Count - 2].relativePosition = new Vector3(0f, InspectorHeight - 34f);
+        }
+
+        private static string MyKey(string name)
+        {
+            return "my/" + name;
+        }
+
+        /// <summary>A picture of every sign to start from, the player's own first; clicking one puts it on the gantry.</summary>
+        private void SignPicker(Gantry g)
+        {
+            var box = _content.AddUIComponent<UIPanel>();
+            var scroll = box.AddUIComponent<UIScrollablePanel>();
+            scroll.relativePosition = Vector3.zero;
+            scroll.autoLayout = true;
+            scroll.autoLayoutDirection = LayoutDirection.Vertical;
+            scroll.autoLayoutPadding = new RectOffset(0, 0, 0, 4);
+            scroll.clipChildren = true;
+            scroll.scrollWheelDirection = UIOrientation.Vertical;
+            scroll.builtinKeyNavigation = true;
+            float width = _content.width - 14f;
+            scroll.width = width;
+
+            float wanted = 0f;
+            List<MySign> mine = MySigns.List(MySignsFolder);
+            if (mine.Count > 0)
+            {
+                var cells = new List<PickerCell>();
+                foreach (MySign sign in mine)
                 {
-                    h.Design = design;
+                    MySign my = sign;
+                    cells.Add(new PickerCell
+                    {
+                        Label = my.Name,
+                        Id = my.Id,
+                        Picture = GuideCache.Thumbnail(MyKey(my.Name), () => my.Design),
+                        Use = () => UseDesign(g, my.Design),
+                        Delete = () => AskDelete(my.Name)
+                    });
+                }
+
+                wanted += PickerSection(scroll, "My signs", cells, width);
+            }
+
+            var builtIn = new List<PickerCell>();
+            foreach (string name in GuideAssets.TemplateNames(Theme))
+            {
+                string file = name;
+                Dictionary<string, object> template = GuideAssets.Template(Theme, file);
+                builtIn.Add(new PickerCell
+                {
+                    Label = Json.Str(template, "name", file),
+                    Id = Json.Str(template, "id"),
+                    Picture = GuideCache.Thumbnail(Theme, file),
+                    Use = () => UseTemplate(g, file)
+                });
+            }
+
+            wanted += PickerSection(scroll, "Ready-made signs", builtIn, width);
+
+            float h = Mathf.Min(wanted, MaxPickerHeight);
+            scroll.height = h;
+            box.size = new Vector2(_content.width, h);
+            var bar = box.AddUIComponent<UIScrollbar>();
+            bar.orientation = UIOrientation.Vertical;
+            bar.size = new Vector2(10f, h);
+            bar.relativePosition = new Vector3(_content.width - 10f, 0f);
+            bar.incrementAmount = 40f;
+            var track = bar.AddUIComponent<UISlicedSprite>();
+            track.spriteName = "ScrollbarTrack";
+            track.size = bar.size;
+            track.relativePosition = Vector3.zero;
+            bar.trackObject = track;
+            var thumb = track.AddUIComponent<UISlicedSprite>();
+            thumb.spriteName = "ScrollbarThumb";
+            thumb.width = bar.width;
+            bar.thumbObject = thumb;
+            scroll.verticalScrollbar = bar;
+            bar.isVisible = wanted > h;
+
+            var back = _content.AddUIComponent<UIPanel>();
+            back.size = new Vector2(_content.width, RowHeight);
+            RowButton(back, 0f, _content.width, "Keep the current sign", "Go back without changing the sign", () =>
+            {
+                _picking = false;
+                _rebuild = true;
+            });
+        }
+
+        private sealed class PickerCell
+        {
+            public string Label, Id;
+            public Texture2D Picture;
+            public Action Use, Delete;
+        }
+
+        /// <summary>A heading and a grid of signs; returns the height they take.</summary>
+        private float PickerSection(UIScrollablePanel scroll, string title, List<PickerCell> cells, float width)
+        {
+            const int Columns = 5;
+            const float CellHeight = 78f, Gap = 4f;
+            string current = Json.Str(_doc, "id");
+            var head = scroll.AddUIComponent<UIPanel>();
+            head.size = new Vector2(width, 18f);
+            UIUtils.CreateLabel(head, title, 0.8f).relativePosition = Vector3.zero;
+
+            float cell = (width - Gap * (Columns - 1)) / Columns;
+            var grid = scroll.AddUIComponent<UIPanel>();
+            grid.size = new Vector2(width, Mathf.Ceil(cells.Count / (float)Columns) * (CellHeight + Gap));
+            for (int i = 0; i < cells.Count; i++)
+            {
+                PickerCell c = cells[i];
+                Vector3 at = new Vector3((i % Columns) * (cell + Gap), (i / Columns) * (CellHeight + Gap));
+                var b = grid.AddUIComponent<UIButton>();
+                b.size = new Vector2(cell, CellHeight);
+                b.relativePosition = at;
+                b.normalBgSprite = c.Id == current ? "ButtonMenuPressed" : "ButtonMenu";
+                b.hoveredBgSprite = "ButtonMenuHovered";
+                b.pressedBgSprite = "ButtonMenuPressed";
+                b.tooltip = c.Label + ": use this sign (replaces what's on it now)";
+                b.eventClick += (x, p) => c.Use();
+
+                if (c.Picture != null)
+                {
+                    var picture = b.AddUIComponent<UITextureSprite>();
+                    picture.isInteractive = false;
+                    picture.texture = c.Picture;
+                    FitPicture(picture, c.Picture, cell - 8f, CellHeight - 24f, 4f, 4f);
+                }
+
+                UILabel label = UIUtils.CreateLabel(b, c.Label.Length > 20 ? c.Label.Substring(0, 19) + "..." : c.Label, 0.65f);
+                label.isInteractive = false;
+                label.relativePosition = new Vector3(5f, CellHeight - 18f);
+
+                if (c.Delete != null)
+                {
+                    var delete = grid.AddUIComponent<UIButton>();
+                    delete.normalBgSprite = "buttonclose";
+                    delete.hoveredBgSprite = "buttonclosehover";
+                    delete.pressedBgSprite = "buttonclosepressed";
+                    delete.size = new Vector2(20f, 20f);
+                    delete.relativePosition = at + new Vector3(cell - 22f, 2f);
+                    delete.tooltip = "Delete this saved sign";
+                    delete.eventClick += (x, p) => c.Delete();
+                }
+            }
+
+            return head.height + grid.height + 8f;
+        }
+
+        private void AskDelete(string name)
+        {
+            ConfirmPanel confirm = UIView.library.ShowModal<ConfirmPanel>("ConfirmPanel", (c, result) =>
+            {
+                if (result == 1)
+                {
+                    MySigns.Delete(MySignsFolder, name);
+                    GuideCache.ForgetThumbnail(MyKey(name));
+                    _rebuild = true;
+                }
+            });
+            confirm.SetMessage("Delete saved sign", "Delete \"" + name + "\"? Signs already on your gantries stay as they are.");
+        }
+
+        private void UseTemplate(Gantry g, string name)
+        {
+            UseDesign(g, GuideAssets.Template(Theme, name));
+        }
+
+        private void UseDesign(Gantry g, Dictionary<string, object> template)
+        {
+            string design = Json.Write(template);
+            bool arrows = GuideFit.HasArrowRow(template);
+            Change(g, "guide sign", h =>
+            {
+                h.Design = design;
+                h.LaneArrows = arrows;
+                return h;
+            });
+            _picking = false;
+            _selected = null;
+            _selectedPath = null;
+            _rebuild = true;
+        }
+
+        private void PlacementPage(Gantry g, GuideHead sign)
+        {
+            var helper = new UIHelper(_content);
+            FacingDropdown(helper, g, sign);
+            LaneControls(helper, g, sign);
+            UIUtils.StyledSlider(helper, _content.width, sign.FitFirst > 0 ? "Text size" : "Sign size", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, sign.Scale * 100f, " %", "0", true, v =>
+            {
+                Change(g, "sign size", h =>
+                {
+                    h.Scale = v / 100f;
                     return h;
                 });
             });
-            Fit(drop);
         }
 
         private void FacingDropdown(UIHelper helper, Gantry g, GuideHead sign)
@@ -237,16 +764,646 @@ namespace GantryTool.UI
                     h.Side = index == 0 ? (sbyte)-1 : (sbyte)1;
                     return h;
                 });
+                _rebuild = true;
             });
             Fit(drop);
         }
 
-        private void Fit(UIDropDown drop)
+        private void LaneControls(UIHelper helper, Gantry g, GuideHead sign)
         {
-            UIComponent row = drop.parent;
-            row.width = _content.width;
-            drop.width = _content.width - 16f;
-            DropdownToggle.Attach(drop);
+            List<GantryLane> lanes;
+            lock (GantryManager.Lock)
+            {
+                lanes = GuideFit.FaceLanes(g.Lanes, sign.Side);
+            }
+
+            if (lanes.Count > 0)
+            {
+                helper.AddCheckbox("Span whole lanes (off: place it by hand)", sign.FitFirst > 0, on =>
+                {
+                    float along = GuideMeshBuilder.Place(g, _shown).Along;
+                    byte first = 0, last = 0;
+                    if (on)
+                    {
+                        lock (GantryManager.Lock)
+                        {
+                            var others = new List<GuideHead>(g.GuideSigns);
+                            others.RemoveAll(o => o.Id == HeadRef.GuideId(_head));
+                            GuideFit.DefaultRange(g.Lanes, others, _shown.Side, out first, out last);
+                        }
+                    }
+
+                    Change(g, "sign fit", h =>
+                    {
+                        h.Along = along;
+                        h.FitFirst = first;
+                        h.FitLast = last;
+                        h.LaneArrows = on && GuideFit.HasArrowRow(_doc);
+                        return h;
+                    });
+                    _rebuild = true;
+                });
+            }
+
+            if (lanes.Count == 0 || sign.FitFirst == 0)
+            {
+                UIUtils.StyledSlider(helper, _content.width, "Position along beam", 0f, Mathf.Max(0.5f, g.Span), 0.05f, sign.Along, " m", "0.00", true, v =>
+                {
+                    Change(g, "sign position", h =>
+                    {
+                        h.Along = v;
+                        return h;
+                    });
+                });
+                return;
+            }
+
+            var labels = new string[Mathf.Min(lanes.Count, 255)];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                labels[i] = "Lane " + (i + 1) + (labels.Length > 1 && i == 0 ? " (left)" : labels.Length > 1 && i == labels.Length - 1 ? " (right)" : "");
+            }
+
+            int first0 = Mathf.Clamp(sign.FitFirst - 1, 0, labels.Length - 1);
+            int last0 = Mathf.Clamp(sign.FitLast - 1, first0, labels.Length - 1);
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight + 18f);
+            float half = (_content.width - 6f) / 2f;
+            UIUtils.CreateLabel(row, "From", 0.8f).relativePosition = Vector3.zero;
+            UIUtils.CreateLabel(row, "To", 0.8f).relativePosition = new Vector3(half + 6f, 0f);
+            UIDropDown from = Dropdown(row, 0f, half, labels, first0, index =>
+            {
+                Change(g, "sign lanes", h =>
+                {
+                    h.FitFirst = (byte)(index + 1);
+                    h.FitLast = (byte)Mathf.Max(index + 1, h.FitLast);
+                    return h;
+                });
+                _rebuild = true;
+            });
+            from.tooltip = "The leftmost lane the sign covers, as drivers see it";
+            from.relativePosition = new Vector3(0f, 18f);
+            UIDropDown to = Dropdown(row, half + 6f, half, labels, last0, index =>
+            {
+                Change(g, "sign lanes", h =>
+                {
+                    h.FitLast = (byte)(index + 1);
+                    h.FitFirst = (byte)Mathf.Min(index + 1, h.FitFirst);
+                    return h;
+                });
+                _rebuild = true;
+            });
+            to.tooltip = "The rightmost lane the sign covers, as drivers see it";
+            to.relativePosition = new Vector3(half + 6f, 18f);
+            helper.AddCheckbox("One arrow over each lane", sign.LaneArrows, on =>
+            {
+                Change(g, "sign arrows", h =>
+                {
+                    h.LaneArrows = on;
+                    return h;
+                });
+            });
+        }
+
+        // ------------------------------------------------------------------------------ the sign's content
+
+        /// <summary>The controls for the selected part, and nothing else.</summary>
+        private void Inspector(Gantry g)
+        {
+            var box = _content.AddUIComponent<UIPanel>();
+            box.size = new Vector2(_content.width, InspectorHeight);
+            string type = _selected == null ? null : Json.Str(_selected, "type");
+            type = type == "row" && !GuideFit.IsArrows(_selected) ? null : type;
+            switch (type)
+            {
+                case "text":
+                    TextControls(box, g);
+                    break;
+                case "shield":
+                    ShieldControls(box, g);
+                    break;
+                case "arrow":
+                    ArrowControls(box, g, "Which way the arrow points", new List<Dictionary<string, object>> { _selected });
+                    break;
+                case "row":
+                    var arrows = new List<Dictionary<string, object>>();
+                    foreach (object o in Items(_selected))
+                    {
+                        arrows.Add((Dictionary<string, object>)o);
+                    }
+
+                    ArrowControls(box, g, "Which way these arrows point", arrows);
+                    break;
+                case "panel":
+                case "chip":
+                    PartColour(box, g);
+                    break;
+                case "tab":
+                    UIUtils.CreateLabel(box, "Exit tab: click its text to change it", 0.8f).relativePosition = new Vector3(0f, 8f);
+                    break;
+                default:
+                    UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click any part of the sign above to change it,\nor add something new below.", 0.85f);
+                    hint.relativePosition = new Vector3(0f, 30f);
+                    return;
+            }
+
+            MoveButtons(box, g);
+        }
+
+        private void TextControls(UIPanel box, Gantry g)
+        {
+            Dictionary<string, object> item = _selected;
+            UIUtils.CreateLabel(box, "Text", 0.8f).relativePosition = new Vector3(0f, 0f);
+            float sizeWidth = 110f;
+            _focus = Field(box, 0f, 18f, _content.width - sizeWidth - 6f, Json.Str(item, "text", ""), 48, g, v => item["text"] = v);
+            UIUtils.CreateLabel(box, "Size", 0.8f).relativePosition = new Vector3(_content.width - sizeWidth, 0f);
+            float height = Json.Num(item, "height", 16f);
+            int nearest = 0;
+            for (int i = 1; i < SizeHeights.Length; i++)
+            {
+                if (Mathf.Abs(SizeHeights[i] - height) < Mathf.Abs(SizeHeights[nearest] - height))
+                {
+                    nearest = i;
+                }
+            }
+
+            Dropdown(box, _content.width - sizeWidth, 18f, sizeWidth, SizeLabels, nearest, index =>
+            {
+                if (index >= 0 && index < SizeHeights.Length)
+                {
+                    item["height"] = (double)SizeHeights[index];
+                    Commit(g, "sign content");
+                }
+            });
+        }
+
+        private void ShieldControls(UIPanel box, Gantry g)
+        {
+            Dictionary<string, object> item = _selected;
+            var keys = new List<string>();
+            var labels = new List<string>();
+            Dictionary<string, object> shields = Json.Obj(GuideAssets.Theme(Theme), "shields");
+            if (shields != null)
+            {
+                foreach (KeyValuePair<string, object> kv in shields)
+                {
+                    keys.Add(kv.Key);
+                    labels.Add(Json.Str(kv.Value as Dictionary<string, object>, "label", kv.Key));
+                }
+            }
+
+            float half = (_content.width - 6f) / 2f;
+            UIUtils.CreateLabel(box, "Route type", 0.8f).relativePosition = new Vector3(0f, 0f);
+            Dropdown(box, 0f, 18f, half, labels.ToArray(), Mathf.Max(0, keys.IndexOf(Json.Str(item, "network", ""))), index =>
+            {
+                if (index >= 0 && index < keys.Count)
+                {
+                    item["network"] = keys[index];
+                    Commit(g, "sign content");
+                }
+            });
+            object number;
+            string value = item.TryGetValue("number", out number) && number != null ? Convert.ToString(number, System.Globalization.CultureInfo.InvariantCulture) : "";
+            UIUtils.CreateLabel(box, "Route number", 0.8f).relativePosition = new Vector3(half + 6f, 0f);
+            _focus = Field(box, half + 6f, 18f, half, value, 4, g, v => item["number"] = v);
+        }
+
+        private void ArrowControls(UIPanel box, Gantry g, string title, List<Dictionary<string, object>> arrows)
+        {
+            UIUtils.CreateLabel(box, title, 0.8f).relativePosition = new Vector3(0f, 0f);
+            string current = arrows.Count > 0 ? Json.Str(arrows[0], "direction", "down") : "down";
+            float gap = 3f, cell = (_content.width - gap * (ArrowKeys.Length - 1)) / ArrowKeys.Length;
+            for (int i = 0; i < ArrowKeys.Length; i++)
+            {
+                string key = ArrowKeys[i];
+                var b = box.AddUIComponent<UIButton>();
+                b.size = new Vector2(cell, 56f);
+                b.relativePosition = new Vector3(i * (cell + gap), 18f);
+                b.normalBgSprite = key == current ? "ButtonMenuPressed" : "ButtonMenu";
+                b.hoveredBgSprite = "ButtonMenuHovered";
+                b.pressedBgSprite = "ButtonMenuPressed";
+                b.tooltip = ArrowLabels[i];
+                b.eventClick += (c, p) =>
+                {
+                    foreach (Dictionary<string, object> a in arrows)
+                    {
+                        a["direction"] = key;
+                    }
+
+                    Commit(g, "sign content");
+                    _rebuild = true;
+                };
+                Texture2D tex = GuideCache.ArrowPicture(key);
+                if (tex != null)
+                {
+                    var picture = b.AddUIComponent<UITextureSprite>();
+                    picture.isInteractive = false;
+                    picture.texture = tex;
+                    FitPicture(picture, tex, cell - 6f, 50f, 3f, 3f);
+                }
+            }
+        }
+
+        private void PartColour(UIPanel box, Gantry g)
+        {
+            Dictionary<string, object> item = _selected;
+            var keys = new List<string>();
+            var labels = new List<string>();
+            Dictionary<string, object> schemes = Json.Obj(GuideAssets.Theme(Theme), "schemes");
+            if (schemes != null)
+            {
+                foreach (KeyValuePair<string, object> kv in schemes)
+                {
+                    keys.Add(kv.Key);
+                    labels.Add(char.ToUpperInvariant(kv.Key[0]) + kv.Key.Substring(1));
+                }
+            }
+
+            UIUtils.CreateLabel(box, "Colour of this band", 0.8f).relativePosition = new Vector3(0f, 0f);
+            Dropdown(box, 0f, 18f, (_content.width - 6f) / 2f, labels.ToArray(), Mathf.Max(0, keys.IndexOf(Json.Str(item, "scheme", ""))), index =>
+            {
+                if (index >= 0 && index < keys.Count)
+                {
+                    item["scheme"] = keys[index];
+                    Commit(g, "sign content");
+                }
+            });
+        }
+
+        /// <summary>Move the selected part among its neighbours, or take it off the sign.</summary>
+        private void MoveButtons(UIPanel box, Gantry g)
+        {
+            Dictionary<string, object> item = _selected;
+            string[] steps = _selectedPath.Split('/');
+            float w = (_content.width - 4f * 6f) / 5f, y = InspectorHeight - 34f;
+            List<object> top = Items(_doc);
+            int line;
+            int.TryParse(steps[0], out line);
+            bool isTab = Json.Str(top[line] as Dictionary<string, object>, "type") == "tab";
+            Dictionary<string, object> parent = ItemAt(_doc, _selectedPath.Substring(0, Mathf.Max(0, _selectedPath.LastIndexOf('/'))));
+            List<object> siblings = steps.Length > 1 && parent != null ? Items(parent) : null;
+            int at = siblings != null ? siblings.IndexOf(item) : -1;
+
+            MoveButton(box, 0, w, y, "Up", "Move it up the sign", !isTab && CanMove(top, line, -1), () => Swap(g, top, line, -1));
+            MoveButton(box, 1, w, y, "Down", "Move it down the sign", !isTab && CanMove(top, line, 1), () => Swap(g, top, line, 1));
+            MoveButton(box, 2, w, y, "Left", "Move it left in its row", at >= 0 && CanMove(siblings, at, -1), () => Swap(g, siblings, at, -1));
+            MoveButton(box, 3, w, y, "Right", "Move it right in its row", at >= 0 && CanMove(siblings, at, 1), () => Swap(g, siblings, at, 1));
+            MoveButton(box, 4, w, y, "Remove", "Take this off the sign", true, () =>
+            {
+                RemoveFrom(_doc, item);
+                Prune(_doc);
+                _selected = null;
+                _selectedPath = null;
+                Commit(g, "sign content");
+                _rebuild = true;
+            });
+        }
+
+        private static void MoveButton(UIPanel box, int index, float w, float y, string text, string tooltip, bool enabled, Action onClick)
+        {
+            RowButton(box, index * (w + 6f), w, text, tooltip, onClick);
+            UIComponent b = box.components[box.components.Count - 1];
+            b.relativePosition = new Vector3(index * (w + 6f), y);
+            b.isEnabled = enabled;
+        }
+
+        /// <summary>Whether a neighbour that isn't a tab is there to swap with (tabs stay at the top).</summary>
+        private static bool CanMove(List<object> list, int index, int step)
+        {
+            int other = index + step;
+            return index >= 0 && other >= 0 && other < list.Count && Json.Str(list[other] as Dictionary<string, object>, "type") != "tab";
+        }
+
+        private void Swap(Gantry g, List<object> list, int index, int step)
+        {
+            object a = list[index];
+            list[index] = list[index + step];
+            list[index + step] = a;
+            Commit(g, "sign content");
+            _rebuild = true;
+        }
+
+        private void AddButtons(Gantry g)
+        {
+            List<object> items = Items(_doc);
+            float w = (_content.width - 4f * 6f) / 5f;
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            RowButton(row, 0f, w, "+ Text", "Add a line of text", () =>
+            {
+                Dictionary<string, object> text = Text("New text", 0f, null);
+                Insert(g, NewLineIndex(items), text, text);
+            });
+            RowButton(row, w + 6f, w, "+ Shield", "Add a route shield and direction", () =>
+            {
+                Dictionary<string, object> shield = Shield();
+                Insert(g, NewLineIndex(items), new Dictionary<string, object>
+                {
+                    { "type", "row" },
+                    { "items", new List<object> { shield, Text("NORTH", 15f, "RG2014D") } }
+                }, shield);
+            });
+            RowButton(row, 2f * (w + 6f), w, "+ Arrow", "Add an arrow", () => AddArrow(g, items));
+            RowButton(row, 3f * (w + 6f), w, "+ Exit tab", "Add an exit number tab on top of the sign", () =>
+            {
+                Dictionary<string, object> text = Text("EXIT 1", 10f, "RG2014E");
+                Insert(g, 0, new Dictionary<string, object>
+                {
+                    { "type", "tab" },
+                    { "align", "right" },
+                    { "items", new List<object> { text } }
+                }, text);
+            });
+            row.components[3].isEnabled = !Contains(items, "tab");
+            RowButton(row, 4f * (w + 6f), w, "+ Exit only", "Add the yellow EXIT ONLY band at the bottom", () =>
+            {
+                Dictionary<string, object> text = Text("EXIT ONLY", 12f, "RG2014E");
+                Insert(g, items.Count, new Dictionary<string, object>
+                {
+                    { "type", "panel" },
+                    { "scheme", "yellow" },
+                    { "align", "center" },
+                    { "items", new List<object> { text } }
+                }, text);
+            });
+            row.components[4].isEnabled = !Contains(items, "panel");
+        }
+
+        /// <summary>A new line goes under the selected one, or above any arrows and bands at the bottom of the sign.</summary>
+        private int NewLineIndex(List<object> items)
+        {
+            if (_selectedPath != null)
+            {
+                int line;
+                int.TryParse(_selectedPath.Split('/')[0], out line);
+                if (Json.Str(items[line] as Dictionary<string, object>, "type") != "tab")
+                {
+                    return line + 1;
+                }
+            }
+
+            return ContentIndex(items);
+        }
+
+        private void SchemeDropdown(UIPanel row, float x, float w, Gantry g)
+        {
+            var keys = new List<string>();
+            var labels = new List<string>();
+            Dictionary<string, object> schemes = Json.Obj(GuideAssets.Theme(Theme), "schemes");
+            if (schemes != null)
+            {
+                foreach (KeyValuePair<string, object> kv in schemes)
+                {
+                    keys.Add(kv.Key);
+                    labels.Add("Colour: " + char.ToUpperInvariant(kv.Key[0]) + kv.Key.Substring(1));
+                }
+            }
+
+            UIDropDown drop = Dropdown(row, x, w, labels.ToArray(), Mathf.Max(0, keys.IndexOf(Json.Str(_doc, "scheme", "green"))), index =>
+            {
+                if (index >= 0 && index < keys.Count)
+                {
+                    _doc["scheme"] = keys[index];
+                    Commit(g, "sign content");
+                }
+            });
+            drop.tooltip = "The sign's colour";
+        }
+
+        private void Insert(Gantry g, int index, Dictionary<string, object> item, Dictionary<string, object> select)
+        {
+            CommitText();
+            List<object> items = Items(_doc);
+            items.Insert(Mathf.Clamp(index, 0, items.Count), item);
+            _selected = select;
+            Commit(g, "sign content");
+            _rebuild = true;
+        }
+
+        private void AddArrow(Gantry g, List<object> items)
+        {
+            var arrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var row = items[i] as Dictionary<string, object>;
+                if (row != null && Json.Str(row, "type") == "row" && GuideFit.IsArrows(row))
+                {
+                    Items(row).Add(arrow);
+                    row["justify"] = "between";
+                    _selected = arrow;
+                    Commit(g, "sign content");
+                    _rebuild = true;
+                    return;
+                }
+            }
+
+            int at = items.Count;
+            while (at > 0 && Json.Str(items[at - 1] as Dictionary<string, object>, "type") == "panel")
+            {
+                at--;
+            }
+
+            Insert(g, at, new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { arrow } }, { "justify", "between" } }, arrow);
+        }
+
+        /// <summary>Where new content goes: above any arrows and bands at the bottom of the sign.</summary>
+        private static int ContentIndex(List<object> items)
+        {
+            int at = items.Count;
+            while (at > 0)
+            {
+                var item = items[at - 1] as Dictionary<string, object>;
+                if (item == null || (Json.Str(item, "type") != "panel" && !GuideFit.IsArrows(item)))
+                {
+                    break;
+                }
+
+                at--;
+            }
+
+            return at;
+        }
+
+        /// <summary>The part at a path like "2/0", or null.</summary>
+        private static Dictionary<string, object> ItemAt(Dictionary<string, object> doc, string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            Dictionary<string, object> at = doc;
+            foreach (string step in path.Split('/'))
+            {
+                int i;
+                List<object> items = Json.Arr(at, "items");
+                if (items == null || !int.TryParse(step, out i) || i < 0 || i >= items.Count)
+                {
+                    return null;
+                }
+
+                at = items[i] as Dictionary<string, object>;
+                if (at == null)
+                {
+                    return null;
+                }
+            }
+
+            return at;
+        }
+
+        private static string PathOf(Dictionary<string, object> parent, Dictionary<string, object> item, string prefix)
+        {
+            List<object> items = parent == null ? null : Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i] == item)
+                {
+                    return prefix + i;
+                }
+
+                string inner = PathOf(items[i] as Dictionary<string, object>, item, prefix + i + "/");
+                if (inner != null)
+                {
+                    return inner;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool RemoveFrom(Dictionary<string, object> parent, Dictionary<string, object> item)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return false;
+            }
+
+            if (items.Remove(item))
+            {
+                return true;
+            }
+
+            foreach (object o in items)
+            {
+                var child = o as Dictionary<string, object>;
+                if (child != null && RemoveFrom(child, item))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static List<object> Items(Dictionary<string, object> parent)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                items = new List<object>();
+                parent["items"] = items;
+            }
+
+            return items;
+        }
+
+        private static bool Contains(List<object> items, string type)
+        {
+            foreach (object o in items)
+            {
+                if (Json.Str(o as Dictionary<string, object>, "type") == type)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Removes groups left with nothing in them.</summary>
+        private static void Prune(Dictionary<string, object> parent)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                string type = Json.Str(item, "type");
+                if (type == "row" || type == "column" || type == "chip" || type == "tab" || type == "panel")
+                {
+                    Prune(item);
+                    if (Items(item).Count == 0)
+                    {
+                        items.RemoveAt(i);
+                    }
+                }
+            }
+        }
+
+        private static Dictionary<string, object> Text(string text, float height, string font)
+        {
+            var item = new Dictionary<string, object> { { "type", "text" }, { "text", text } };
+            if (height > 0f)
+            {
+                item["height"] = (double)height;
+            }
+
+            if (font != null)
+            {
+                item["font"] = font;
+            }
+
+            return item;
+        }
+
+        private static Dictionary<string, object> Shield()
+        {
+            return new Dictionary<string, object> { { "type", "shield" }, { "network", "I" }, { "number", "95" }, { "height", 36.0 } };
+        }
+
+        // ------------------------------------------------------------------------------ changes
+
+        private void CommitText()
+        {
+            if (_commitAt < 0f)
+            {
+                return;
+            }
+
+            _commitAt = -1f;
+            Gantry g = GantryManager.Find(_gantryId);
+            if (g != null)
+            {
+                Commit(g, "sign text");
+            }
+        }
+
+        private void Commit(Gantry g, string what)
+        {
+            _commitAt = -1f;
+            string design = Json.Write(_doc);
+            if (design.Length > GuideData.MaxDesignLength)
+            {
+                _rebuild = true; // too long to keep: show the sign as it was
+                return;
+            }
+
+            Change(g, what, h =>
+            {
+                h.Design = design;
+                return h;
+            });
         }
 
         private void Change(Gantry g, string what, Func<GuideHead, GuideHead> change)
@@ -259,6 +1416,11 @@ namespace GantryTool.UI
             try
             {
                 GantryManager.UpdateGuideSign(g, _head, what, change);
+                GuideHead now;
+                if (GantryManager.GetGuideSign(g, _head, out now))
+                {
+                    _shown = now;
+                }
             }
             catch (Exception e)
             {
@@ -266,7 +1428,67 @@ namespace GantryTool.UI
             }
         }
 
-        private static void RowButton(UIPanel row, int index, float w, string text, string tooltip, Action onClick)
+        // ------------------------------------------------------------------------------ controls
+
+        private UITextField Field(UIPanel row, float x, float y, float w, string text, int maxLength, Gantry g, Action<string> apply)
+        {
+            UITextField field = UIUtils.CreateTextField(row, w, maxLength);
+            field.relativePosition = new Vector3(x, y);
+            field.text = text;
+            field.selectOnFocus = true;
+            field.submitOnFocusLost = true;
+            field.eventTextChanged += (c, v) =>
+            {
+                if (!_building)
+                {
+                    apply(v);
+                    _commitAt = Time.realtimeSinceStartup + TextCommitDelay;
+                }
+            };
+            field.eventTextSubmitted += (c, v) =>
+            {
+                if (!_building)
+                {
+                    apply(v);
+                    _commitAt = -1f;
+                    Commit(g, "sign text");
+                }
+            };
+            return field;
+        }
+
+        private UIDropDown Dropdown(UIPanel row, float x, float w, string[] labels, int selected, Action<int> onChange)
+        {
+            return Dropdown(row, x, 2f, w, labels, selected, onChange);
+        }
+
+        private UIDropDown Dropdown(UIPanel row, float x, float y, float w, string[] labels, int selected, Action<int> onChange)
+        {
+            UIDropDown drop = UIUtils.CreateDropDown(row, w);
+            drop.relativePosition = new Vector3(x, y);
+            drop.items = labels;
+            drop.listHeight = Mathf.Min(480, labels.Length * drop.itemHeight + 8);
+            drop.selectedIndex = selected;
+            drop.eventSelectedIndexChanged += (c, index) =>
+            {
+                if (!_building)
+                {
+                    onChange(index);
+                }
+            };
+            DropdownToggle.Attach(drop);
+            return drop;
+        }
+
+        private void Fit(UIDropDown drop)
+        {
+            UIComponent row = drop.parent;
+            row.width = _content.width;
+            drop.width = _content.width - 16f;
+            DropdownToggle.Attach(drop);
+        }
+
+        private static void RowButton(UIPanel row, float x, float w, string text, string tooltip, Action onClick)
         {
             var b = row.AddUIComponent<UIButton>();
             b.text = text;
@@ -275,8 +1497,9 @@ namespace GantryTool.UI
             b.normalBgSprite = "ButtonMenu";
             b.hoveredBgSprite = "ButtonMenuHovered";
             b.pressedBgSprite = "ButtonMenuPressed";
+            b.disabledBgSprite = "ButtonMenuDisabled";
             b.size = new Vector2(w, 28f);
-            b.relativePosition = new Vector3(index * (w + 6f), 4f);
+            b.relativePosition = new Vector3(x, 4f);
             b.eventClick += (c, p) => onClick();
         }
     }

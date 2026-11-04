@@ -337,11 +337,12 @@ namespace GantryTool.Data
         {
             if (HeadRef.IsGuide(laneIndex))
             {
-                // Guide signs: "nudge" is the position along the beam; their size has its own slider.
+                // Guide signs: "nudge" is the position along the beam; their size has its own slider. A sign fitted to
+                // lanes stays over them.
                 float along = Mathf.Clamp(nudge, 0f, Mathf.Max(0f, g.Span));
                 UpdateGuideSign(g, laneIndex, undoKey, h =>
                 {
-                    h.Along = along;
+                    h.Along = h.FitFirst == 0 ? along : h.Along;
                     return h;
                 });
                 return;
@@ -493,7 +494,7 @@ namespace GantryTool.Data
         }
 
         /// <summary>Adds a guide sign; returns its head number, or -1 when the gantry is full.</summary>
-        public static int AddGuideSign(Gantry g, float along, sbyte side, string design)
+        public static int AddGuideSign(Gantry g, float along, sbyte side, string design, byte fitFirst, byte fitLast)
         {
             UndoStack.PushModified(g, "add guide sign", coalesce: false);
             int head;
@@ -513,7 +514,9 @@ namespace GantryTool.Data
                     }
                 }
 
-                g.GuideSigns.Add(new GuideHead { Id = id, Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)), Scale = 1f, Side = side, Design = design });
+                // A gantry's first guide sign: its signals now face only their own traffic (a checkbox in the gantry panel).
+                g.BlankBacks |= g.GuideSigns.Count == 0;
+                g.GuideSigns.Add(new GuideHead { Id = id, Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)), Scale = 1f, Side = side, Design = design, FitFirst = fitFirst, FitLast = fitLast });
                 g.SignalsDirty = true;
                 head = HeadRef.OfGuide(id);
             }
@@ -1033,6 +1036,12 @@ namespace GantryTool.Data
                 {
                     UnityEngine.Object.Destroy(gantry.GuideBackMesh);
                     gantry.GuideBackMesh = null;
+                }
+
+                if (gantry.GuideCasterMesh != null)
+                {
+                    UnityEngine.Object.Destroy(gantry.GuideCasterMesh);
+                    gantry.GuideCasterMesh = null;
                 }
             }
             catch (Exception e)

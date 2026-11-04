@@ -16,6 +16,9 @@ namespace GantryTool.Data
         public float Scale;     // size relative to the default
         public sbyte Side;      // which way it faces: -1 = the gantry's -side, +1 = +side
         public string Design;   // the sign, as design JSON
+        public byte FitFirst;   // fitted to these lanes of its face, 1-based and left to right as drivers see them; 0 = placed by hand
+        public byte FitLast;
+        public bool LaneArrows; // when fitted: one arrow over each lane
     }
 
     /// <summary>
@@ -24,13 +27,13 @@ namespace GantryTool.Data
     /// Testable outside the game.
     ///
     /// Format, key "GantryTool.Guide": int version(=1), int count, then per gantry that isn't at the defaults: int id,
-    /// float startX/Y/Z, float endX/Y/Z (stale-data guard), bool laneHeads, int signCount, then per sign: byte id,
-    /// float along, float scale, sbyte side, string design.
+    /// float startX/Y/Z, float endX/Y/Z (stale-data guard), bool laneHeads, from version 3 bool blankBacks, int signCount, then per sign: byte id,
+    /// float along, float scale, sbyte side, string design; from version 2 also byte fitFirst, byte fitLast, bool laneArrows.
     /// </summary>
     public static class GuideData
     {
         public const string Key = "GantryTool.Guide";
-        public const int Version = 1;
+        public const int Version = 3;
         public const int MaxSigns = 8;
         public const int MaxDesignLength = 32 * 1024;
         public const float MinScale = 0.3f;
@@ -44,15 +47,17 @@ namespace GantryTool.Data
                 var keep = new List<Gantry>();
                 var signs = new List<List<GuideHead>>();
                 var laneHeads = new List<bool>();
+                var blankBacks = new List<bool>();
                 lock (overridesLock)
                 {
                     foreach (Gantry g in gantries)
                     {
-                        if (!g.LaneHeads || g.GuideSigns.Count > 0)
+                        if (!g.LaneHeads || g.BlankBacks || g.GuideSigns.Count > 0)
                         {
                             keep.Add(g);
                             signs.Add(new List<GuideHead>(g.GuideSigns));
                             laneHeads.Add(g.LaneHeads);
+                            blankBacks.Add(g.BlankBacks);
                         }
                     }
                 }
@@ -65,6 +70,7 @@ namespace GantryTool.Data
                     GantryData.WriteVector(w, keep[i].Start);
                     GantryData.WriteVector(w, keep[i].End);
                     w.Write(laneHeads[i]);
+                    w.Write(blankBacks[i]);
                     w.Write(signs[i].Count);
                     foreach (GuideHead h in signs[i])
                     {
@@ -73,6 +79,9 @@ namespace GantryTool.Data
                         w.Write(h.Scale);
                         w.Write(h.Side);
                         w.Write(h.Design ?? "");
+                        w.Write(h.FitFirst);
+                        w.Write(h.FitLast);
+                        w.Write(h.LaneArrows);
                     }
                 }
 
@@ -116,6 +125,7 @@ namespace GantryTool.Data
                         Vector3 start = GantryData.ReadVector(r);
                         Vector3 end = GantryData.ReadVector(r);
                         bool laneHeads = r.ReadBoolean();
+                        bool blankBacks = version >= 3 && r.ReadBoolean();
                         int n = r.ReadInt32();
                         if (n < 0 || n > 255)
                         {
@@ -128,11 +138,19 @@ namespace GantryTool.Data
                         if (match)
                         {
                             g.LaneHeads = laneHeads;
+                            g.BlankBacks = blankBacks;
                         }
 
                         for (int k = 0; k < n; k++)
                         {
                             var h = new GuideHead { Id = r.ReadByte(), Along = r.ReadSingle(), Scale = r.ReadSingle(), Side = r.ReadSByte(), Design = r.ReadString() };
+                            if (version >= 2)
+                            {
+                                h.FitFirst = r.ReadByte();
+                                h.FitLast = r.ReadByte();
+                                h.LaneArrows = r.ReadBoolean();
+                            }
+
                             if (match && Valid(ref h, g))
                             {
                                 g.GuideSigns.Add(h);
@@ -163,6 +181,7 @@ namespace GantryTool.Data
             h.Along = float.IsNaN(h.Along) ? span * 0.5f : Mathf.Clamp(h.Along, 0f, Mathf.Max(0f, span));
             h.Scale = float.IsNaN(h.Scale) ? 1f : Mathf.Clamp(h.Scale, MinScale, MaxScale);
             h.Side = h.Side >= 0 ? (sbyte)1 : (sbyte)-1;
+            h.FitLast = h.FitFirst == 0 ? (byte)0 : (byte)Mathf.Max(h.FitFirst, h.FitLast);
             return true;
         }
 

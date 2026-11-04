@@ -147,7 +147,7 @@ namespace GantryTool.Render
         /// </summary>
         public static Mesh Build(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
             List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, Mesh mesh,
-            SignAtlas atlas, bool blinkLayer = false, bool laneHeads = true)
+            SignAtlas atlas, bool blinkLayer = false, bool laneHeads = true, bool blankBacks = false)
         {
             Verts.Clear();
             Normals.Clear();
@@ -183,6 +183,10 @@ namespace GantryTool.Render
             {
                 FaceSign minus, plus;
                 SignalRules.ResolveHead(lanes, overrides, extras, head, out minus, out plus, atlas.Style);
+                if (blankBacks)
+                {
+                    SignalRules.BlankBack(lanes, extras, head, ref minus, ref plus);
+                }
                 if (SignalRules.IsHidden(minus.Symbol, plus.Symbol))
                 {
                     continue; // head removed by the player

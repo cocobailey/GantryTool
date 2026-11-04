@@ -61,6 +61,14 @@ namespace GantryTool.Tests
             Run("guide signs: layout grows with its content", GuideLayout);
             Run("guide signs: bad designs never throw", GuideBadDesigns);
             Run("guide signs: save data round-trips; old blocks unchanged; bad data is safe", GuideSaveData);
+            Run("guide signs: dev saves without lane fitting still load", GuideOldSave);
+            Run("guide signs: lanes are ordered as each face's drivers see them", GuideFaceLanes);
+            Run("guide signs: a fitted sign spans its lanes with an arrow over each", GuideFitSpan);
+            Run("guide signs: a sign too wide for its lanes shrinks; bad designs stay safe", GuideFitLimits);
+            Run("guide signs: new signs take the lanes still free", GuideDefaultRange);
+            Run("guide signs: signal backs can go blank; the setting is saved", GuideBlankBacks);
+            Run("guide signs: every part can be found by where it was drawn", GuideParts);
+            Run("guide signs: your own saved signs", GuideMySigns);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
             Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
@@ -793,6 +801,254 @@ namespace GantryTool.Tests
                 GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(d, 256);
                 Check(s.PixelWidth >= 1 && s.PixelHeight >= 1 && s.PixelWidth <= 256 && s.PixelHeight <= 256, "bad design still draws inside the limit");
             }
+        }
+
+        private static List<GantryTool.Detect.GantryLane> GuideLanes()
+        {
+            var lanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 4; i++)
+            {
+                lanes.Add(new GantryTool.Detect.GantryLane { Offset = 5f + i * 3f, Width = 3f, TravelSign = i < 3 ? 1 : -1 });
+            }
+
+            return lanes;
+        }
+
+        private static void GuideOldSave()
+        {
+            byte[] bytes = Bytes(w =>
+            {
+                List<Gantry> g = Sample();
+                w.Write(1);
+                w.Write(1);
+                w.Write(g[1].Id);
+                foreach (float v in new[] { g[1].Start.x, g[1].Start.y, g[1].Start.z, g[1].End.x, g[1].End.y, g[1].End.z })
+                {
+                    w.Write(v);
+                }
+
+                w.Write(true);
+                w.Write(1);
+                w.Write((byte)1);
+                w.Write(2f);
+                w.Write(1f);
+                w.Write((sbyte)-1);
+                w.Write("{}");
+            });
+            List<Gantry> loaded = Sample();
+            string err;
+            GuideData.Apply(bytes, loaded, out err);
+            Check(err == null, "no error: " + err);
+            Check(loaded[1].GuideSigns.Count == 1 && loaded[1].GuideSigns[0].FitFirst == 0 && !loaded[1].GuideSigns[0].LaneArrows, "loads as a hand-placed sign");
+
+            loaded[1].GuideSigns[0] = new GuideHead { Id = 1, Along = 2f, Scale = 1f, Side = 1, Design = "{}", FitFirst = 2, FitLast = 3, LaneArrows = true };
+            List<Gantry> again = Sample();
+            GuideData.Apply(GuideData.Write(loaded, new object()), again, out err);
+            GuideHead h = again[1].GuideSigns[0];
+            Check(err == null && h.FitFirst == 2 && h.FitLast == 3 && h.LaneArrows, "lane fitting is saved");
+        }
+
+        private static void GuideFaceLanes()
+        {
+            List<GantryTool.Detect.GantryLane> minus = GantryTool.Guide.GuideFit.FaceLanes(GuideLanes(), -1);
+            Check(minus.Count == 3 && minus[0].Offset == 5f && minus[2].Offset == 11f, "-side face: along the beam");
+            List<GantryTool.Detect.GantryLane> plus = GantryTool.Guide.GuideFit.FaceLanes(GuideLanes(), 1);
+            Check(plus.Count == 1 && plus[0].Offset == 14f, "+side face: the other direction");
+            var two = new List<GantryTool.Detect.GantryLane> { new GantryTool.Detect.GantryLane { Offset = 1f }, new GantryTool.Detect.GantryLane { Offset = 2f } };
+            Check(GantryTool.Guide.GuideFit.FaceLanes(two, 1)[0].Offset == 2f, "two-way lanes show on both; +side face runs back along the beam");
+        }
+
+        /// <summary>Middles of the arrows in a row of pixels through a rendered sign, in sign units from its centre.</summary>
+        private static List<float> ArrowCentres(GantryTool.Guide.GuideSign s, int y)
+        {
+            var found = new List<float>();
+            float ppu = s.PixelWidth / s.Width;
+            int margin = Mathf.CeilToInt(8f * ppu), start = -1;
+            for (int x = margin; x < s.PixelWidth - margin; x++)
+            {
+                bool light = s.Pixels[y * s.PixelWidth + x].r > 128;
+                if (light && start < 0)
+                {
+                    start = x;
+                }
+                else if (!light && start >= 0)
+                {
+                    found.Add(((start + x) * 0.5f) / ppu - s.Width * 0.5f);
+                    start = -1;
+                }
+            }
+
+            return found;
+        }
+
+        private static void GuideFitSpan()
+        {
+            string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "pull-through"));
+            var h = new GuideHead { Id = 1, Along = 1f, Scale = 1f, Side = -1, Design = design, FitFirst = 1, FitLast = 3, LaneArrows = true };
+            GantryTool.Guide.GuidePlacement p = GantryTool.Guide.GuideFit.Resolve(h, GuideLanes());
+            Check(p.Fitted && Mathf.Abs(p.Along - 8f) < 0.01f, "centred over the lanes (" + p.Along + ")");
+            var doc = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(p.Design);
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(doc, 2048, 3f);
+            float metres = s.Width * GantryTool.Guide.GuideFit.MetresPerUnit * p.Scale;
+            Check(Mathf.Abs(metres - 8.6f) < 0.05f, "as wide as the lanes, less a small gap (" + metres + ")");
+
+            int y = s.PixelHeight - Mathf.CeilToInt(28f * s.PixelHeight / s.Height); // through the arrows: 16 of border and margin, then 24 tall
+            List<float> arrows = ArrowCentres(s, y);
+            float unit = 3f / (GantryTool.Guide.GuideFit.MetresPerUnit * p.Scale);
+            Check(arrows.Count == 3, "one arrow per lane (" + arrows.Count + ")");
+            for (int i = 0; i < 3 && i < arrows.Count; i++)
+            {
+                Check(Mathf.Abs(arrows[i] - (i - 1) * unit) < 4f, "arrow " + i + " over its lane (" + arrows[i] + " vs " + (i - 1) * unit + ")");
+            }
+
+            h.FitFirst = h.FitLast = 2;
+            p = GantryTool.Guide.GuideFit.Resolve(h, GuideLanes());
+            Check(Mathf.Abs(p.Along - 8f) < 0.01f, "one lane: over that lane");
+            h.FitFirst = 9;
+            h.FitLast = 9;
+            Check(Mathf.Abs(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Along - 11f) < 0.01f, "lanes taken away: falls back to the last one");
+            h.FitFirst = 1;
+            h.FitLast = 3;
+            h.LaneArrows = false;
+            string plain = GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design;
+            Check(plain.Contains("\"arrow\"") && !plain.Contains("laneArrows"), "without lane arrows the design's own stay");
+            h.FitFirst = 0;
+            Check(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design == design, "not fitted: untouched");
+        }
+
+        private static void GuideFitLimits()
+        {
+            string wide = GantryTool.Guide.Json.Write(GuideText("A very long place name indeed, far too long for one lane"));
+            var h = new GuideHead { Id = 1, Scale = 1f, Side = -1, Design = wide, FitFirst = 1, FitLast = 1 };
+            GantryTool.Guide.GuidePlacement p = GantryTool.Guide.GuideFit.Resolve(h, GuideLanes());
+            Check(p.Scale < 1f && p.Scale >= GuideData.MinScale, "legend shrinks (" + p.Scale + ")");
+            foreach (string bad in new[] { "", "not json", "[1,2]", "{\"items\":7}", "{\"items\":[{\"type\":\"row\",\"items\":[]}]}" })
+            {
+                h.Design = bad;
+                h.LaneArrows = true;
+                GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()); // must not throw
+            }
+
+            h.Design = wide;
+            Check(!GantryTool.Guide.GuideFit.Resolve(h, new List<GantryTool.Detect.GantryLane>()).Fitted, "no lanes: placed by hand");
+            var odd = new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "laneArrows" }, { "at", new List<object> { "x", null, 1e9, -1e9 } } } } } };
+            GantryTool.Guide.GuideRenderer.Render(odd, 256);
+            GantryTool.Guide.GuideSign big = GantryTool.Guide.GuideRenderer.Render(new Dictionary<string, object> { { "minWidth", 2000.0 }, { "height", 800.0 } }, 2048, 3f);
+            Check(big.PixelWidth * big.PixelHeight <= 1100000, "area stays limited (" + big.PixelWidth + " x " + big.PixelHeight + ")");
+        }
+
+        private static void GuideDefaultRange()
+        {
+            byte first, last;
+            var signs = new List<GuideHead>();
+            GantryTool.Guide.GuideFit.DefaultRange(GuideLanes(), signs, -1, out first, out last);
+            Check(first == 1 && last == 3, "all lanes of that face");
+            signs.Add(new GuideHead { Id = 1, Side = -1, FitFirst = 1, FitLast = 2 });
+            GantryTool.Guide.GuideFit.DefaultRange(GuideLanes(), signs, -1, out first, out last);
+            Check(first == 3 && last == 3, "what is still free");
+            GantryTool.Guide.GuideFit.DefaultRange(GuideLanes(), signs, 1, out first, out last);
+            Check(first == 1 && last == 1, "the other face is separate");
+            signs.Add(new GuideHead { Id = 2, Side = -1, FitFirst = 3, FitLast = 3 });
+            GantryTool.Guide.GuideFit.DefaultRange(GuideLanes(), signs, -1, out first, out last);
+            Check(first == 1 && last == 3, "none free: all of them");
+            GantryTool.Guide.GuideFit.DefaultRange(new List<GantryTool.Detect.GantryLane>(), signs, -1, out first, out last);
+            Check(first == 0 && last == 0, "no lanes: placed by hand");
+        }
+
+        private static void GuideMySigns()
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "GantryToolTest" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Check(GantryTool.Guide.MySigns.List(folder).Count == 0, "no folder yet: no signs");
+                Dictionary<string, object> design = GantryTool.Guide.GuideAssets.Template("us", "pull-through");
+                Check(!GantryTool.Guide.MySigns.Save(folder, "   ", design), "a name is needed");
+                Check(GantryTool.Guide.MySigns.Save(folder, " My exit: sign/2 ", design), "saved despite odd characters");
+                Check(GantryTool.Guide.MySigns.Save(folder, "CON", design), "a name Windows reserves");
+                List<GantryTool.Guide.MySign> signs = GantryTool.Guide.MySigns.List(folder);
+                Check(signs.Count == 2 && signs[0].Name == "CON" && signs[1].Name == "My exit: sign/2", "listed by name");
+                Check(signs[1].Id == GantryTool.Guide.MySigns.IdPrefix + "My exit: sign/2", "marked as the player's own");
+                Check(GantryTool.Guide.Json.Str(design, "id") == "pull-through", "the design handed in is left alone");
+                Check(GantryTool.Guide.GuideRenderer.Render(signs[1].Design).Width > 0f, "draws");
+
+                Dictionary<string, object> other = GuideText("Changed");
+                Check(GantryTool.Guide.MySigns.Save(folder, "CON", other), "saved again");
+                signs = GantryTool.Guide.MySigns.List(folder);
+                Check(signs.Count == 2 && GantryTool.Guide.Json.Write(signs[0].Design).Contains("Changed"), "the same name replaces it");
+
+                File.WriteAllText(Path.Combine(folder, "sign-broken.json"), "{ not json");
+                File.WriteAllText(Path.Combine(folder, "sign-list.json"), "[1,2]");
+                File.WriteAllText(Path.Combine(folder, "other.txt"), "x");
+                Check(GantryTool.Guide.MySigns.List(folder).Count == 2, "files it can't use are skipped");
+
+                GantryTool.Guide.MySigns.Delete(folder, "CON");
+                GantryTool.Guide.MySigns.Delete(folder, "never existed");
+                Check(GantryTool.Guide.MySigns.List(folder).Count == 1, "deleted");
+            }
+            finally
+            {
+                if (Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, true);
+                }
+            }
+        }
+
+        private static void GuideParts()
+        {
+            Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", "guide-exit-only");
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(doc);
+            var found = new Dictionary<string, GantryTool.Guide.GuidePart>();
+            foreach (GantryTool.Guide.GuidePart p in s.Parts)
+            {
+                found[p.Path] = p;
+                Check(p.W > 0f && p.H > 0f && p.X >= -0.01f && p.Y >= -0.01f && p.X + p.W <= s.Width + 0.01f && p.Y + p.H <= s.Height + 0.01f, "part " + p.Path + " inside the sign");
+            }
+
+            Check(found.ContainsKey("0") && found["0"].Type == "tab" && found.ContainsKey("0/0") && found["0/0"].Type == "text", "the tab and its text");
+            Check(found["0/0"].Y + found["0/0"].H <= s.TabHeight + 0.01f, "the tab's text is in the tab row");
+            Check(found["1/0"].Type == "shield" && found["1/1"].Type == "text", "shield and direction in their row");
+            Check(found["2"].Type == "text" && found["2"].Y > found["1/0"].Y, "place name below them");
+            Check(found["3"].Type == "panel" && Mathf.Abs(found["3"].Y + found["3"].H - s.Height) < 6f, "band at the bottom");
+            Check(!found.ContainsKey("1"), "rows aren't parts themselves");
+
+            // Fitting to lanes doesn't move anything the editor knows about.
+            string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "pull-through"));
+            var h = new GuideHead { Id = 1, Scale = 1f, Side = -1, Design = design, FitFirst = 1, FitLast = 3, LaneArrows = true };
+            var fitted = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design);
+            bool place = false, arrows = false;
+            foreach (GantryTool.Guide.GuidePart p in GantryTool.Guide.GuideRenderer.Render(fitted).Parts)
+            {
+                place |= p.Path == "1" && p.Type == "text";
+                arrows |= p.Path == "2" && p.Type == "laneArrows";
+            }
+
+            Check(place && arrows, "same paths on a fitted sign");
+        }
+
+        private static void GuideBlankBacks()
+        {
+            List<GantryTool.Detect.GantryLane> lanes = GuideLanes();
+            FaceSign minus = new FaceSign(SignalSymbol.Arrow, 0), plus = new FaceSign(SignalSymbol.Cross, 0);
+            SignalRules.BlankBack(lanes, null, 0, ref minus, ref plus);
+            Check(minus.Symbol == SignalSymbol.Arrow && plus.Symbol == SignalSymbol.Blank, "+side traffic: the plus face goes blank");
+            minus = new FaceSign(SignalSymbol.Cross, 0);
+            plus = new FaceSign(SignalSymbol.Arrow, 0);
+            SignalRules.BlankBack(lanes, null, 3, ref minus, ref plus);
+            Check(minus.Symbol == SignalSymbol.Blank && plus.Symbol == SignalSymbol.Arrow, "-side traffic: the minus face goes blank");
+            minus = new FaceSign(SignalSymbol.Cross, 0);
+            plus = new FaceSign(SignalSymbol.Reserved, 0);
+            SignalRules.BlankBack(lanes, null, 0, ref minus, ref plus);
+            Check(minus.Symbol == SignalSymbol.Cross && plus.Symbol == SignalSymbol.Reserved, "the driver's own face, and other symbols, stay");
+
+            List<Gantry> g = Sample();
+            g[2].BlankBacks = true;
+            List<Gantry> loaded = Sample();
+            string err;
+            GuideData.Apply(GuideData.Write(g, new object()), loaded, out err);
+            Check(err == null && loaded[2].BlankBacks && !loaded[0].BlankBacks && loaded[2].LaneHeads, "saved");
+            List<Gantry> plain = Sample();
+            Check(SameBytes(GantryData.WriteExt(plain), GantryData.WriteExt(g)), "extension block unchanged");
         }
 
         private static void GuideSaveData()

@@ -941,12 +941,12 @@ namespace GantryTool.Tool
             {
                 GuideHead sign;
                 float w;
-                if (!GantryManager.GetGuideSign(g, lane, out sign) || !GuideMeshBuilder.Layout(sign, g.Span, out along, out w, out size))
+                if (!GantryManager.GetGuideSign(g, lane, out sign) || !GuideMeshBuilder.Layout(g, sign, out along, out w, out size))
                 {
                     return false;
                 }
 
-                midY = SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size);
+                midY = GuideMeshBuilder.CentreY(g, size);
                 return true;
             }
 
@@ -1238,6 +1238,12 @@ namespace GantryTool.Tool
                     {
                         float hAlong, hSize, hMid;
                         HeadGeom(hg, _headLane, out hAlong, out hSize, out hMid);
+                        if (HeadRef.IsGuide(_headLane))
+                        {
+                            DrawGuideBox(cameraInfo, rm, hg, _headLane, HeadHoverColor, false);
+                            return;
+                        }
+
                         Vector3 c = SignalMeshBuilder.HeadCentre(hg.Start, hg.End, hg.BeamBottomY, hg.BeamDepth, hAlong, hSize);
                         float half = hSize * 0.5f;
                         rm.OverlayEffect.DrawCircle(cameraInfo, HeadHoverColor, c, half * 2.6f,
@@ -1289,12 +1295,14 @@ namespace GantryTool.Tool
             Handle hot = _dragHandle != Handle.None ? _dragHandle : _hoverHandle;
             RenderManager.CameraInfo cam = cameraInfo;
 
-            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.StartPost, hot), g.Start, PostHandleRadius * 2f, -1f, 1280f, false, true);
-            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.EndPost, hot), g.End, PostHandleRadius * 2f, -1f, 1280f, false, true);
+            // These mark the ground: kept below the beam so they don't project onto the truss and signs too.
+            float roof = g.BeamBottomY - 0.05f;
+            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.StartPost, hot), g.Start, PostHandleRadius * 2f, -1f, roof, false, true);
+            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.EndPost, hot), g.End, PostHandleRadius * 2f, -1f, roof, false, true);
 
             Vector3 mid = Middle(g);
             Vector3 rot = RotateHandlePos(g);
-            rm.OverlayEffect.DrawSegment(cam, HandleColor, new Segment3(mid, rot), 0.3f, 0.6f, -1f, 1280f, false, true);
+            rm.OverlayEffect.DrawSegment(cam, HandleColor, new Segment3(mid, rot), 0.3f, 0.6f, -1f, roof, false, true);
 
             Vector3 d = g.End - g.Start;
             d.y = 0f;
@@ -1303,8 +1311,41 @@ namespace GantryTool.Tool
             float h = MiddleHandleRadius * 0.8f;
             var square = new Quad3(mid - along * h - across * h, mid + along * h - across * h,
                                    mid + along * h + across * h, mid - along * h + across * h);
-            rm.OverlayEffect.DrawQuad(cam, HandleCol(Handle.Middle, hot), square, -1f, 1280f, false, true);
-            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.Rotate, hot), rot, RotateHandleRadius * 2f, -1f, 1280f, false, true);
+            rm.OverlayEffect.DrawQuad(cam, HandleCol(Handle.Middle, hot), square, -1f, roof, false, true);
+            rm.OverlayEffect.DrawCircle(cam, HandleCol(Handle.Rotate, hot), rot, RotateHandleRadius * 2f, -1f, roof, false, true);
+        }
+
+        /// <summary>
+        /// Highlights a guide sign with a box the sign's size. Overlays project straight down, so a ring around it would
+        /// show as two bars across its face; this covers it evenly, or as strips along its edges for one being edited.
+        /// </summary>
+        private static void DrawGuideBox(RenderManager.CameraInfo cam, RenderManager rm, Gantry g, int head, Color color, bool edgesOnly)
+        {
+            GuideHead sign;
+            float along, width, height;
+            if (!GantryManager.GetGuideSign(g, head, out sign) || !GuideMeshBuilder.Layout(g, sign, out along, out width, out height))
+            {
+                return;
+            }
+
+            Vector3 d = g.End - g.Start;
+            d.y = 0f;
+            Vector3 dir = d.sqrMagnitude > 1e-4f ? d.normalized : Vector3.right;
+            Vector3 across = new Vector3(-dir.z, 0f, dir.x) * (SignalMeshBuilder.HeadDepth * 0.5f + 0.3f);
+            Vector3 c = new Vector3(g.Start.x, 0f, g.Start.z) + dir * along;
+            Vector3 half = dir * (width * 0.5f);
+            var box = new Quad3(c - half - across, c + half - across, c + half + across, c - half + across);
+            float mid = GuideMeshBuilder.CentreY(g, height), bottom = mid - height * 0.5f, top = mid + height * 0.5f;
+            if (edgesOnly)
+            {
+                const float Strip = 0.12f;
+                rm.OverlayEffect.DrawQuad(cam, color, box, bottom - 0.02f, bottom + Strip, false, true);
+                rm.OverlayEffect.DrawQuad(cam, color, box, top - Strip, top + 0.02f, false, true);
+            }
+            else
+            {
+                rm.OverlayEffect.DrawQuad(cam, color, box, bottom - 0.02f, top + 0.02f, false, true);
+            }
         }
 
         private void DrawHeadHandles(RenderManager.CameraInfo cameraInfo, RenderManager rm)
@@ -1316,17 +1357,18 @@ namespace GantryTool.Tool
                 return;
             }
 
+            bool moving = _headDrag == HeadDrag.Move && _headDragStarted;
+            if (HeadRef.IsGuide(_selHeadLane))
+            {
+                DrawGuideBox(cameraInfo, rm, g, _selHeadLane, moving ? HandleHotColor : HandleColor, true);
+                return;
+            }
+
             float half = size * 0.5f;
             Vector3 c = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along, size);
-            bool moving = _headDrag == HeadDrag.Move && _headDragStarted;
             bool resizing = _headDrag == HeadDrag.Resize && _headDragStarted;
             rm.OverlayEffect.DrawCircle(cameraInfo, moving ? HandleHotColor : HandleColor, c, size * 1.3f,
                 c.y - half - 0.05f, c.y + half + 0.05f, false, true);
-
-            if (HeadRef.IsGuide(_selHeadLane))
-            {
-                return; // guide signs are sized with their panel's slider
-            }
 
             Vector3 corner = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + half, size);
             corner.y = c.y + half;

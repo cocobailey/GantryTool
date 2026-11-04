@@ -130,9 +130,13 @@ namespace GantryTool.UI
                     extras = g.ExtraHeads.Count;
                 }
 
-                Checkbox(helper, "Automatic lane signals", g.LaneHeads, on =>
+                Checkbox(helper, "Lane signals (off: a signs-only gantry)", g.LaneHeads, on =>
                 {
                     Change(g, "lane signals", () => g.LaneHeads = on);
+                });
+                Checkbox(helper, "No red Xs on the back of signals", g.BlankBacks, on =>
+                {
+                    Change(g, "signal backs", () => g.BlankBacks = on);
                 });
 
                 var addRow = _content.AddUIComponent<UIPanel>();
@@ -175,7 +179,13 @@ namespace GantryTool.UI
 
                         string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab"));
                         sbyte facing = SignalPanel.CameraSeesMinusFace(cur) ? (sbyte)-1 : (sbyte)1;
-                        int head = GantryManager.AddGuideSign(cur, cur.Span * 0.5f, facing, design);
+                        byte first, last;
+                        lock (GantryManager.Lock)
+                        {
+                            GantryTool.Guide.GuideFit.DefaultRange(cur.Lanes, cur.GuideSigns, facing, out first, out last);
+                        }
+
+                        int head = GantryManager.AddGuideSign(cur, cur.Span * 0.5f, facing, design, first, last);
                         if (head >= 0)
                         {
                             Tool.EditHead(cur, head);

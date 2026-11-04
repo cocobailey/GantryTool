@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using GantryTool.Detect;
+using GantryTool.Guide;
 using UnityEngine;
 
 namespace GantryTool.Data
@@ -57,9 +58,14 @@ namespace GantryTool.Data
         /// <summary>Automatic lane signals on. Off makes a pure sign gantry: only added signs and guide signs show.</summary>
         public bool LaneHeads = true;
 
+        /// <summary>Signals show nothing to traffic going the other way, instead of its red X.</summary>
+        public bool BlankBacks;
+
         // Guide sign meshes: one per face (its material shows that sign) and one for all the plain backs.
         public readonly List<GuideDraw> GuideDraws = new List<GuideDraw>();
+        public readonly Dictionary<byte, GuidePlacement> GuidePlacements = new Dictionary<byte, GuidePlacement>(); // fitted signs, by id
         public Mesh GuideBackMesh;
+        public Mesh GuideCasterMesh;
 
         /// <summary>Only the signal faces changed (override edit); the truss and lanes are still valid.</summary>
         public bool SignalsDirty;
