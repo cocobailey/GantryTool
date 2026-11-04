@@ -81,6 +81,12 @@ namespace GantryTool.UI
         public int GantryId => isVisible ? _gantryId : 0;
 
         /// <summary>Opens (or rebuilds) the panel for a gantry.</summary>
+        public override void Update()
+        {
+            base.Update();
+            UIUtils.KeepTooltipHidden(this);
+        }
+
         public void ShowFor(Gantry g)
         {
             if (g == null)
@@ -91,7 +97,7 @@ namespace GantryTool.UI
 
             try
             {
-                UIUtils.HideTooltip(this); // a button destroyed under the mouse leaves its tooltip on screen
+                UIUtils.ClearTooltips(_content);
                 _building = true;
                 _gantryId = g.Id;
                 _title.text = "Gantry #" + g.Id;
@@ -112,6 +118,14 @@ namespace GantryTool.UI
                 lock (GantryManager.Lock)
                 {
                     bare = g.IsBare;
+                }
+
+                TypeButtons(g);
+                LookButtons(g);
+                if (g.Type == GantryShape.MedianT)
+                {
+                    float post = GantryShape.PostPosition(g.PostAlong, g.Lanes, g.Span);
+                    Slider(helper, "Post position", 0f, Mathf.Max(0.5f, g.Span), 0.1f, post, " m", true, v => Change(g, "post position", () => g.PostAlong = v));
                 }
 
                 if (!bare)
@@ -197,6 +211,89 @@ namespace GantryTool.UI
             }
         }
 
+        /// <summary>A little picture of each kind of gantry to pick from.</summary>
+        private void TypeButtons(Gantry g)
+        {
+            const float Height = 56f, Gap = 4f;
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, Height + 2f);
+            float w = (_content.width - Gap * (GantryShape.Count - 1)) / GantryShape.Count;
+            for (byte type = 0; type < GantryShape.Count; type++)
+            {
+                byte chosen = type;
+                var b = row.AddUIComponent<UIButton>();
+                b.size = new Vector2(w, Height);
+                b.relativePosition = new Vector3(type * (w + Gap), 0f);
+                b.normalBgSprite = g.Type == type ? "ButtonMenuPressed" : "ButtonMenu";
+                b.hoveredBgSprite = "ButtonMenuHovered";
+                b.pressedBgSprite = "ButtonMenuPressed";
+                b.tooltip = GantryShape.Names[type];
+                b.eventClick += (c, p) =>
+                {
+                    Change(g, "gantry type", () => g.Type = chosen);
+                    Rebuild();
+                };
+
+                // Beam across, posts below it, seen as drivers see it.
+                float x0 = 12f, x1 = w - 12f, beamY = 10f, ground = 40f;
+                TypeBlock(b, x0, beamY, x1 - x0, 5f);
+                if (GantryShape.PostAtStart(type))
+                {
+                    TypeBlock(b, x0, beamY, 4f, ground - beamY);
+                }
+
+                if (GantryShape.PostAtEnd(type))
+                {
+                    TypeBlock(b, x1 - 4f, beamY, 4f, ground - beamY);
+                }
+
+                if (type == GantryShape.MedianT)
+                {
+                    TypeBlock(b, (x0 + x1) * 0.5f - 2f, beamY, 4f, ground - beamY);
+                }
+
+                UILabel label = UIUtils.CreateLabel(b, type == GantryShape.CantileverEnd ? "Cantilever 2" : GantryShape.Names[type], 0.6f);
+                label.isInteractive = false;
+                label.relativePosition = new Vector3(5f, Height - 14f);
+            }
+        }
+
+        /// <summary>What the structure is built from.</summary>
+        private void LookButtons(Gantry g)
+        {
+            const float Gap = 4f;
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, 30f);
+            float w = (_content.width - Gap * (GantryShape.LookCount - 1)) / GantryShape.LookCount;
+            for (byte look = 0; look < GantryShape.LookCount; look++)
+            {
+                byte chosen = look;
+                var b = row.AddUIComponent<UIButton>();
+                b.text = GantryShape.LookNames[look];
+                b.textScale = 0.65f;
+                b.size = new Vector2(w, 28f);
+                b.relativePosition = new Vector3(look * (w + Gap), 0f);
+                b.normalBgSprite = g.Look == look ? "ButtonMenuPressed" : "ButtonMenu";
+                b.hoveredBgSprite = "ButtonMenuHovered";
+                b.pressedBgSprite = "ButtonMenuPressed";
+                b.eventClick += (c, p) =>
+                {
+                    Change(g, "gantry look", () => g.Look = chosen);
+                    Rebuild();
+                };
+            }
+        }
+
+        private static void TypeBlock(UIComponent parent, float x, float y, float w, float h)
+        {
+            var s = parent.AddUIComponent<UISprite>();
+            s.spriteName = "EmptySprite";
+            s.color = new Color32(225, 225, 215, 255);
+            s.isInteractive = false;
+            s.size = new Vector2(w, h);
+            s.relativePosition = new Vector3(x, y);
+        }
+
         /// <summary>What goes on a gantry that has nothing on it yet. Both can go on later, from the normal controls.</summary>
         private void Chooser(Gantry g)
         {
@@ -247,7 +344,7 @@ namespace GantryTool.UI
             int head = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, design, first, last);
             if (head >= 0)
             {
-                UIUtils.HideTooltip(this);
+                UIUtils.ClearTooltips(_content);
                 Tool.EditHead(g, head);
             }
         }
@@ -286,9 +383,9 @@ namespace GantryTool.UI
             addRow.size = new Vector2(_content.width, 34f);
             bool canAdd = extras < HeadRef.MaxExtraHeads;
             float halfRow = (_content.width - 6f) / 2f;
-            RowButton(addRow, 0, halfRow, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
+            RowButton(addRow, 0, halfRow, "Add signal (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
                 canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
-                       : "This gantry has the most added signs allowed", () =>
+                       : "This gantry has the most added signals allowed", () =>
                 {
                     Gantry cur = GantryManager.Find(_gantryId);
                     if (cur == null || Tool == null)

@@ -97,6 +97,38 @@ namespace GantryTool.UI
             }
         }
 
+        private static int _tooltipFrames;
+
+        /// <summary>
+        /// Before replacing a panel's controls: takes the tooltips off them, as the one under the mouse would otherwise stay
+        /// on screen. It can also come back later in the same frame, so <see cref="KeepTooltipHidden"/> sees it off.
+        /// </summary>
+        public static void ClearTooltips(UIComponent c)
+        {
+            HideTooltip(c);
+            ForgetTooltips(c);
+            _tooltipFrames = 3;
+        }
+
+        private static void ForgetTooltips(UIComponent c)
+        {
+            c.tooltip = "";
+            foreach (UIComponent child in c.components)
+            {
+                ForgetTooltips(child);
+            }
+        }
+
+        /// <summary>Call every frame from a panel that uses <see cref="ClearTooltips"/>.</summary>
+        public static void KeepTooltipHidden(UIComponent c)
+        {
+            if (_tooltipFrames > 0)
+            {
+                _tooltipFrames--;
+                HideTooltip(c);
+            }
+        }
+
         /// <summary>
         /// A slider from the options-page template (UIHelper), sized to <paramref name="rowWidth"/>, with its value in
         /// the label and colours that read clearly on a MenuPanel2 background. <paramref name="format"/> null =

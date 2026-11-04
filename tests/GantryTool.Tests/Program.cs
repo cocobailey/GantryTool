@@ -20,6 +20,8 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("guide signs: default size, matching heights and the player's own size", GuideSizes);
+            Run("guide signs: can be drawn on several threads at once", GuideThreads);
             Run("v2 save (overrides without direction) loads", V2Loads);
             Run("v3 save written by 1.0 loads identically", V3From10Loads);
             Run("legacy block is byte-identical to 1.0's", LegacyBytesIdenticalTo10);
@@ -72,6 +74,10 @@ namespace GantryTool.Tests
             Run("bare gantries: only new ones; old saves keep their signals", BareGantries);
             Run("arrangement view: lanes as drivers see them, and where a dragged sign lands", GuideArrangement);
             Run("guide signs: blank, lane closed and lane ending", GuideSimpleSigns);
+            Run("guide signs: exit only sections cover their lanes", GuideExitSections);
+            Run("guide signs: divider and exit only plate", GuideDividerAndPlate);
+            Run("gantry types: posts, the median post, and saving", GantryTypes);
+            Run("guide signs: dragging a part snaps it into place", GuideDragging);
             Run("guide signs: only the marked row becomes lane arrows", GuideLaneRow);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
@@ -1014,6 +1020,83 @@ namespace GantryTool.Tests
             Check(GantryTool.Guide.GuideFit.LaneRowIndex(new Dictionary<string, object> { { "items", new List<object>() } }) == -1, "no arrows at all");
         }
 
+        private static GuideHead SizedSign(byte id, string template, Action<Dictionary<string, object>> change = null)
+        {
+            Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", template);
+            if (change != null)
+            {
+                change(doc);
+            }
+
+            return new GuideHead { Id = id, Along = 10f, Side = -1, Scale = 1f, Design = GantryTool.Guide.Json.Write(doc) };
+        }
+
+        private static void GuideSizes()
+        {
+            var none = new List<GantryTool.Detect.GantryLane>();
+            var signs = new List<GuideHead> { SizedSign(1, "lane-ending"), SizedSign(2, "pull-through"), SizedSign(3, "guide-exit-only"), SizedSign(4, "lane-closed"), SizedSign(5, "gore-exit") };
+            Dictionary<byte, GantryTool.Guide.GuidePlacement> placed = GantryTool.Guide.GuideFit.Arrange(signs, none);
+            float tall = placed[3].PanelMetres;
+            Check(tall >= GantryTool.Guide.GuideFit.DefaultHeight, "no sign starts below the default height");
+            foreach (GuideHead h in signs)
+            {
+                Check(Mathf.Abs(placed[h.Id].PanelMetres - tall) < 0.03f, "signs side by side match in height: " + h.Id);
+            }
+
+            Check(Mathf.Abs(placed[1].WidthMetres - placed[1].HeightMetres) < 0.03f, "the lane ending sign stays square");
+            Check(Mathf.Abs(placed[4].WidthMetres - placed[4].HeightMetres) < 0.03f, "the lane closed sign stays square");
+            Check(placed[5].WidthMetres >= GantryTool.Guide.GuideFit.DefaultWidth - 0.03f, "no plain sign starts below the default width");
+
+            signs[1] = SizedSign(2, "pull-through", d =>
+            {
+                d[GantryTool.Guide.GuideFit.WidthKey] = 8.0;
+                d[GantryTool.Guide.GuideFit.HeightKey] = 4.0;
+            });
+            placed = GantryTool.Guide.GuideFit.Arrange(signs, none);
+            Check(Mathf.Abs(placed[2].WidthMetres - 8f) < 0.03f && Mathf.Abs(placed[2].PanelMetres - 4f) < 0.03f, "the player's own size is used");
+            Check(Mathf.Abs(placed[3].PanelMetres - tall) < 0.03f, "a sign with its own height doesn't change the others");
+
+            signs[1] = SizedSign(2, "pull-through", d => d[GantryTool.Guide.GuideFit.HeightKey] = 1.2);
+            placed = GantryTool.Guide.GuideFit.Arrange(signs, none);
+            Check(Mathf.Abs(placed[2].PanelMetres - 1.2f) < 0.03f, "a short sign shrinks its legend to fit");
+
+            GuideHead other = SizedSign(3, "guide-long");
+            other.Side = 1;
+            GuideHead pull = SizedSign(2, "pull-through");
+            placed = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { pull, other }, none);
+            Check(placed[2].PanelMetres < placed[3].PanelMetres - 0.01f, "signs facing the other way don't count");
+        }
+
+        private static void GuideThreads()
+        {
+            string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-only"));
+            GantryTool.Guide.GuideSign alone = GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(design), 2048, 3f);
+            var results = new GantryTool.Guide.GuideSign[6];
+            var threads = new System.Threading.Thread[results.Length];
+            for (int i = 0; i < threads.Length; i++)
+            {
+                int n = i;
+                threads[i] = new System.Threading.Thread(() => results[n] = GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(design), 2048, 3f));
+                threads[i].Start();
+            }
+
+            foreach (System.Threading.Thread t in threads)
+            {
+                t.Join();
+            }
+
+            foreach (GantryTool.Guide.GuideSign r in results)
+            {
+                bool same = r != null && r.Parts.Count == alone.Parts.Count && r.Pixels.Length == alone.Pixels.Length;
+                for (int i = 0; same && i < r.Pixels.Length; i++)
+                {
+                    same = r.Pixels[i].r == alone.Pixels[i].r && r.Pixels[i].g == alone.Pixels[i].g && r.Pixels[i].b == alone.Pixels[i].b && r.Pixels[i].a == alone.Pixels[i].a;
+                }
+
+                Check(same, "a sign drawn alongside others comes out the same");
+            }
+        }
+
         private static void GuideSimpleSigns()
         {
             GantryTool.Guide.GuideSign blank = GantryTool.Guide.GuideRenderer.Render(GantryTool.Guide.GuideAssets.Template("us", "blank-green"));
@@ -1021,7 +1104,7 @@ namespace GantryTool.Tests
 
             Dictionary<string, object> ending = GantryTool.Guide.GuideAssets.Template("us", "lane-ending");
             GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(ending);
-            Check(s.Height > s.Width && s.Parts.Count == 1 && s.Parts[0].Type == "symbol" && s.Parts[0].Path == "0", "the symbol can be clicked");
+            Check(s.Height == s.Width && s.Parts.Count == 1 && s.Parts[0].Type == "symbol" && s.Parts[0].Path == "0", "the symbol can be clicked");
             int black = 0;
             foreach (Color32 c in s.Pixels)
             {
@@ -1036,6 +1119,227 @@ namespace GantryTool.Tests
 
             var missing = new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "symbol" }, { "name", "nope" } } } } };
             GantryTool.Guide.GuideRenderer.Render(missing, 256); // must not throw
+        }
+
+        private static void GuideExitSections()
+        {
+            Func<string, bool, Dictionary<string, object>> arrow = (dir, exit) =>
+            {
+                var a = new Dictionary<string, object> { { "type", "arrow" }, { "direction", dir } };
+                if (exit)
+                {
+                    a[GantryTool.Guide.GuideFit.ExitOnlyKey] = true;
+                }
+
+                return a;
+            };
+            var row = new Dictionary<string, object>
+            {
+                { "type", "row" },
+                { GantryTool.Guide.GuideFit.PerLaneKey, true },
+                { "items", new List<object> { arrow("down", false), arrow("down", false), arrow("down", true) } }
+            };
+            var doc = new Dictionary<string, object> { { "theme", "us" }, { "items", new List<object> { row } } };
+            var h = new GuideHead { Id = 1, Scale = 1f, Side = -1, Design = GantryTool.Guide.Json.Write(doc), FitFirst = 1, FitLast = 3, LaneArrows = true };
+            GantryTool.Guide.GuidePlacement placed = GantryTool.Guide.GuideFit.Resolve(h, GuideLanes());
+            var fitted = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(placed.Design);
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(fitted, 2048, 3f);
+            var parts = new Dictionary<string, GantryTool.Guide.GuidePart>();
+            foreach (GantryTool.Guide.GuidePart p in s.Parts)
+            {
+                parts[p.Path] = p;
+            }
+
+            // Yellow only in the third lane's share of the sign, along the row of arrows.
+            float ppu = s.PixelWidth / s.Width;
+            int y = Mathf.RoundToInt((parts["0"].Y + 3f) * ppu);
+            int yellowFirst = -1, yellowLast = -1;
+            for (int x = 0; x < s.PixelWidth; x++)
+            {
+                Color32 c = s.Pixels[y * s.PixelWidth + x];
+                if (c.r > 230 && c.g > 170 && c.b < 60)
+                {
+                    yellowFirst = yellowFirst < 0 ? x : yellowFirst;
+                    yellowLast = x;
+                }
+            }
+
+            float laneUnits = 3f / (GantryTool.Guide.GuideFit.MetresPerUnit * placed.Scale);
+            float centre = s.Width * 0.5f;
+            Check(yellowFirst >= 0, "a yellow section is drawn");
+            Check(Mathf.Abs(yellowFirst / ppu - (centre + laneUnits * 0.5f)) < 6f, "it starts at the lane's left edge (" + yellowFirst / ppu + " vs " + (centre + laneUnits * 0.5f) + ")");
+            Check(yellowLast / ppu > centre + laneUnits, "and carries on across the lane");
+
+            // Wording can change, and is carried through fitting.
+            row[GantryTool.Guide.GuideFit.ExitTextKey] = "EXIT 12 ONLY";
+            h.Design = GantryTool.Guide.Json.Write(doc);
+            Check(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design.Contains("EXIT 12 ONLY"), "its wording");
+            h.FitFirst = 0;
+            GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(h.Design)); // placed by hand: plain arrows
+
+            // New lanes aren't exit only just because the last one was.
+            GantryTool.Guide.GuideFit.PadLaneRow(doc, 5);
+            List<object> arrows = GantryTool.Guide.Json.Arr(row, "items");
+            Check(arrows.Count == 5 && !((Dictionary<string, object>)arrows[4]).ContainsKey(GantryTool.Guide.GuideFit.ExitOnlyKey), "padding doesn't copy it");
+
+            // Bad data still draws.
+            var bad = new Dictionary<string, object>
+            {
+                { "items", new List<object> { new Dictionary<string, object>
+                {
+                    { "type", "laneArrows" },
+                    { "at", new List<object> { 0.0, 1.0 } },
+                    { "edges", new List<object> { "x" } },
+                    { "items", new List<object> { arrow("down", true), arrow("none", true) } }
+                } } }
+            };
+            GantryTool.Guide.GuideRenderer.Render(bad, 256);
+        }
+
+        private static void GuideDividerAndPlate()
+        {
+            Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", "pull-through");
+            Check(!GantryTool.Guide.GuideFit.HasDivider(doc), "no divider yet");
+            Dictionary<string, object> text = GantryTool.Guide.GuideFit.SplitSign(doc);
+            Check(GantryTool.Guide.GuideFit.HasDivider(doc) && text != null, "split");
+            List<object> items = GantryTool.Guide.Json.Arr(doc, "items");
+            Check(items.Count == 2 && GantryTool.Guide.GuideFit.IsArrows((Dictionary<string, object>)items[1]), "wording together, arrows still below");
+            Check(GantryTool.Guide.GuideRenderer.Render(doc).Parts.Count >= 5, "draws both sides");
+
+            Dictionary<string, object> plate = GantryTool.Guide.GuideFit.AddExitPlate(doc);
+            var arrowRow = (Dictionary<string, object>)items[1];
+            Check(GantryTool.Guide.Json.Arr(arrowRow, "items").Count == 3 && GantryTool.Guide.Json.Str((Dictionary<string, object>)GantryTool.Guide.Json.Arr(arrowRow, "items")[1], "type") == "chip", "plate goes between the arrows");
+            Check(GantryTool.Guide.Json.Str(plate, "text") == "EXIT ONLY", "with its text");
+
+            var empty = new Dictionary<string, object> { { "theme", "us" } };
+            GantryTool.Guide.GuideFit.AddExitPlate(empty);
+            Check(GantryTool.Guide.Json.Arr((Dictionary<string, object>)GantryTool.Guide.Json.Arr(empty, "items")[0], "items").Count == 3, "with no arrows it brings its own");
+            GantryTool.Guide.GuideFit.SplitSign(new Dictionary<string, object>());
+            GantryTool.Guide.GuideRenderer.Render(empty);
+        }
+
+        private static void GuideDragging()
+        {
+            Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", "guide-exit-only");
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(doc);
+            Func<string, Dictionary<string, object>> at = path => GantryTool.Guide.GuideDrag.ItemAt(doc, path);
+            var parts = new Dictionary<string, GantryTool.Guide.GuidePart>();
+            foreach (GantryTool.Guide.GuidePart p in s.Parts)
+            {
+                parts[p.Path] = p;
+            }
+
+            // Items: 0 tab, 1 row(shield, SOUTH), 2 Saugus, 3 band.
+            Check(GantryTool.Guide.GuideDrag.Movable(doc, "0/0", -1) == null, "a tab's text stays");
+            Check(GantryTool.Guide.GuideDrag.Movable(doc, "3/0", -1) == null, "a band's parts stay");
+            Check(GantryTool.Guide.GuideDrag.Movable(doc, "3", -1) == null, "the band itself moves with its buttons");
+            Check(GantryTool.Guide.GuideDrag.Movable(doc, "1/0", 1) == null, "lane arrows stay");
+            Dictionary<string, object> saugus = GantryTool.Guide.GuideDrag.Movable(doc, "2", -1);
+            Check(saugus != null && GantryTool.Guide.Json.Str(saugus, "text") == "Saugus", "text moves");
+
+            GantryTool.Guide.GuidePart south = parts["1/1"];
+            GantryTool.Guide.GuideDrop drop;
+            Check(GantryTool.Guide.GuideDrag.Find(doc, s.Parts, saugus, south.X + south.W * 0.95f, south.Y + south.H * 0.5f, out drop), "finds a place");
+            Check(drop.Path == "1/1" && drop.Side == GantryTool.Guide.DropSide.Right, "the right end of a word: beside it (" + drop.Path + " " + drop.Side + ")");
+            Check(GantryTool.Guide.GuideDrag.Find(doc, s.Parts, saugus, south.X + south.W * 0.5f, south.Y + 1f, out drop) && drop.Side == GantryTool.Guide.DropSide.Above, "the top of a word: above it");
+            GantryTool.Guide.GuideDrag.Find(doc, s.Parts, saugus, parts["3"].X + parts["3"].W * 0.05f, parts["3"].Y + 1f, out drop);
+            Check(drop.Side == GantryTool.Guide.DropSide.Above || drop.Side == GantryTool.Guide.DropSide.Below, "a band is only above or below");
+            Check(drop.Path != "0" && drop.Path != "0/0", "never into the tab");
+
+            // Beside a word in a row: it joins the row.
+            GantryTool.Guide.GuideDrag.Find(doc, s.Parts, saugus, south.X + south.W * 0.95f, south.Y + south.H * 0.5f, out drop);
+            Check(GantryTool.Guide.GuideDrag.Apply(doc, saugus, drop), "moves");
+            List<object> top = GantryTool.Guide.Json.Arr(doc, "items");
+            List<object> row = GantryTool.Guide.Json.Arr((Dictionary<string, object>)top[1], "items");
+            Check(top.Count == 3 && row.Count == 3 && row[2] == saugus, "joined the row, on the right");
+
+            // Above a word in a row: above the whole row.
+            s = GantryTool.Guide.GuideRenderer.Render(doc);
+            Dictionary<string, object> shield = at("1/0");
+            var above = new GantryTool.Guide.GuideDrop { Path = "1/1", Side = GantryTool.Guide.DropSide.Above };
+            Check(GantryTool.Guide.GuideDrag.Apply(doc, saugus, above), "moves again");
+            top = GantryTool.Guide.Json.Arr(doc, "items");
+            Check(top[1] == saugus && GantryTool.Guide.Json.Arr((Dictionary<string, object>)top[2], "items").Count == 2, "above the row, which is left with two");
+
+            // Beside a line of its own: the two become a row.
+            var beside = new GantryTool.Guide.GuideDrop { Path = "1", Side = GantryTool.Guide.DropSide.Left };
+            Check(GantryTool.Guide.GuideDrag.Apply(doc, shield, beside), "moves a third time");
+            top = GantryTool.Guide.Json.Arr(doc, "items");
+            var made = (Dictionary<string, object>)top[1];
+            Check(GantryTool.Guide.Json.Str(made, "type") == "row" && GantryTool.Guide.Json.Arr(made, "items")[0] == shield && GantryTool.Guide.Json.Arr(made, "items")[1] == saugus, "a new row, shield on the left");
+            GantryTool.Guide.GuideRenderer.Render(doc);
+
+            var self = new GantryTool.Guide.GuideDrop { Path = "1/0", Side = GantryTool.Guide.DropSide.Left };
+            Check(!GantryTool.Guide.GuideDrag.Apply(doc, shield, self), "not onto itself");
+            Check(!GantryTool.Guide.GuideDrag.Apply(doc, shield, new GantryTool.Guide.GuideDrop { Path = "9/9", Side = GantryTool.Guide.DropSide.Left }), "not onto nothing");
+        }
+
+        private static void GantryTypes()
+        {
+            Check(GantryShape.PostAtStart(GantryShape.Span) && GantryShape.PostAtEnd(GantryShape.Span), "span: both ends");
+            Check(GantryShape.PostAtStart(GantryShape.CantileverStart) && !GantryShape.PostAtEnd(GantryShape.CantileverStart), "cantilever: first end");
+            Check(!GantryShape.PostAtStart(GantryShape.CantileverEnd) && GantryShape.PostAtEnd(GantryShape.CantileverEnd), "cantilever: second end");
+            Check(!GantryShape.PostAtStart(GantryShape.MedianT) && !GantryShape.PostAtEnd(GantryShape.MedianT), "median T: neither");
+            Check(GantryShape.Valid(200) == GantryShape.Span, "an unknown type is a span");
+            Check(GantryShape.Names.Length == GantryShape.Count, "all named");
+
+            // Lanes at 5, 8, 11, then a wide gap to 20 and 23: the post goes in the median.
+            var lanes = GuideLanes();
+            lanes.RemoveAt(3);
+            lanes.Add(new GantryTool.Detect.GantryLane { Offset = 20f, Width = 3f, TravelSign = -1 });
+            lanes.Add(new GantryTool.Detect.GantryLane { Offset = 23f, Width = 3f, TravelSign = -1 });
+            Check(Mathf.Abs(GantryShape.MedianPost(lanes, 30f) - 15.5f) < 0.01f, "post in the widest gap (" + GantryShape.MedianPost(lanes, 30f) + ")");
+            Check(GantryShape.MedianPost(new List<GantryTool.Detect.GantryLane>(), 30f) == 15f, "no lanes: the middle");
+            Check(GantryShape.MedianPost(GuideLanes(), 40f) == 20f, "lanes side by side: the middle");
+            Check(GantryShape.PostPosition(7f, lanes, 30f) == 7f, "the player's position wins");
+            Check(GantryShape.PostPosition(99f, lanes, 30f) == 30f, "kept on the beam");
+
+            List<Gantry> gantries = Sample();
+            gantries[0].Type = GantryShape.MedianT;
+            gantries[0].PostAlong = 3.5f;
+            gantries[1].Type = GantryShape.CantileverEnd;
+            List<Gantry> loaded = Sample();
+            string err;
+            GuideData.Apply(GuideData.Write(gantries, new object()), loaded, out err);
+            Check(err == null && loaded[0].Type == GantryShape.MedianT && loaded[0].PostAlong == 3.5f, "saved");
+            Check(loaded[1].Type == GantryShape.CantileverEnd && float.IsNaN(loaded[1].PostAlong), "automatic post stays automatic");
+            Check(loaded[2].Type == GantryShape.Span && loaded[2].LaneHeads, "others are spans with their signals");
+            Check(SameBytes(GantryData.WriteLegacy(Sample(), new object()), GantryData.WriteLegacy(gantries, new object())), "legacy block unchanged");
+            Check(SameBytes(GantryData.WriteExt(Sample()), GantryData.WriteExt(gantries)), "extension block unchanged");
+            Check(GuideData.Write(Sample(), new object()).Length == 8, "plain gantries add nothing");
+
+            gantries = Sample();
+            gantries[2].Look = GantryShape.CurvedTube;
+            loaded = Sample();
+            GuideData.Apply(GuideData.Write(gantries, new object()), loaded, out err);
+            Check(err == null && loaded[2].Look == GantryShape.CurvedTube && loaded[0].Look == GantryShape.BoxTruss, "its look is saved");
+            Check(GantryShape.ValidLook(99) == GantryShape.BoxTruss && GantryShape.LookNames.Length == GantryShape.LookCount, "looks are named; unknown is a box truss");
+
+            // The curved tube: up from the ground, over, and down again.
+            List<Vector2> arch = GantryShape.CurvedPath(GantryShape.Span, 30f, 8f, 1f, 2f, 3f);
+            Check(arch[0] == new Vector2(0f, 1f) && arch[arch.Count - 1] == new Vector2(30f, 2f), "from foot to foot");
+            float high = 0f;
+            for (int i = 1; i < arch.Count; i++)
+            {
+                high = Mathf.Max(high, arch[i].y);
+                Check(arch[i].x >= arch[i - 1].x - 0.001f, "always moving along");
+            }
+
+            Check(Mathf.Abs(high - 8f) < 0.01f, "reaching the beam");
+            Check(Mathf.Abs(arch[5].x - arch[0].x) < 3f && arch[9].y > 7.9f, "after a bend at the start");
+            List<Vector2> arm = GantryShape.CurvedPath(GantryShape.CantileverStart, 20f, 8f, 0f, 0f, 3f);
+            Check(arm[arm.Count - 1] == new Vector2(20f, 8f), "a cantilever's free end stays up");
+            List<Vector2> other = GantryShape.CurvedPath(GantryShape.CantileverEnd, 20f, 8f, 0f, 0f, 3f);
+            Check(other[0] == new Vector2(0f, 8f) && other[other.Count - 1] == new Vector2(20f, 0f), "or the other way round");
+            List<Vector2> tiny = GantryShape.CurvedPath(GantryShape.Span, 4f, 8f, 0f, 0f, 3f);
+            for (int i = 1; i < tiny.Count; i++)
+            {
+                Check(tiny[i].x >= tiny[i - 1].x - 0.001f, "bends don't cross on a short span");
+            }
+
+            // A save from before types.
+            List<Gantry> older = Sample();
+            Check(older[0].Type == GantryShape.Span, "a gantry starts as a span");
         }
 
         private static void GuideArrangement()

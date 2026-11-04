@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using GantryTool.Data;
 using GantryTool.Guide;
 using UnityEngine;
@@ -17,7 +19,10 @@ namespace GantryTool.Render
         public Material Material;
     }
 
-    /// <summary>Bakes each distinct design once. Main thread only (makes Unity textures).</summary>
+    /// <summary>
+    /// Bakes each distinct design once, drawing it on a worker thread so an edit never holds up the game. Until a design
+    /// is ready, whoever asked for it keeps showing what it had. Call from the main thread (makes Unity textures).
+    /// </summary>
     public static class GuideCache
     {
         private const int CollectAbove = 16;
@@ -29,6 +34,23 @@ namespace GantryTool.Render
         private static readonly Dictionary<string, GuideCacheEntry> Entries = new Dictionary<string, GuideCacheEntry>();
         private static readonly Dictionary<string, Texture2D> Thumbnails = new Dictionary<string, Texture2D>();
 
+        private sealed class Drawn
+        {
+            public string Design;
+            public int Generation;
+            public GuideSign Sign;
+            public Color32[] Pixels;
+            public Exception Error;
+            public long Milliseconds;
+        }
+
+        private static readonly object Sync = new object();
+        private static readonly List<string> Wanted = new List<string>();
+        private static readonly List<Drawn> Finished = new List<Drawn>();
+        private static string _drawing;
+        private static bool _working;
+        private static int _generation;
+
         /// <summary>The design's entry, baking it if needed; null if it can't be drawn (logged once).</summary>
         public static GuideCacheEntry Get(string design)
         {
@@ -38,41 +60,133 @@ namespace GantryTool.Render
             }
 
             GuideCacheEntry e;
-            if (Entries.TryGetValue(design, out e))
-            {
-                return e;
-            }
-
-            if (Entries.Count >= CollectAbove)
-            {
-                Collect();
-            }
-
-            try
-            {
-                e = Bake(design);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Guide sign could not be drawn", ex);
-                e = null;
-            }
-
-            Entries[design] = e;
+            TryGet(design, out e);
             return e;
         }
 
-        private static GuideCacheEntry Bake(string design)
+        /// <summary>True once a design has been dealt with (its entry is null if it can't be drawn); if not, starts on it.</summary>
+        public static bool TryGet(string design, out GuideCacheEntry entry)
         {
-            var doc = Json.Parse(design) as Dictionary<string, object>;
-            if (doc == null)
+            Pump();
+            if (Entries.TryGetValue(design, out entry))
             {
-                throw new FormatException("A guide sign design must be a JSON object");
+                return true;
             }
 
-            GuideSign sign = GuideRenderer.Render(doc, MaxPixels, PixelsPerUnit);
-            Texture2D tex = ToTexture(sign);
-            Log.Debug("Baked guide sign: " + sign.PixelWidth + " x " + sign.PixelHeight + " px");
+            lock (Sync)
+            {
+                if (design != _drawing && !Wanted.Contains(design))
+                {
+                    Wanted.Add(design);
+                }
+
+                if (!_working)
+                {
+                    _working = true;
+                    ThreadPool.QueueUserWorkItem(Work);
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The worker: draws the design asked for last and forgets the rest. While someone types, only the latest text
+        /// matters, and anything still needed is asked for again.
+        /// </summary>
+        private static void Work(object unused)
+        {
+            while (true)
+            {
+                string design;
+                int generation;
+                lock (Sync)
+                {
+                    if (Wanted.Count == 0)
+                    {
+                        _working = false;
+                        return;
+                    }
+
+                    design = Wanted[Wanted.Count - 1];
+                    Wanted.Clear();
+                    _drawing = design;
+                    generation = _generation;
+                }
+
+                var done = new Drawn { Design = design, Generation = generation };
+                var watch = Stopwatch.StartNew();
+                try
+                {
+                    var doc = Json.Parse(design) as Dictionary<string, object>;
+                    if (doc == null)
+                    {
+                        throw new FormatException("A guide sign design must be a JSON object");
+                    }
+
+                    done.Sign = GuideRenderer.Render(doc, MaxPixels, PixelsPerUnit);
+                    done.Pixels = Upright(done.Sign);
+                }
+                catch (Exception ex)
+                {
+                    done.Error = ex;
+                }
+
+                done.Milliseconds = watch.ElapsedMilliseconds;
+                lock (Sync)
+                {
+                    _drawing = null;
+                    Finished.Add(done);
+                }
+            }
+        }
+
+        /// <summary>Takes in what the worker has finished.</summary>
+        private static void Pump()
+        {
+            Drawn[] done;
+            lock (Sync)
+            {
+                if (Finished.Count == 0)
+                {
+                    return;
+                }
+
+                done = Finished.ToArray();
+                Finished.Clear();
+            }
+
+            foreach (Drawn d in done)
+            {
+                if (d.Generation != _generation)
+                {
+                    continue;
+                }
+
+                if (Entries.Count >= CollectAbove)
+                {
+                    Collect();
+                }
+
+                GuideCacheEntry e = null;
+                if (d.Error != null)
+                {
+                    Log.Error("Guide sign could not be drawn", d.Error);
+                }
+                else
+                {
+                    var watch = Stopwatch.StartNew();
+                    e = Bake(d.Sign, d.Pixels);
+                    Log.Debug("Baked guide sign: " + d.Sign.PixelWidth + " x " + d.Sign.PixelHeight + " px, drawn in " + d.Milliseconds + " ms, uploaded in " + watch.ElapsedMilliseconds + " ms");
+                }
+
+                Entries[d.Design] = e;
+            }
+        }
+
+        private static GuideCacheEntry Bake(GuideSign sign, Color32[] pixels)
+        {
+            Texture2D tex = ToTexture(pixels, sign.PixelWidth, sign.PixelHeight);
             return new GuideCacheEntry
             {
                 Width = sign.Width,
@@ -159,6 +273,11 @@ namespace GantryTool.Render
 
         private static Texture2D ToTexture(GuideSign sign)
         {
+            return ToTexture(Upright(sign), sign.PixelWidth, sign.PixelHeight);
+        }
+
+        private static Color32[] Upright(GuideSign sign)
+        {
             int w = sign.PixelWidth, h = sign.PixelHeight;
 
             // Bottom row first for Unity. The mesh has the sign's shape, so the texture is opaque; what lies outside the
@@ -181,6 +300,11 @@ namespace GantryTool.Render
                 }
             }
 
+            return px;
+        }
+
+        private static Texture2D ToTexture(Color32[] px, int w, int h)
+        {
             var tex = new Texture2D(w, h, TextureFormat.ARGB32, true, false) { name = "GantryGuideSign" };
             tex.wrapMode = TextureWrapMode.Clamp;
             tex.filterMode = FilterMode.Trilinear;
@@ -194,23 +318,21 @@ namespace GantryTool.Render
         public static void Collect()
         {
             var used = new HashSet<string>();
+            var showing = new HashSet<Material>();   // still on a gantry until its new design is ready
             var gantries = new List<Gantry>();
             GantryManager.GetAll(gantries);
             lock (GantryManager.Lock)
             {
                 foreach (Gantry g in gantries)
                 {
-                    foreach (GuideHead h in g.GuideSigns)
-                    {
-                        if (h.Design != null && h.FitFirst == 0)
-                        {
-                            used.Add(h.Design);
-                        }
-                    }
-
                     foreach (GuidePlacement p in g.GuidePlacements.Values)
                     {
                         used.Add(p.Design);
+                    }
+
+                    foreach (GuideDraw d in g.GuideDraws)
+                    {
+                        showing.Add(d.Material);
                     }
                 }
             }
@@ -218,7 +340,7 @@ namespace GantryTool.Render
             var drop = new List<string>();
             foreach (KeyValuePair<string, GuideCacheEntry> kv in Entries)
             {
-                if (!used.Contains(kv.Key))
+                if (!used.Contains(kv.Key) && (kv.Value == null || !showing.Contains(kv.Value.Material)))
                 {
                     drop.Add(kv.Key);
                 }
@@ -233,6 +355,13 @@ namespace GantryTool.Render
 
         public static void Release()
         {
+            lock (Sync)
+            {
+                _generation++;
+                Wanted.Clear();
+                Finished.Clear();
+            }
+
             foreach (GuideCacheEntry e in Entries.Values)
             {
                 Free(e);
@@ -269,6 +398,7 @@ namespace GantryTool.Render
         private const float Depth = 0.08f;      // panel thickness
         private const int CornerSteps = 5;
         private const float OnTopOverlap = 0.15f; // how far a sign on top of the truss comes down over it
+        private const float BracketSize = 0.1f;
         private const float CasterBehind = 0.6f;  // shadow sheet behind the face: more than a shadow map texel at most distances
 
         /// <summary>A sign's size in metres and where its centre is along the beam; false if its design can't be drawn.</summary>
@@ -277,16 +407,13 @@ namespace GantryTool.Render
             GuidePlacement p = Place(g, h);
             float span = g.Span;
             along = p.Along;
-            width = height = 0f;
-            GuideCacheEntry e = GuideCache.Get(p.Design);
-            if (e == null)
+            width = p.WidthMetres;
+            height = p.HeightMetres;
+            if (width <= 0f)
             {
                 return false;
             }
 
-            float m = GuideFit.MetresPerUnit * p.Scale;
-            width = e.Width * m;
-            height = e.Height * m;
             float half = width * 0.5f;
             along = span > width ? Mathf.Clamp(p.Along, half, span - half) : span * 0.5f;
             return true;
@@ -304,23 +431,56 @@ namespace GantryTool.Render
                 : SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, height);
         }
 
-        /// <summary>A sign's placement; a fitted one is remembered until it, or the lanes, change. Main thread.</summary>
+        /// <summary>The height of the middle of a whole sign: signs line up by their panels, with any exit tab standing above.</summary>
+        public static float MidY(Gantry g, GuideHead h)
+        {
+            GuidePlacement p = Place(g, h);
+            return CentreY(g, p.PanelMetres) + (p.HeightMetres - p.PanelMetres) * 0.5f;
+        }
+
+        /// <summary>A sign's placement; all of a gantry's are remembered until a sign, or the lanes, change. Main thread.</summary>
         public static GuidePlacement Place(Gantry g, GuideHead h)
         {
-            GuidePlacement p;
-            if (h.FitFirst == 0)
+            lock (GantryManager.Lock)
             {
-                return new GuidePlacement { Design = h.Design, Along = h.Along, Scale = h.Scale, Source = h };
+                bool current = g.GuidePlacements.Count == g.GuideSigns.Count;
+                GuidePlacement p;
+                for (int i = 0; current && i < g.GuideSigns.Count; i++)
+                {
+                    GuideHead s = g.GuideSigns[i];
+                    current = g.GuidePlacements.TryGetValue(s.Id, out p) && GuideFit.SameFit(p.Source, s);
+                }
+
+                if (!current)
+                {
+                    g.GuidePlacements.Clear();
+                    foreach (KeyValuePair<byte, GuidePlacement> kv in GuideFit.Arrange(g.GuideSigns, g.Lanes))
+                    {
+                        g.GuidePlacements[kv.Key] = kv.Value;
+                    }
+                }
+
+                if (g.GuidePlacements.TryGetValue(h.Id, out p))
+                {
+                    return p;
+                }
+
+                // A sign that has just been removed, still being looked at.
+                return GuideFit.Arrange(new List<GuideHead> { h }, g.Lanes)[h.Id];
+            }
+        }
+
+        /// <summary>True once every sign on the gantry has its picture; until then the old signs stay up.</summary>
+        public static bool Ready(Gantry g)
+        {
+            bool ready = true;
+            foreach (GuideHead h in g.GuideSigns)
+            {
+                GuideCacheEntry e;
+                ready &= GuideCache.TryGet(Place(g, h).Design, out e);
             }
 
-            if (g.GuidePlacements.TryGetValue(h.Id, out p) && GuideFit.SameFit(p.Source, h))
-            {
-                return p;
-            }
-
-            p = GuideFit.Resolve(h, g.Lanes);
-            g.GuidePlacements[h.Id] = p;
-            return p;
+            return ready;
         }
 
         public static void Build(Gantry g)
@@ -331,7 +491,6 @@ namespace GantryTool.Render
             }
 
             g.GuideDraws.Clear();
-            g.GuidePlacements.Clear();
             if (g.GuideBackMesh != null)
             {
                 UnityEngine.Object.Destroy(g.GuideBackMesh);
@@ -367,9 +526,14 @@ namespace GantryTool.Render
 
                 GuidePlacement placed = Place(g, h);
                 GuideCacheEntry e = GuideCache.Get(placed.Design);
+                if (e == null)
+                {
+                    continue;
+                }
+
                 Vector3 normal = side * h.Side;
                 Vector3 right = Vector3.Cross(Vector3.up, -normal).normalized;
-                float midY = CentreY(g, height);
+                float midY = MidY(g, h);
                 Vector3 centre = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along);
                 centre.y = midY;
                 centre = centre - g.Origin + normal * (SignalMeshBuilder.HeadDepth * 0.5f + FacePlane);
@@ -381,11 +545,34 @@ namespace GantryTool.Render
                     AddSign(face, back, caster, outline, e, centre, right, normal, m);
                 }
 
+                if (g.Look != GantryShape.BoxTruss)
+                {
+                    AddBrackets(back, g, along, width, dir, normal, midY);
+                }
+
                 g.GuideDraws.Add(new GuideDraw { Mesh = face.ToMesh("GantryGuideFace"), Material = e.Material });
             }
 
             g.GuideBackMesh = back.Verts.Count > 0 ? back.ToMesh("GantryGuideBack") : null;
             g.GuideCasterMesh = caster.Verts.Count > 0 ? caster.ToMesh("GantryGuideCaster") : null;
+        }
+
+        /// <summary>
+        /// A thin beam doesn't reach a sign's back as a truss does, so two brackets do: out from the beam, then up or down
+        /// behind the sign.
+        /// </summary>
+        private static void AddBrackets(MeshData back, Gantry g, float along, float width, Vector3 dir, Vector3 normal, float signY)
+        {
+            float beamY = g.BeamBottomY + g.BeamDepth * 0.5f;
+            float reach = SignalMeshBuilder.HeadDepth * 0.5f + FacePlane - Depth - BracketSize * 0.5f;
+            for (int i = -1; i <= 1; i += 2)
+            {
+                Vector3 beam = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + i * width * 0.28f) - g.Origin;
+                beam.y = beamY - g.Origin.y;
+                Vector3 out1 = beam + normal * reach;
+                back.Bar(beam, out1, BracketSize, dir);
+                back.Bar(out1, new Vector3(out1.x, signY - g.Origin.y, out1.z), BracketSize, dir);
+            }
         }
 
         /// <summary>The sign's convex parts in sign units (y down): the panel, then each tab.</summary>
@@ -531,6 +718,22 @@ namespace GantryTool.Render
                 int ia = Add(a, n, t, uv), ib = Add(b, n, t, uv), ic = Add(c, n, t, uv), id = Add(d, n, t, uv);
                 Tri(ia, ib, ic, n);
                 Tri(ia, ic, id, n);
+            }
+
+            /// <summary>A square bar between two points, <paramref name="across"/> being square to it.</summary>
+            public void Bar(Vector3 a, Vector3 b, float size, Vector3 across)
+            {
+                Vector3 axis = (b - a).normalized;
+                if (axis.sqrMagnitude < 0.5f)
+                {
+                    return;
+                }
+
+                Vector3 u = across.normalized * (size * 0.5f), v = Vector3.Cross(axis, across).normalized * (size * 0.5f);
+                Quad(a - u - v, b - u - v, b - u + v, a - u + v, -u);
+                Quad(a + u - v, b + u - v, b + u + v, a + u + v, u);
+                Quad(a - u + v, b - u + v, b + u + v, a + u + v, v);
+                Quad(a - u - v, b - u - v, b + u - v, a + u - v, -v);
             }
 
             public Mesh ToMesh(string name)

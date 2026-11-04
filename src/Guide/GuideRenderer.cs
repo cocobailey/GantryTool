@@ -39,7 +39,13 @@ namespace GantryTool.Guide
     /// </summary>
     public static class GuideRenderer
     {
-        private static readonly List<KeyValuePair<Dictionary<string, object>, Node>> Tracked = new List<KeyValuePair<Dictionary<string, object>, Node>>();
+        [ThreadStatic]
+        private static List<KeyValuePair<Dictionary<string, object>, Node>> _tracked;   // signs are also drawn on a worker thread
+
+        private static List<KeyValuePair<Dictionary<string, object>, Node>> Tracked
+        {
+            get { return _tracked ?? (_tracked = new List<KeyValuePair<Dictionary<string, object>, Node>>()); }
+        }
 
         private const string DefaultArrow = "M32 0 H68 V88 H100 L50 150 L0 88 H32 Z";
 
@@ -340,23 +346,123 @@ namespace GantryTool.Guide
         {
             public readonly List<Node> Arrows = new List<Node>();
             public readonly List<float> At = new List<float>();
+            public readonly List<ExitSection> Sections = new List<ExitSection>();
 
             public override void Arrange(float x, float y, float w, float h)
             {
                 base.Arrange(x, y, w, h);
+                float mid = x + w * 0.5f;
                 for (int i = 0; i < Arrows.Count; i++)
                 {
                     Node a = Arrows[i];
-                    float left = Mathf.Clamp(x + w * 0.5f + At[i] - a.W * 0.5f, x, Mathf.Max(x, x + w - a.W));
-                    a.Arrange(left, y, a.W, a.H);
+                    float left = Mathf.Clamp(mid + At[i] - a.W * 0.5f, x, Mathf.Max(x, x + w - a.W));
+                    a.Arrange(left, y + (H - a.H) * 0.5f, a.W, a.H);
+                }
+
+                foreach (ExitSection s in Sections)
+                {
+                    s.Arrange(mid, x, x + w, y, H, Arrows);
                 }
             }
 
             public override void Draw(SignCanvas c, float ppi)
             {
+                foreach (ExitSection s in Sections)
+                {
+                    s.DrawPlate(c, ppi);
+                }
+
                 foreach (Node a in Arrows)
                 {
                     a.Draw(c, ppi);
+                }
+
+                foreach (ExitSection s in Sections)
+                {
+                    s.DrawText(c, ppi);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A coloured section under neighbouring exit only lanes, as wide as those lanes, its wording in the widest space
+        /// the arrows leave.
+        /// </summary>
+        private sealed class ExitSection
+        {
+            private const float TextHeight = 12f;
+            private const float MinTextHeight = 7f;
+            private const float Inset = 3f;
+
+            public Theme Theme;
+            public string Wording, Font;
+            public Color32 Bg, Fg;
+            public int First, Last;
+            public float Left, Right;   // from the sign's centre
+            private float _x0, _x1, _y, _h;
+            private TextNode _text;
+
+            public void Arrange(float mid, float minX, float maxX, float y, float h, List<Node> arrows)
+            {
+                _x0 = Mathf.Max(minX, mid + Left + Inset);
+                _x1 = Mathf.Min(maxX, mid + Right - Inset);
+                _y = y;
+                _h = h;
+
+                // The widest space between this section's arrows.
+                float best = -1f, from = _x0, gapStart = _x0, gapEnd = _x1;
+                for (int i = First; i <= Last + 1; i++)
+                {
+                    bool end = i > Last;
+                    Node a = end ? null : arrows[i];
+                    if (a is BlockNode)
+                    {
+                        continue; // a lane with no arrow leaves its space free
+                    }
+
+                    float to = end ? _x1 : a.X;
+                    if (to - from > best)
+                    {
+                        best = to - from;
+                        gapStart = from;
+                        gapEnd = to;
+                    }
+
+                    if (!end)
+                    {
+                        from = a.X + a.W;
+                    }
+                }
+
+                _text = null;
+                if (string.IsNullOrEmpty(Wording) || best <= 0f)
+                {
+                    return;
+                }
+
+                const float Margin = 3f;
+                TextNode text = BuildText(Theme, Wording, TextHeight, Font, Fg, 0f);
+                float room = best - 2f * Margin;
+                if (text.W > room && text.W > 0f)
+                {
+                    text = BuildText(Theme, Wording, Mathf.Max(MinTextHeight, TextHeight * room / text.W), Font, Fg, 0f);
+                }
+
+                text.Arrange((gapStart + gapEnd - text.W) * 0.5f, y + (h - text.H) * 0.5f, text.W, text.H);
+                _text = text;
+            }
+
+            public void DrawPlate(SignCanvas c, float ppi)
+            {
+                float r = 2f * ppi;
+                c.FillRoundRect(_x0 * ppi, _y * ppi, _x1 * ppi, (_y + _h) * ppi, r, r, r, r, Bg);
+            }
+
+            public void DrawText(SignCanvas c, float ppi)
+            {
+                if (_text != null)
+                {
+                    _text.Draw(c, ppi);
                 }
             }
         }
@@ -729,18 +835,58 @@ namespace GantryTool.Guide
 
         private static Node BuildLaneArrows(Theme t, Dictionary<string, object> item, Ctx ctx)
         {
+            const float SectionPad = 4f;
             var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight) };
             List<object> at = Json.Arr(item, "at");
+            List<object> edges = Json.Arr(item, "edges");
             List<Dictionary<string, object>> arrows = Children(item);
+            Color32 exitBg, exitFg;
+            t.Scheme("yellow", out exitBg, out exitFg);
+            var exitCtx = new Ctx { Font = ctx.Font, Fg = exitFg, Bg = exitBg };
+            ExitSection section = null;
             for (int i = 0; at != null && i < at.Count && i < arrows.Count && node.At.Count < 64; i++)
             {
-                Node a = at[i] is double ? Build(t, arrows[i], ctx, true) : null;
-                if (a != null)
+                bool exitOnly = arrows[i].ContainsKey(GuideFit.ExitOnlyKey) && edges != null && 2 * i + 1 < edges.Count &&
+                    edges[2 * i] is double && edges[2 * i + 1] is double;
+                Node a = at[i] is double ? Build(t, arrows[i], exitOnly ? exitCtx : ctx, true) : null;
+                if (a == null)
                 {
-                    node.At.Add((float)(double)at[i]);
-                    node.Arrows.Add(a);
-                    node.H = Mathf.Max(node.H, a.H);
+                    section = null;
+                    continue;
                 }
+
+                int index = node.Arrows.Count;
+                node.At.Add((float)(double)at[i]);
+                node.Arrows.Add(a);
+                node.H = Mathf.Max(node.H, a.H);
+                if (!exitOnly)
+                {
+                    section = null;
+                    continue;
+                }
+
+                if (section == null)
+                {
+                    section = new ExitSection
+                    {
+                        Theme = t,
+                        Wording = Json.Str(item, GuideFit.ExitTextKey, GuideFit.DefaultExitText),
+                        Font = "RG2014D",
+                        Bg = exitBg,
+                        Fg = exitFg,
+                        First = index,
+                        Left = (float)(double)edges[2 * i]
+                    };
+                    node.Sections.Add(section);
+                }
+
+                section.Last = index;
+                section.Right = (float)(double)edges[2 * i + 1];
+            }
+
+            if (node.Sections.Count > 0)
+            {
+                node.H += 2f * SectionPad;
             }
 
             return node;
@@ -1164,12 +1310,19 @@ namespace GantryTool.Guide
 
             float width = Mathf.Max(content + 4f * border, Mathf.Max(tabsW, Mathf.Max(minWidth, Json.Num(doc, "width", 0f))));
             float extraH = Mathf.Max(0f, Json.Num(doc, "height", 0f) - (bodyH + 4f * border));
+            if (Json.Has(doc, GuideFit.SquareKey))
+            {
+                float sideLength = Mathf.Max(width, bodyH + extraH + 4f * border);
+                width = sideLength;
+                extraH = sideLength - (bodyH + 4f * border);
+            }
+
             float panelH = bodyH + extraH + 4f * border;
             float height = tabsH + panelH;
 
             if (measureOnly)
             {
-                return new GuideSign { Width = width, Height = height };
+                return new GuideSign { Width = width, Height = height, TabHeight = tabsH };
             }
 
             // Bake size.
@@ -1188,6 +1341,9 @@ namespace GantryTool.Guide
                 iir * rTL * ppu, iir * rTR * ppu, iir * ppu, iir * ppu, bg);
 
             float inner = width - 4f * border, pen = y0 + 2f * border;
+
+            // Spare height goes around the first run of content, so it stays centred above any band.
+            int spareAt = parts.FindIndex(n => !(n is BoxNode));
             for (int k = 0; k < parts.Count; k++)
             {
                 var band = parts[k] as BoxNode;
@@ -1202,8 +1358,8 @@ namespace GantryTool.Guide
                 }
                 else
                 {
-                    float extra = k == 0 ? extraH : 0f;
-                    parts[k].Arrange(2f * border + margin, pen + margin, inner - 2f * margin, parts[k].H);
+                    float extra = k == spareAt ? extraH : 0f;
+                    parts[k].Arrange(2f * border + margin, pen + margin + extra * 0.5f, inner - 2f * margin, parts[k].H);
                     parts[k].Draw(canvas, ppu);
                     pen += parts[k].H + 2f * margin + extra;
                 }

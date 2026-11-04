@@ -530,6 +530,8 @@ namespace GantryTool.Tool
             {
                 g.HeightAboveRoad = GantryManager.DefaultHeight;
                 g.LaneHeads = start == Settings.StartLaneSignals;
+                g.Type = GantryShape.Valid(Settings.Current.NewGantryType);
+                g.Look = GantryShape.ValidLook(Settings.Current.NewGantryLook);
             }
 
             UndoStack.PushAdded(g);
@@ -1003,7 +1005,7 @@ namespace GantryTool.Tool
                     return false;
                 }
 
-                midY = GuideMeshBuilder.CentreY(g, size);
+                midY = GuideMeshBuilder.MidY(g, sign);
                 return true;
             }
 
@@ -1192,7 +1194,7 @@ namespace GantryTool.Tool
             }
             else if (_headGantryId != 0 && _headLane >= 0)
             {
-                text = "Click to edit this signal";
+                text = HeadRef.IsGuide(_headLane) ? "Click to edit this sign" : "Click to edit this signal";
             }
             else if (_hoveredId != 0)
             {
@@ -1246,8 +1248,10 @@ namespace GantryTool.Tool
                     }
 
                     float bottom = GantryHeight.BeamBottom(Mathf.Max(_start.y, end.y), scan.RoadTopY, GantryManager.DefaultHeight);
+                    byte previewType = GantryShape.Valid(Settings.Current.NewGantryType);
                     _previewMesh = GantryMeshBuilder.Build(_start, end, bottom,
-                        GantryManager.DefaultBeamDepth, _previewMesh, out _previewOrigin);
+                        GantryManager.DefaultBeamDepth, _previewMesh, out _previewOrigin, previewType,
+                        GantryShape.MedianPost(scan.Lanes, FlatDistance(_start, end)), GantryShape.ValidLook(Settings.Current.NewGantryLook));
                     _previewSignals = SignalMeshBuilder.Build(_start, end, _previewOrigin, bottom,
                         GantryManager.DefaultBeamDepth, scan.Lanes, NoOverrides, null, SignalMeshBuilder.DefaultSignalSize,
                         _previewSignals, GantryMaterials.AtlasFor(SignStyles.Resolve((byte)SignStyle.Default)));
@@ -1396,7 +1400,7 @@ namespace GantryTool.Tool
             Vector3 c = new Vector3(g.Start.x, 0f, g.Start.z) + dir * along;
             Vector3 half = dir * (width * 0.5f);
             var box = new Quad3(c - half - across, c + half - across, c + half + across, c - half + across);
-            float mid = GuideMeshBuilder.CentreY(g, height), bottom = mid - height * 0.5f, top = mid + height * 0.5f;
+            float mid = GuideMeshBuilder.MidY(g, sign), bottom = mid - height * 0.5f, top = mid + height * 0.5f;
             if (edgesOnly)
             {
                 const float Strip = 0.12f;

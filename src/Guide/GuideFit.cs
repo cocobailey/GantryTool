@@ -14,6 +14,7 @@ namespace GantryTool.Guide
         public float Scale;
         public bool Fitted;
         public GuideHead Source;
+        public float WidthMetres, HeightMetres, PanelMetres;   // as drawn; the panel leaves out any exit tab above it
     }
 
     /// <summary>
@@ -30,7 +31,19 @@ namespace GantryTool.Guide
         private const float MinWidth = 1.5f;
 
         /// <summary>Marks the row of arrows in a design that becomes one arrow per lane.</summary>
+        public const string WidthKey = "signWidth";    // the player's own size, metres; in the design, so it needs no save data
+        public const string HeightKey = "signHeight";
+        public const string SquareKey = "square";       // the sign stays square, growing with the gantry's other signs
+        public const float DefaultWidth = 3f, DefaultHeight = 2.4f; // metres: no sign starts smaller
+
         public const string PerLaneKey = "perLane";
+
+        /// <summary>On a lane's arrow: that lane is exit only, shown as a coloured section under its arrow.</summary>
+        public const string ExitOnlyKey = "exitOnly";
+
+        /// <summary>On the lane row: the wording of its exit only sections.</summary>
+        public const string ExitTextKey = "exitText";
+        public const string DefaultExitText = "EXIT ONLY";
 
         /// <summary>The lanes whose drivers see this face (<paramref name="side"/> as in GuideHead), left to right as they see them.</summary>
         public static List<GantryLane> FaceLanes(List<GantryLane> lanes, sbyte side)
@@ -145,6 +158,120 @@ namespace GantryTool.Guide
             return first;
         }
 
+        public static bool HasDivider(Dictionary<string, object> parent)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items != null)
+            {
+                foreach (object o in items)
+                {
+                    var item = o as Dictionary<string, object>;
+                    if (item != null && (Json.Str(item, "type") == "divider" || HasDivider(item)))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Splits the sign's wording into two sides with a line between them: what's there goes left, and the right starts
+        /// with a new line of text, which is returned. Tabs, bands and arrows stay as they are.
+        /// </summary>
+        public static Dictionary<string, object> SplitSign(Dictionary<string, object> doc)
+        {
+            List<object> items = Json.Arr(doc, "items");
+            if (items == null)
+            {
+                items = new List<object>();
+                doc["items"] = items;
+            }
+
+            var left = new List<object>();
+            int at = -1;
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                string type = Json.Str(item, "type");
+                if (item != null && type != "tab" && type != "panel" && !IsArrows(item))
+                {
+                    left.Insert(0, item);
+                    items.RemoveAt(i);
+                    at = i;
+                }
+            }
+
+            if (at < 0)
+            {
+                at = 0;
+                while (at < items.Count && Json.Str(items[at] as Dictionary<string, object>, "type") == "tab")
+                {
+                    at++;
+                }
+            }
+
+            var text = new Dictionary<string, object> { { "type", "text" }, { "text", "New text" } };
+            items.Insert(at, new Dictionary<string, object>
+            {
+                { "type", "row" },
+                { "align", "center" },
+                { "justify", "even" },
+                {
+                    "items", new List<object>
+                    {
+                        new Dictionary<string, object> { { "type", "column" }, { "align", "center" }, { "items", left } },
+                        new Dictionary<string, object> { { "type", "divider" } },
+                        new Dictionary<string, object> { { "type", "column" }, { "align", "center" }, { "items", new List<object> { text } } }
+                    }
+                }
+            });
+            return text;
+        }
+
+        /// <summary>
+        /// Puts a small EXIT ONLY plate between the arrows of the sign's last row of arrows, making that row if there isn't
+        /// one. Returns the plate's text.
+        /// </summary>
+        public static Dictionary<string, object> AddExitPlate(Dictionary<string, object> doc)
+        {
+            List<object> items = Json.Arr(doc, "items");
+            if (items == null)
+            {
+                items = new List<object>();
+                doc["items"] = items;
+            }
+
+            var text = new Dictionary<string, object> { { "type", "text" }, { "text", DefaultExitText }, { "height", 12.0 }, { "font", "RG2014D" } };
+            var chip = new Dictionary<string, object> { { "type", "chip" }, { "scheme", "yellow" }, { "radius", 2.0 }, { "items", new List<object> { text } } };
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var row = items[i] as Dictionary<string, object>;
+                if (row != null && Json.Str(row, "type") == "row" && IsArrows(row))
+                {
+                    List<object> arrows = Json.Arr(row, "items");
+                    arrows.Insert((arrows.Count + 1) / 2, chip);
+                    row["justify"] = "between";
+                    return text;
+                }
+            }
+
+            int at = items.Count;
+            while (at > 0 && Json.Str(items[at - 1] as Dictionary<string, object>, "type") == "panel")
+            {
+                at--;
+            }
+
+            items.Insert(at, new Dictionary<string, object>
+            {
+                { "type", "row" },
+                { "justify", "between" },
+                { "items", new List<object> { NewArrow(), chip, NewArrow() } }
+            });
+            return text;
+        }
+
         public static Dictionary<string, object> NewArrow()
         {
             return new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
@@ -170,7 +297,9 @@ namespace GantryTool.Guide
             List<object> items = where >= 0 ? Json.Arr((Dictionary<string, object>)Json.Arr(doc, "items")[where], "items") : null;
             while (items != null && items.Count < lanes)
             {
-                items.Add(new Dictionary<string, object>((Dictionary<string, object>)items[items.Count - 1]));
+                var copy = new Dictionary<string, object>((Dictionary<string, object>)items[items.Count - 1]);
+                copy.Remove(ExitOnlyKey);
+                items.Add(copy);
             }
         }
 
@@ -273,19 +402,11 @@ namespace GantryTool.Guide
         }
 
         /// <summary>Works out a sign's placement; a sign not fitted, or with no lanes to fit to, stays as stored. Never throws on a bad design.</summary>
-        public static GuidePlacement Resolve(GuideHead h, List<GantryLane> allLanes)
+        public static GuidePlacement Resolve(GuideHead h, List<GantryLane> allLanes, float wantedHeight = 0f)
         {
             var free = new GuidePlacement { Design = h.Design, Along = h.Along, Scale = h.Scale, Source = h };
-            if (h.FitFirst == 0)
-            {
-                return free;
-            }
-
-            List<GantryLane> lanes = FaceLanes(allLanes, h.Side);
-            if (lanes.Count == 0)
-            {
-                return free;
-            }
+            List<GantryLane> lanes = h.FitFirst > 0 ? FaceLanes(allLanes, h.Side) : new List<GantryLane>();
+            bool fit = lanes.Count > 0;
 
             Dictionary<string, object> doc;
             try
@@ -302,37 +423,90 @@ namespace GantryTool.Guide
                 return free;
             }
 
-            int first = Mathf.Clamp(h.FitFirst - 1, 0, lanes.Count - 1);
-            int last = Mathf.Clamp(h.FitLast - 1, first, lanes.Count - 1);
-            float lo = float.MaxValue, hi = float.MinValue;
-            for (int i = first; i <= last; i++)
+            float customWidth = Json.Num(doc, WidthKey, 0f), customHeight = Json.Num(doc, HeightKey, 0f);
+            bool square = Json.Has(doc, SquareKey);
+            if (!fit && wantedHeight <= 0f && customWidth <= 0f && customHeight <= 0f)
             {
-                lo = Mathf.Min(lo, lanes[i].Offset - lanes[i].Width * 0.5f);
-                hi = Mathf.Max(hi, lanes[i].Offset + lanes[i].Width * 0.5f);
+                return free;
             }
 
-            float along = (lo + hi) * 0.5f;
-            float metres = Mathf.Max(MinWidth, hi - lo - 2f * Inset);
-
-            // The legend keeps its chosen size where it fits; a sign that can't fit shrinks to the lanes.
-            doc.Remove("minLanes");
-            doc.Remove("minWidth");
-            doc.Remove("width");
-            float natural = GuideRenderer.Render(doc, 1024, 1f, true).Width;
-            float scale = h.Scale;
-            if (natural * MetresPerUnit * scale > metres)
+            int first = 0, last = 0;
+            float along = h.Along, limit = 0f;
+            if (fit)
             {
-                scale = Mathf.Max(GuideData.MinScale, metres / (natural * MetresPerUnit));
+                first = Mathf.Clamp(h.FitFirst - 1, 0, lanes.Count - 1);
+                last = Mathf.Clamp(h.FitLast - 1, first, lanes.Count - 1);
+                float lo = float.MaxValue, hi = float.MinValue;
+                for (int i = first; i <= last; i++)
+                {
+                    lo = Mathf.Min(lo, lanes[i].Offset - lanes[i].Width * 0.5f);
+                    hi = Mathf.Max(hi, lanes[i].Offset + lanes[i].Width * 0.5f);
+                }
+
+                along = (lo + hi) * 0.5f;
+                limit = Mathf.Max(MinWidth, hi - lo - 2f * Inset);
+            }
+
+            // A square sign stays square over any lanes, unless the player gives it a width. Lane arrows need all their lanes.
+            float laneWidth = limit;
+            if (customWidth > 0f)
+            {
+                limit = fit && h.LaneArrows ? Mathf.Max(customWidth, laneWidth) : customWidth;
+                doc.Remove(SquareKey);
+                square = false;
+            }
+            else if (square)
+            {
+                limit = 0f;
+            }
+
+            if (fit || square || customWidth > 0f)
+            {
+                doc.Remove("minLanes");
+                doc.Remove("minWidth");
+                doc.Remove("width");
+            }
+
+            doc.Remove("height");
+            GuideSign natural = GuideRenderer.Render(doc, 1024, 1f, true);
+            float scale = h.Scale;
+            float target = customHeight > 0f ? customHeight : wantedHeight;
+            if (target > 0f)
+            {
+                float content = (natural.Height - natural.TabHeight) * MetresPerUnit * scale;
+                if (content > target || square)
+                {
+                    scale = Mathf.Max(GuideData.MinScale, scale * target / content);
+                }
+            }
+
+            // The legend keeps its chosen size where it fits; a sign that can't fit shrinks to the width it has.
+            if (limit > 0f && natural.Width * MetresPerUnit * scale > limit)
+            {
+                scale = Mathf.Max(GuideData.MinScale, limit / (natural.Width * MetresPerUnit));
             }
 
             float m = MetresPerUnit * scale;
-            doc["minWidth"] = Math.Round(metres / m, 1);
-            if (!Json.Has(doc, "align"))
+            if (limit > 0f)
+            {
+                doc["minWidth"] = Math.Round(limit / m, 1);
+            }
+            else if (wantedHeight > 0f && !square && !Json.Has(doc, "minLanes"))
+            {
+                doc["minWidth"] = Math.Round(Mathf.Max(Json.Num(doc, "minWidth", 0f), DefaultWidth / m), 1);
+            }
+
+            if (target > 0f)
+            {
+                doc["height"] = Math.Round(target / m, 1);
+            }
+
+            if (fit && !Json.Has(doc, "align"))
             {
                 doc["align"] = "center";
             }
 
-            if (h.LaneArrows)
+            if (fit && h.LaneArrows)
             {
                 // Sign x runs left to right as the driver sees it, the same way round as the lanes.
                 float flip = h.Side < 0 ? 1f : -1f;
@@ -340,14 +514,24 @@ namespace GantryTool.Guide
                 PadLaneRow(doc, last - first + 1);
                 List<object> own = arrowsAt >= 0 ? RowArrows(doc, arrowsAt) : null;
                 var at = new List<object>();
+                var edges = new List<object>();
                 var arrows = new List<object>();
                 for (int i = first; i <= last; i++)
                 {
                     at.Add(Math.Round((lanes[i].Offset - along) * flip / m, 1));
+                    float half = lanes[i].Width * 0.5f;
+                    edges.Add(Math.Round((lanes[i].Offset - along) * flip / m - half / m, 1));
+                    edges.Add(Math.Round((lanes[i].Offset - along) * flip / m + half / m, 1));
                     arrows.Add(own != null && i - first < own.Count ? own[i - first] : NewArrow());
                 }
 
-                var row = new Dictionary<string, object> { { "type", "laneArrows" }, { "items", arrows }, { "at", at } };
+                var row = new Dictionary<string, object> { { "type", "laneArrows" }, { "items", arrows }, { "at", at }, { "edges", edges } };
+                string exitText = arrowsAt >= 0 ? Json.Str((Dictionary<string, object>)Json.Arr(doc, "items")[arrowsAt], ExitTextKey) : null;
+                if (exitText != null)
+                {
+                    row[ExitTextKey] = exitText;
+                }
+
                 if (own != null && own.Count > 0)
                 {
                     object height;
@@ -374,7 +558,85 @@ namespace GantryTool.Guide
                 }
             }
 
-            return new GuidePlacement { Design = Json.Write(doc), Along = along, Scale = scale, Fitted = true, Source = h };
+            return new GuidePlacement { Design = Json.Write(doc), Along = along, Scale = scale, Fitted = fit, Source = h };
+        }
+
+        /// <summary>
+        /// Lays out all the signs on a gantry. Every sign starts from the default size, and the signs facing one way match
+        /// the tallest of them, unless the player has set a height of their own.
+        /// </summary>
+        public static Dictionary<byte, GuidePlacement> Arrange(List<GuideHead> signs, List<GantryLane> lanes)
+        {
+            float minus = DefaultHeight, plus = DefaultHeight;
+            foreach (GuideHead h in signs)
+            {
+                float panel = NaturalPanel(h);
+                if (h.Side < 0)
+                {
+                    minus = Mathf.Max(minus, panel);
+                }
+                else
+                {
+                    plus = Mathf.Max(plus, panel);
+                }
+            }
+
+            var placed = new Dictionary<byte, GuidePlacement>();
+            foreach (GuideHead h in signs)
+            {
+                GuidePlacement p = Resolve(h, lanes, h.Side < 0 ? minus : plus);
+                Measure(ref p);
+                placed[h.Id] = p;
+            }
+
+            return placed;
+        }
+
+        /// <summary>How tall a sign's panel wants to be, in metres; 0 if the player has set its height, or it can't be read.</summary>
+        private static float NaturalPanel(GuideHead h)
+        {
+            try
+            {
+                var doc = Json.Parse(h.Design) as Dictionary<string, object>;
+                if (doc == null || Json.Num(doc, HeightKey, 0f) > 0f)
+                {
+                    return 0f;
+                }
+
+                // A square sign is drawn to fit, so it follows the others and only its size slider can raise them.
+                if (Json.Has(doc, SquareKey))
+                {
+                    return DefaultHeight * h.Scale;
+                }
+
+                doc.Remove("height");
+                GuideSign s = GuideRenderer.Render(doc, 1024, 1f, true);
+                return (s.Height - s.TabHeight) * MetresPerUnit * h.Scale;
+            }
+            catch (FormatException)
+            {
+                return 0f;
+            }
+        }
+
+        private static void Measure(ref GuidePlacement p)
+        {
+            try
+            {
+                var doc = Json.Parse(p.Design) as Dictionary<string, object>;
+                if (doc != null)
+                {
+                    GuideSign s = GuideRenderer.Render(doc, 1024, 1f, true);
+                    float m = MetresPerUnit * p.Scale;
+                    p.WidthMetres = s.Width * m;
+                    p.HeightMetres = s.Height * m;
+                    p.PanelMetres = (s.Height - s.TabHeight) * m;
+                }
+            }
+            catch (FormatException)
+            {
+                p.WidthMetres = p.HeightMetres = p.PanelMetres = 0f;
+            }
         }
     }
 }

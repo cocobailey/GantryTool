@@ -23,10 +23,12 @@ namespace GantryTool.UI
         private const float Margin = 12f;
         private const float PreviewHeight = 210f;
         private const float MaxPickerHeight = 370f;
-        private const float InspectorHeight = 118f;
+        private const float InspectorHeight = 152f;
         private const float MinPartSize = 10f;
+        private const float DragStart = 6f;
         private const float RowHeight = 34f;
-        private const float TextCommitDelay = 0.35f;
+        private const float MaxSignWidth = 12f, MaxSignHeight = 6f;
+        private const float TextCommitDelay = 0.05f;   // just enough to take in keys pressed together
         private const string Theme = "us";
 
         private static readonly string[] ArrowKeys =
@@ -63,6 +65,10 @@ namespace GantryTool.UI
         private Dictionary<string, object> _selected;   // the part being edited, in _doc
         private string _selectedPath;
         private UITextField _focus;
+        private Dictionary<string, object> _pressed;    // the part the mouse went down on, while it's held
+        private Vector2 _pressedAt;
+        private bool _dragging, _dragged;
+        private readonly UISprite[] _dropLine = new UISprite[1];
         private bool _saving;
         private string _notice;
 
@@ -120,6 +126,7 @@ namespace GantryTool.UI
         public override void Update()
         {
             base.Update();
+            UIUtils.KeepTooltipHidden(this);
             if (!isVisible)
             {
                 return;
@@ -151,6 +158,7 @@ namespace GantryTool.UI
                 Show(g);
             }
 
+            DragPart(g);
             UpdatePreview(g, now);
         }
 
@@ -193,16 +201,135 @@ namespace GantryTool.UI
             return null;
         }
 
+        // Dragging: a part held and moved a little starts to drag. A line shows where it would snap to, and letting go moves it.
+
+        private void PressPicture(UIMouseEventParameter p)
+        {
+            _pressed = null;
+            _dragging = false;
+            _dragged = false;
+            if ((p.buttons & UIMouseButton.Left) == 0 || _doc == null)
+            {
+                return;
+            }
+
+            GuidePart? part = PartUnder(p.ray);
+            int laneRow = _shown.LaneArrows && _shown.FitFirst > 0 ? GuideFit.LaneRowIndex(_doc) : -1;
+            Dictionary<string, object> movable = part.HasValue ? GuideDrag.Movable(_doc, part.Value.Path, laneRow) : null;
+            float x, y;
+            if (movable != null && PointerOnSign(p.ray, out x, out y))
+            {
+                _pressed = movable;
+                _pressedAt = new Vector2(x, y);
+            }
+        }
+
+        private void DragPart(Gantry g)
+        {
+            if (_pressed == null || _preview == null)
+            {
+                return;
+            }
+
+            Ray ray = GetUIView().uiCamera.ScreenPointToRay(Input.mousePosition);
+            float x, y;
+            bool over = PointerOnSign(ray, out x, out y);
+            GuideDrop drop = default(GuideDrop);
+            bool canDrop = false;
+            if (over)
+            {
+                if (!_dragging && (new Vector2(x, y) - _pressedAt).magnitude * _pictureScale > DragStart)
+                {
+                    _dragging = true;
+                    _dragged = true;
+                    CommitText();
+                }
+
+                canDrop = _dragging && _entry != null && _entry.Parts != null && GuideDrag.Find(_doc, _entry.Parts, _pressed, x, y, out drop);
+            }
+
+            if (Input.GetMouseButton(0))
+            {
+                PlaceDropLine(canDrop, drop);
+                return;
+            }
+
+            Dictionary<string, object> moving = _pressed;
+            _pressed = null;
+            _dragging = false;
+            PlaceDropLine(false, drop);
+            if (canDrop && GuideDrag.Apply(_doc, moving, drop))
+            {
+                Prune(_doc);
+                _selected = moving;
+                _selectedPath = null;
+                Commit(g, "sign content");
+                _rebuild = true;
+            }
+        }
+
+        private void PlaceDropLine(bool show, GuideDrop drop)
+        {
+            UISprite line = _dropLine[0];
+            if (line == null)
+            {
+                return;
+            }
+
+            line.isVisible = show;
+            if (!show)
+            {
+                return;
+            }
+
+            const float Thick = 3f;
+            Vector3 origin = _preview.relativePosition;
+            float x = origin.x + drop.X * _pictureScale, y = origin.y + drop.Y * _pictureScale;
+            float w = drop.W * _pictureScale, h = drop.H * _pictureScale;
+            switch (drop.Side)
+            {
+                case DropSide.Above:
+                    line.size = new Vector2(w, Thick);
+                    line.relativePosition = new Vector3(x, y - Thick - 1f);
+                    break;
+                case DropSide.Below:
+                    line.size = new Vector2(w, Thick);
+                    line.relativePosition = new Vector3(x, y + h + 1f);
+                    break;
+                case DropSide.Left:
+                    line.size = new Vector2(Thick, h);
+                    line.relativePosition = new Vector3(x - Thick - 1f, y);
+                    break;
+                default:
+                    line.size = new Vector2(Thick, h);
+                    line.relativePosition = new Vector3(x + w + 1f, y);
+                    break;
+            }
+        }
+
+        private bool PointerOnSign(Ray ray, out float x, out float y)
+        {
+            x = y = 0f;
+            Vector2 at;
+            if (_entry == null || _pictureScale <= 0f || !_preview.GetHitPosition(ray, out at))
+            {
+                return false;
+            }
+
+            x = at.x / _pictureScale;
+            y = at.y / _pictureScale;
+            return true;
+        }
+
         /// <summary>The smallest part under a point on the picture, so a word wins over the band it sits in.</summary>
         private GuidePart? PartUnder(Ray ray)
         {
-            Vector2 at;
-            if (_entry == null || _entry.Parts == null || _pictureScale <= 0f || !_preview.GetHitPosition(ray, out at))
+            float x, y, best = float.MaxValue;
+            if (_entry == null || _entry.Parts == null || !PointerOnSign(ray, out x, out y))
             {
                 return null;
             }
 
-            float x = at.x / _pictureScale, y = at.y / _pictureScale, best = float.MaxValue;
             GuidePart? found = null;
             foreach (GuidePart p in _entry.Parts)
             {
@@ -220,6 +347,12 @@ namespace GantryTool.UI
 
         private void ClickPicture(Ray ray)
         {
+            if (_dragged)
+            {
+                _dragged = false;
+                return;
+            }
+
             CommitText();
             GuidePart? part = PartUnder(ray);
             _saving = false;
@@ -309,7 +442,9 @@ namespace GantryTool.UI
             {
                 _building = true;
                 _focus = null;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
                 Rebuild(g);
+                Log.Debug("Guide sign panel built in " + watch.ElapsedMilliseconds + " ms");
                 if (_focus != null)
                 {
                     _focus.Focus();
@@ -327,7 +462,7 @@ namespace GantryTool.UI
 
         private void Rebuild(Gantry g)
         {
-            UIUtils.HideTooltip(this); // a button destroyed under the mouse leaves its tooltip on screen
+            UIUtils.ClearTooltips(_content);
             for (int i = _content.components.Count - 1; i >= 0; i--)
             {
                 UIComponent old = _content.components[i];
@@ -444,9 +579,11 @@ namespace GantryTool.UI
             _entry = null;
             AddBox(box, _hoverBox, new Color32(255, 255, 255, 200));
             AddBox(box, _selectBox, new Color32(255, 210, 40, 255));
+            AddBox(box, _dropLine, new Color32(255, 120, 30, 255));
             if (!_placementPage && !_picking)
             {
-                _preview.tooltip = "Click part of the sign to change it";
+                _preview.tooltip = "Click part of the sign to change it, or drag it to move it";
+                _preview.eventMouseDown += (c, p) => PressPicture(p);
                 _preview.eventMouseMove += (c, p) => PlaceBox(_hoverBox, PartUnder(p.ray));
                 _preview.eventMouseLeave += (c, p) => PlaceBox(_hoverBox, null);
                 _preview.eventClick += (c, p) => ClickPicture(p.ray);
@@ -747,7 +884,8 @@ namespace GantryTool.UI
             var helper = new UIHelper(_content);
             FacingDropdown(helper, g, sign);
             LaneControls(helper, g, sign);
-            UIUtils.StyledSlider(helper, _content.width, sign.FitFirst > 0 ? "Text size" : "Sign size", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, sign.Scale * 100f, " %", "0", true, v =>
+            SizeControls(helper, g, sign);
+            UIUtils.StyledSlider(helper, _content.width, "Text and symbol size", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, sign.Scale * 100f, " %", "0", true, v =>
             {
                 Change(g, "sign size", h =>
                 {
@@ -755,6 +893,38 @@ namespace GantryTool.UI
                     return h;
                 });
             });
+        }
+
+        /// <summary>The sign's own width and height; left alone, it has the default size and matches the signs beside it.</summary>
+        private void SizeControls(UIHelper helper, Gantry g, GuideHead sign)
+        {
+            GuidePlacement placed = GuideMeshBuilder.Place(g, sign);
+            UIUtils.StyledSlider(helper, _content.width, "Width", 1f, Mathf.Max(MaxSignWidth, g.Span), 0.1f, placed.WidthMetres, " m", "0.0", true, v => SetSize(g, GuideFit.WidthKey, v));
+            UIUtils.StyledSlider(helper, _content.width, "Height", 1f, MaxSignHeight, 0.1f, placed.PanelMetres, " m", "0.0", true, v => SetSize(g, GuideFit.HeightKey, v));
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            RowButton(row, 0f, _content.width, "Reset to default size", "Go back to the default size, matching the signs beside it (Ctrl+Z brings yours back)", () =>
+            {
+                _doc.Remove(GuideFit.WidthKey);
+                _doc.Remove(GuideFit.HeightKey);
+                string design = Json.Write(_doc);
+                Change(g, "sign dimensions", h =>
+                {
+                    h.Design = design;
+                    h.Scale = 1f;
+                    return h;
+                });
+                _rebuild = true;
+            });
+        }
+
+        private void SetSize(Gantry g, string key, float metres)
+        {
+            if (!_building)
+            {
+                _doc[key] = Math.Round(metres, 1);
+                Commit(g, "sign dimensions");
+            }
         }
 
         private void FacingDropdown(UIHelper helper, Gantry g, GuideHead sign)
@@ -853,6 +1023,7 @@ namespace GantryTool.UI
                     if (InLaneRow())
                     {
                         ArrowControls(box, g, "The arrow over this lane", new List<Dictionary<string, object>> { _selected }, true);
+                        ExitOnlyControls(box, g);
                     }
                     else
                     {
@@ -880,7 +1051,7 @@ namespace GantryTool.UI
                     UIUtils.CreateLabel(box, "Exit tab: click its text to change it", 0.8f).relativePosition = new Vector3(0f, 8f);
                     break;
                 default:
-                    UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click any part of the sign above to change it,\nor add something new below.", 0.85f);
+                    UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click any part of the sign above to change it, or drag it somewhere else:\nit snaps above, below or beside the other parts. Add something new below.", 0.85f);
                     hint.relativePosition = new Vector3(0f, 30f);
                     return;
             }
@@ -956,6 +1127,40 @@ namespace GantryTool.UI
 
             int line;
             return int.TryParse(_selectedPath.Split('/')[0], out line) && line == GuideFit.LaneRowIndex(_doc);
+        }
+
+        /// <summary>Whether this lane is exit only, and what those sections say.</summary>
+        private void ExitOnlyControls(UIPanel box, Gantry g)
+        {
+            const float W = 130f, Y = 78f;
+            Dictionary<string, object> arrow = _selected;
+            bool on = arrow.ContainsKey(GuideFit.ExitOnlyKey);
+            RowButton(box, 0f, W, "Exit only: " + (on ? "on" : "off"), "A yellow section under this lane. Neighbouring exit only lanes share one.", () =>
+            {
+                if (on)
+                {
+                    arrow.Remove(GuideFit.ExitOnlyKey);
+                }
+                else
+                {
+                    arrow[GuideFit.ExitOnlyKey] = true;
+                }
+
+                Commit(g, "sign content");
+                _rebuild = true;
+            });
+            UIComponent toggle = box.components[box.components.Count - 1];
+            toggle.relativePosition = new Vector3(0f, Y);
+            if (on)
+            {
+                var button = (UIButton)toggle;
+                button.normalBgSprite = "ButtonMenuPressed";
+                int line;
+                int.TryParse(_selectedPath.Split('/')[0], out line);
+                var row = (Dictionary<string, object>)Items(_doc)[line];
+                UITextField field = Field(box, W + 6f, Y, _content.width - W - 6f, Json.Str(row, GuideFit.ExitTextKey, GuideFit.DefaultExitText), 24, g, v => row[GuideFit.ExitTextKey] = v);
+                field.tooltip = "What the exit only sections say";
+            }
         }
 
         private void ArrowControls(UIPanel box, Gantry g, string title, List<Dictionary<string, object>> arrows, bool allowNone)
@@ -1110,7 +1315,7 @@ namespace GantryTool.UI
         private void AddButtons(Gantry g)
         {
             List<object> items = Items(_doc);
-            float w = (_content.width - 5f * 6f) / 6f;
+            float w = (_content.width - 3f * 6f) / 4f;
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, RowHeight);
             RowButton(row, 0f, w, "+ Text", "Add a line of text", () =>
@@ -1135,10 +1340,14 @@ namespace GantryTool.UI
             }
 
             RowButton(row, 3f * (w + 6f), w, "+ Lane arrows",
-                hasLanes ? "One arrow over the middle of each lane. The sign spans its lanes to line them up."
+                hasLanes ? "One arrow over the middle of each lane. Click one to change it, or to make that lane exit only."
                     : "No lanes pass under this side of the sign", () => AddLaneArrows(g, items));
-            row.components[3].isEnabled = hasLanes && !(_shown.LaneArrows && _shown.FitFirst > 0 && GuideFit.LaneRowIndex(_doc) >= 0);
-            RowButton(row, 4f * (w + 6f), w, "+ Exit tab", "Add an exit number tab on top of the sign", () =>
+            bool laneArrows = _shown.LaneArrows && _shown.FitFirst > 0 && GuideFit.LaneRowIndex(_doc) >= 0;
+            row.components[3].isEnabled = hasLanes && !laneArrows;
+
+            var row2 = _content.AddUIComponent<UIPanel>();
+            row2.size = new Vector2(_content.width, RowHeight);
+            RowButton(row2, 0f, w, "+ Exit tab", "Add an exit number tab on top of the sign", () =>
             {
                 Dictionary<string, object> text = Text("EXIT 1", 10f, "RG2014E");
                 Insert(g, 0, new Dictionary<string, object>
@@ -1148,8 +1357,8 @@ namespace GantryTool.UI
                     { "items", new List<object> { text } }
                 }, text);
             });
-            row.components[4].isEnabled = !Contains(items, "tab");
-            RowButton(row, 5f * (w + 6f), w, "+ Exit only", "Add the yellow EXIT ONLY band at the bottom", () =>
+            row2.components[0].isEnabled = !Contains(items, "tab");
+            RowButton(row2, w + 6f, w, "+ Exit only band", "A yellow EXIT ONLY band across the whole sign. For just some lanes, use + Lane arrows and click a lane's arrow.", () =>
             {
                 Dictionary<string, object> text = Text("EXIT ONLY", 12f, "RG2014E");
                 Insert(g, items.Count, new Dictionary<string, object>
@@ -1160,7 +1369,23 @@ namespace GantryTool.UI
                     { "items", new List<object> { text } }
                 }, text);
             });
-            row.components[5].isEnabled = !Contains(items, "panel");
+            row2.components[1].isEnabled = !Contains(items, "panel");
+            RowButton(row2, 2f * (w + 6f), w, "+ Exit only plate", "A small EXIT ONLY plate between the sign's arrows", () =>
+            {
+                CommitText();
+                _selected = GuideFit.AddExitPlate(_doc);
+                Commit(g, "sign content");
+                _rebuild = true;
+            });
+            row2.components[2].isEnabled = !laneArrows;
+            RowButton(row2, 3f * (w + 6f), w, "+ Divider", "Split the sign in two with a line, for a second destination", () =>
+            {
+                CommitText();
+                _selected = GuideFit.SplitSign(_doc);
+                Commit(g, "sign content");
+                _rebuild = true;
+            });
+            row2.components[3].isEnabled = !GuideFit.HasDivider(_doc);
         }
 
         /// <summary>A new line goes under the selected one, or above any arrows and bands at the bottom of the sign.</summary>
@@ -1423,11 +1648,28 @@ namespace GantryTool.UI
                 if (type == "row" || type == "column" || type == "chip" || type == "tab" || type == "panel")
                 {
                     Prune(item);
+                    RemoveLoneDivider(item);
                     if (Items(item).Count == 0)
                     {
                         items.RemoveAt(i);
                     }
                 }
+            }
+        }
+
+        /// <summary>A divider with nothing left on one side of it has nothing to divide.</summary>
+        private static void RemoveLoneDivider(Dictionary<string, object> row)
+        {
+            List<object> items = Items(row);
+            int others = 0;
+            foreach (object o in items)
+            {
+                others += Json.Str(o as Dictionary<string, object>, "type") != "divider" ? 1 : 0;
+            }
+
+            if (others < 2)
+            {
+                items.RemoveAll(o => Json.Str(o as Dictionary<string, object>, "type") == "divider");
             }
         }
 

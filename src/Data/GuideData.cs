@@ -27,13 +27,13 @@ namespace GantryTool.Data
     /// Testable outside the game.
     ///
     /// Format, key "GantryTool.Guide": int version(=1), int count, then per gantry that isn't at the defaults: int id,
-    /// float startX/Y/Z, float endX/Y/Z (stale-data guard), bool laneHeads, from version 3 bool blankBacks, int signCount, then per sign: byte id,
+    /// float startX/Y/Z, float endX/Y/Z (stale-data guard), bool laneHeads, from version 3 bool blankBacks, from version 4 byte type and float postAlong, from version 5 byte look, int signCount, then per sign: byte id,
     /// float along, float scale, sbyte side, string design; from version 2 also byte fitFirst, byte fitLast, bool laneArrows.
     /// </summary>
     public static class GuideData
     {
         public const string Key = "GantryTool.Guide";
-        public const int Version = 3;
+        public const int Version = 5;
         public const int MaxSigns = 8;
         public const int MaxDesignLength = 32 * 1024;
         public const float MinScale = 0.3f;
@@ -48,16 +48,22 @@ namespace GantryTool.Data
                 var signs = new List<List<GuideHead>>();
                 var laneHeads = new List<bool>();
                 var blankBacks = new List<bool>();
+                var types = new List<byte>();
+                var posts = new List<float>();
+                var looks = new List<byte>();
                 lock (overridesLock)
                 {
                     foreach (Gantry g in gantries)
                     {
-                        if (!g.LaneHeads || g.BlankBacks || g.GuideSigns.Count > 0)
+                        if (!g.LaneHeads || g.BlankBacks || g.Type != GantryShape.Span || g.Look != GantryShape.BoxTruss || g.GuideSigns.Count > 0)
                         {
                             keep.Add(g);
                             signs.Add(new List<GuideHead>(g.GuideSigns));
                             laneHeads.Add(g.LaneHeads);
                             blankBacks.Add(g.BlankBacks);
+                            types.Add(g.Type);
+                            posts.Add(g.PostAlong);
+                            looks.Add(g.Look);
                         }
                     }
                 }
@@ -71,6 +77,9 @@ namespace GantryTool.Data
                     GantryData.WriteVector(w, keep[i].End);
                     w.Write(laneHeads[i]);
                     w.Write(blankBacks[i]);
+                    w.Write(types[i]);
+                    w.Write(posts[i]);
+                    w.Write(looks[i]);
                     w.Write(signs[i].Count);
                     foreach (GuideHead h in signs[i])
                     {
@@ -126,6 +135,9 @@ namespace GantryTool.Data
                         Vector3 end = GantryData.ReadVector(r);
                         bool laneHeads = r.ReadBoolean();
                         bool blankBacks = version >= 3 && r.ReadBoolean();
+                        byte type = version >= 4 ? r.ReadByte() : GantryShape.Span;
+                        float post = version >= 4 ? r.ReadSingle() : float.NaN;
+                        byte look = version >= 5 ? r.ReadByte() : GantryShape.BoxTruss;
                         int n = r.ReadInt32();
                         if (n < 0 || n > 255)
                         {
@@ -139,6 +151,9 @@ namespace GantryTool.Data
                         {
                             g.LaneHeads = laneHeads;
                             g.BlankBacks = blankBacks;
+                            g.Type = GantryShape.Valid(type);
+                            g.PostAlong = post;
+                            g.Look = GantryShape.ValidLook(look);
                         }
 
                         for (int k = 0; k < n; k++)

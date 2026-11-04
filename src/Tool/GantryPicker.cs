@@ -88,7 +88,7 @@ namespace GantryTool.Tool
                         continue;
                     }
 
-                    float midY = GuideMeshBuilder.CentreY(g, h);
+                    float midY = GuideMeshBuilder.MidY(g, sign);
                     float depth = SignalMeshBuilder.HeadDepth * 0.5f + 0.25f;
                     float t;
                     if (RayBox(ray, g.Start, dir, side, along - w * 0.5f, along + w * 0.5f, midY - h * 0.5f, midY + h * 0.5f, depth, out t) && t < bestT)

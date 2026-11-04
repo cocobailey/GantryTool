@@ -210,16 +210,13 @@ namespace GantryTool.UI
             {
                 UITextureSprite picture = _pictures[i];
                 float along, w, h;
-                GuideCacheEntry entry = i < _signs.Count && GuideMeshBuilder.Layout(_gantry, _signs[i], out along, out w, out h)
-                    ? GuideCache.Get(GuideMeshBuilder.Place(_gantry, _signs[i]).Design)
-                    : null;
-                if (entry == null)
+                if (i >= _signs.Count || !GuideMeshBuilder.Layout(_gantry, _signs[i], out along, out w, out h))
                 {
                     picture.isVisible = false;
                     continue;
                 }
 
-                GuideMeshBuilder.Layout(_gantry, _signs[i], out along, out w, out h);
+                GuideCacheEntry entry = GuideCache.Get(GuideMeshBuilder.Place(_gantry, _signs[i]).Design);
                 var rect = new SignRect { Id = _signs[i].Id };
                 rect.X0 = _x0 + (GuideArrange.ViewX(along, _span, _side) - w * 0.5f) * _scale;
                 rect.X1 = rect.X0 + w * _scale;
@@ -227,8 +224,9 @@ namespace GantryTool.UI
                 rect.Y0 = rect.Y1 - h * _scale;
                 _rects.Add(rect);
 
-                picture.isVisible = true;
-                picture.texture = entry.Texture;
+                // While a change is being drawn, the picture it had stands in.
+                picture.texture = entry != null ? entry.Texture : picture.texture;
+                picture.isVisible = picture.texture != null;
                 picture.size = new Vector2(rect.X1 - rect.X0, rect.Y1 - rect.Y0);
                 picture.relativePosition = new Vector3(rect.X0, rect.Y0);
                 picture.opacity = _signs[i].Id == selectedId ? 1f : OtherSignOpacity;

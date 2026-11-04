@@ -27,6 +27,9 @@ namespace GantryTool.Data
         /// </summary>
         public float HeightAboveRoad = float.NaN;
         public float SignalSizeOverride = float.NaN;
+        public byte Type;                        // GantryShape: where the posts stand
+        public byte Look;                        // GantryShape: what the structure is built from
+        public float PostAlong = float.NaN;      // a median T's post, from the start; NaN = found from the lanes
         public byte Style;
 
         public float Clearance => float.IsNaN(ClearanceOverride) ? Settings.Current.RoadClearance : ClearanceOverride;

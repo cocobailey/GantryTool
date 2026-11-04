@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev17";
+        public const string Version = "2.0.0-dev23";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -57,6 +57,24 @@ namespace GantryTool
                     }
                 });
                 GantryTool.UI.DropdownToggle.Attach(startDrop);
+                var typeDrop = (UIDropDown)newGroup.AddDropdown("New gantry type", GantryShape.Names, GantryShape.Valid(s.NewGantryType), index =>
+                {
+                    if (index >= 0 && index < GantryShape.Count)
+                    {
+                        s.NewGantryType = (byte)index;
+                        Settings.Current.Save();
+                    }
+                });
+                GantryTool.UI.DropdownToggle.Attach(typeDrop);
+                var lookDrop = (UIDropDown)newGroup.AddDropdown("New gantries are built from", GantryShape.LookNames, GantryShape.ValidLook(s.NewGantryLook), index =>
+                {
+                    if (index >= 0 && index < GantryShape.LookCount)
+                    {
+                        s.NewGantryLook = (byte)index;
+                        Settings.Current.Save();
+                    }
+                });
+                GantryTool.UI.DropdownToggle.Attach(lookDrop);
                 newGroup.AddButton("Apply height and depth to all existing gantries", () =>
                 {
                     int n = GantryRenderer.Active ? GantryManager.ApplyDefaultsToAll() : 0;

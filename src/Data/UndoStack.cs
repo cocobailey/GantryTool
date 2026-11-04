@@ -21,6 +21,9 @@ namespace GantryTool.Data
         public readonly List<GuideHead> GuideSigns = new List<GuideHead>();
         public bool LaneHeads = true;
         public bool BlankBacks;
+        public byte Type;
+        public byte Look;
+        public float PostAlong = float.NaN;
 
         /// <summary>Call under GantryManager.Lock.</summary>
         public static GantryState Capture(Gantry g)
@@ -42,6 +45,9 @@ namespace GantryTool.Data
             s.GuideSigns.AddRange(g.GuideSigns);
             s.LaneHeads = g.LaneHeads;
             s.BlankBacks = g.BlankBacks;
+            s.Type = g.Type;
+            s.Look = g.Look;
+            s.PostAlong = g.PostAlong;
             return s;
         }
 
@@ -64,6 +70,9 @@ namespace GantryTool.Data
             g.GuideSigns.AddRange(GuideSigns);
             g.LaneHeads = LaneHeads;
             g.BlankBacks = BlankBacks;
+            g.Type = Type;
+            g.Look = Look;
+            g.PostAlong = PostAlong;
             g.MeshDirty = true;
         }
 
@@ -72,7 +81,8 @@ namespace GantryTool.Data
             if (g.Start != Start || g.End != End || g.BeamDepth != BeamDepth ||
                 !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
                 g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count ||
-                g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads || g.BlankBacks != BlankBacks)
+                g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads || g.BlankBacks != BlankBacks ||
+                g.Type != Type || g.Look != Look || !SameFloat(g.PostAlong, PostAlong))
             {
                 return false;
             }

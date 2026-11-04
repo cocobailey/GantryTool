@@ -185,8 +185,11 @@ def bake_shield(path, size=256, ss=4):
                 for x, y in s:
                     d.ellipse([x - r, y - r, x + r, y + r], fill=colour(stroke) + (255,))
     img = img.resize((size, size), Image.LANCZOS)
+    write_gim(img, os.path.splitext(os.path.basename(path))[0], size)
+
+
+def write_gim(img, name, size):
     data = img.load()
-    name = os.path.splitext(os.path.basename(path))[0]
     with open(os.path.join(OUT, name + ".gim"), "wb") as f:
         f.write(b"GIM1" + struct.pack("<ii", size, size))
         n = 0

@@ -27,6 +27,7 @@ namespace GantryTool.Render
 
         private static readonly Color HoverTint = new Color(0.75f, 0.92f, 1f, 1f);
         private static readonly Color SelectedTint = new Color(0.45f, 0.8f, 1f, 1f);
+        private static readonly Color TubeTint = new Color(0.6f, 0.62f, 0.64f, 1f); // round pipes catch more light than a truss
 
         /// <summary>Gantry selected in the tool (0 = none); drawn tinted blue.</summary>
         public static volatile int SelectedId;
@@ -99,11 +100,11 @@ namespace GantryTool.Render
                         continue;
                     }
 
-                    DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : Color.white);
+                    DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : SteelTint(g));
                     SignStyle style = SignStyles.Resolve(g.Style);
                     DrawSignals(g.SignalMesh, g.Origin, style);
-                    DrawGuideSteel(g.GuideBackMesh, g.Origin, ShadowCastingMode.Off);
-                    DrawGuideSteel(g.GuideCasterMesh, g.Origin, ShadowCastingMode.ShadowsOnly);
+                    DrawGuideSteel(g.GuideBackMesh, g.Origin, ShadowCastingMode.Off, SteelTint(g));
+                    DrawGuideSteel(g.GuideCasterMesh, g.Origin, ShadowCastingMode.ShadowsOnly, Color.white);
 
                     foreach (GuideDraw d in g.GuideDraws)
                     {
@@ -174,8 +175,13 @@ namespace GantryTool.Render
             _instance._drawCallData.m_defaultCalls++;
         }
 
+        private static Color SteelTint(Gantry g)
+        {
+            return g.Look == GantryShape.BoxTruss || g.Look == GantryShape.FlatTruss ? Color.white : TubeTint;
+        }
+
         /// <summary>Draws a guide sign's back, or the sheet that casts its shadow (see <see cref="GuideMeshBuilder"/>).</summary>
-        private static void DrawGuideSteel(Mesh mesh, Vector3 origin, ShadowCastingMode shadows)
+        private static void DrawGuideSteel(Mesh mesh, Vector3 origin, ShadowCastingMode shadows, Color tint)
         {
             if (_instance == null || !GantryMaterials.Ready || mesh == null)
             {
@@ -184,7 +190,7 @@ namespace GantryTool.Render
 
             MaterialPropertyBlock block = _instance._block;
             block.Clear();
-            block.SetColor(_instance._idColor, Color.white);
+            block.SetColor(_instance._idColor, tint);
             block.SetVector(_instance._idObjectIndex, RenderManager.DefaultColorLocation);
             Graphics.DrawMesh(mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one),
                 GantryMaterials.Structure, GantryMaterials.Layer, null, 0, block, shadows);
@@ -251,7 +257,8 @@ namespace GantryTool.Render
                     Log.Debug(LaneScanner.Describe(g.Id, scan, g.BeamBottomY, SideOf(g)));
                 }
 
-                g.Mesh = GantryMeshBuilder.Build(g.Start, g.End, g.BeamBottomY, g.BeamDepth, g.Mesh, out g.Origin);
+                g.Mesh = GantryMeshBuilder.Build(g.Start, g.End, g.BeamBottomY, g.BeamDepth, g.Mesh, out g.Origin, g.Type,
+                    GantryShape.PostPosition(g.PostAlong, g.Lanes, g.Span), g.Look);
                 Bounds b = g.Mesh.bounds;
                 b.center += g.Origin;
                 g.Bounds = b;
@@ -277,6 +284,14 @@ namespace GantryTool.Render
                 SignAtlas atlas = GantryMaterials.AtlasFor(SignStyles.Resolve(g.Style));
                 lock (GantryManager.Lock)
                 {
+                    // The lanes may have changed. New pictures are drawn in the background: the old stay up until then.
+                    g.GuidePlacements.Clear();
+                    if (!GuideMeshBuilder.Ready(g))
+                    {
+                        g.SignalsDirty = true;
+                        return;
+                    }
+
                     g.SignalsDirty = false;
                     GantryManager.RefreshExtraLinks(g);
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,

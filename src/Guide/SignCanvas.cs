@@ -57,11 +57,29 @@ namespace GantryTool.Guide
         {
             int ix0 = Mathf.FloorToInt(x0), iy0 = Mathf.FloorToInt(y0);
             int ix1 = Mathf.CeilToInt(x1), iy1 = Mathf.CeilToInt(y1);
+            bool opaque = c.a == 255;
+            float corners = Mathf.Max(Mathf.Max(tl, tr), Mathf.Max(br, bl));
+            int solidX0 = Mathf.Max(0, Mathf.CeilToInt(x0 + 0.5f + corners)), solidX1 = Mathf.Min(Width, Mathf.FloorToInt(x1 - 0.5f - corners));
             for (int y = iy0; y < iy1; y++)
             {
                 float py = y + 0.5f;
+                bool solidRow = opaque && py - y0 >= 0.5f && y1 - py >= 0.5f && y >= 0 && y < Height;
+                bool clearOfCorners = py - y0 >= corners && y1 - py >= corners;
                 for (int x = ix0; x < ix1; x++)
                 {
+                    // Most of a sign is the inside of a rectangle: no edge or corner to work out there.
+                    if (solidRow && x >= solidX0 && x < solidX1)
+                    {
+                        Pixels[y * Width + x] = c;
+                        continue;
+                    }
+
+                    if (solidRow && clearOfCorners && x >= 0 && x < Width && x + 0.5f - x0 >= 0.5f && x1 - x - 0.5f >= 0.5f)
+                    {
+                        Pixels[y * Width + x] = c;
+                        continue;
+                    }
+
                     float px = x + 0.5f;
                     float d = Mathf.Min(Mathf.Min(px - x0, x1 - px), Mathf.Min(py - y0, y1 - py));
                     float cover = Mathf.Clamp01(d + 0.5f);
