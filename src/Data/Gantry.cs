@@ -70,6 +70,9 @@ namespace GantryTool.Data
         /// <summary>Only the signal faces changed (override edit); the truss and lanes are still valid.</summary>
         public bool SignalsDirty;
 
+        /// <summary>Just the truss: nothing has been put on it yet.</summary>
+        public bool IsBare => !LaneHeads && GuideSigns.Count == 0 && ExtraHeads.Count == 0;
+
         public float Span
         {
             get

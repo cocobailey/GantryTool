@@ -107,101 +107,42 @@ namespace GantryTool.UI
                 var helper = new UIHelper(_content);
                 Settings s = Settings.Current;
 
-                StyleDropdown(helper, g);
+                bool bare;
+                lock (GantryManager.Lock)
+                {
+                    bare = g.IsBare;
+                }
+
+                if (!bare)
+                {
+                    StyleDropdown(helper, g);
+                }
 
                 string heightLabel = float.IsNaN(g.RoadTopY) ? "Height above ground" : "Height above road";
                 float aboveRoad = float.IsNaN(g.HeightAboveRoad) ? s.HeightAboveRoad : g.HeightAboveRoad;
                 Slider(helper, heightLabel, 2f, 15f, 0.1f, aboveRoad, " m", true, v => Change(g, "height", () => g.HeightAboveRoad = v));
                 Slider(helper, "Truss depth", 1f, 2.5f, 0.1f, g.BeamDepth, " m", true, v => Change(g, "truss depth", () => g.BeamDepth = v));
 
-                bool sizeDefault = float.IsNaN(g.SignalSizeOverride);
-                Slider(helper, "Signal box size", 0.6f, 2f, 0.05f, g.SignalSize, " m", !sizeDefault,
-                    v => Change(g, "signal size", () => g.SignalSizeOverride = v));
-                Checkbox(helper, "Use default signal box size (" + s.SignalSize.ToString("0.00") + " m)", sizeDefault, on =>
+                if (!bare)
                 {
-                    Change(g, "signal size", () => g.SignalSizeOverride = on ? float.NaN : s.SignalSize);
-                    Rebuild();
-                });
-
-                // Extra signal heads, placed anywhere on the beam.
-                int extras;
-                lock (GantryManager.Lock)
-                {
-                    extras = g.ExtraHeads.Count;
+                    bool sizeDefault = float.IsNaN(g.SignalSizeOverride);
+                    Slider(helper, "Signal box size", 0.6f, 2f, 0.05f, g.SignalSize, " m", !sizeDefault,
+                        v => Change(g, "signal size", () => g.SignalSizeOverride = v));
+                    Checkbox(helper, "Use default signal box size (" + s.SignalSize.ToString("0.00") + " m)", sizeDefault, on =>
+                    {
+                        Change(g, "signal size", () => g.SignalSizeOverride = on ? float.NaN : s.SignalSize);
+                        Rebuild();
+                    });
                 }
 
-                // With no signals at all, there are no backs to blank: added signs count as signals here.
-                UIComponent backs = null;
-                int extraCount = extras;
-                Action<bool> showBacks = signals =>
+                if (bare)
                 {
-                    backs.isEnabled = signals || extraCount > 0;
-                    backs.opacity = backs.isEnabled ? 1f : 0.4f;
-                };
-                Checkbox(helper, "Lane signals (off: a signs-only gantry)", g.LaneHeads, on =>
-                {
-                    Change(g, "lane signals", () => g.LaneHeads = on);
-                    showBacks(on);
-                });
-                backs = (UIComponent)helper.AddCheckbox("No red Xs on the back of signals", g.BlankBacks, on =>
-                {
-                    Change(g, "signal backs", () => g.BlankBacks = on);
-                });
-                showBacks(g.LaneHeads);
-
-                var addRow = _content.AddUIComponent<UIPanel>();
-                addRow.size = new Vector2(_content.width, 34f);
-                bool canAdd = extras < HeadRef.MaxExtraHeads;
-                float halfRow = (_content.width - 6f) / 2f;
-                RowButton(addRow, 0, halfRow, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
-                    canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
-                           : "This gantry has the most added signs allowed", () =>
-                    {
-                        Gantry cur = GantryManager.Find(_gantryId);
-                        if (cur == null || Tool == null)
-                        {
-                            return;
-                        }
-
-                        int head = GantryManager.AddExtraHead(cur, cur.Span * 0.5f);
-                        if (head >= 0)
-                        {
-                            Tool.EditHead(cur, head);
-                        }
-                    });
-                addRow.components[0].isEnabled = canAdd;
-
-                int guides;
-                lock (GantryManager.Lock)
-                {
-                    guides = g.GuideSigns.Count;
+                    Chooser(g);
                 }
-
-                bool canGuide = guides < GuideData.MaxSigns;
-                RowButton(addRow, 1, halfRow, "Add guide sign (" + guides + " of " + GuideData.MaxSigns + ")",
-                    canGuide ? "Add a big printed highway sign to this gantry" : "This gantry has the most guide signs allowed", () =>
-                    {
-                        Gantry cur = GantryManager.Find(_gantryId);
-                        if (cur == null || Tool == null)
-                        {
-                            return;
-                        }
-
-                        string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab"));
-                        sbyte facing = SignalPanel.CameraSeesMinusFace(cur) ? (sbyte)-1 : (sbyte)1;
-                        byte first, last;
-                        lock (GantryManager.Lock)
-                        {
-                            GantryTool.Guide.GuideFit.DefaultRange(cur.Lanes, cur.GuideSigns, facing, out first, out last);
-                        }
-
-                        int head = GantryManager.AddGuideSign(cur, cur.Span * 0.5f, facing, design, first, last);
-                        if (head >= 0)
-                        {
-                            Tool.EditHead(cur, head);
-                        }
-                    });
-                addRow.components[1].isEnabled = canGuide;
+                else
+                {
+                    ContentControls(helper, g);
+                }
 
                 // One row of equal buttons, like the signal panel.
                 var row = _content.AddUIComponent<UIPanel>();
@@ -253,6 +194,131 @@ namespace GantryTool.UI
             {
                 _building = false;
             }
+        }
+
+        /// <summary>What goes on a gantry that has nothing on it yet. Both can go on later, from the normal controls.</summary>
+        private void Chooser(Gantry g)
+        {
+            var box = _content.AddUIComponent<UIPanel>();
+            box.size = new Vector2(_content.width, 92f);
+            UIUtils.CreateLabel(box, "What goes on this gantry?", 0.9f).relativePosition = Vector3.zero;
+            float half = (_content.width - 6f) / 2f;
+            ChoiceButton(box, 0f, half, "Lane signals", "Signals over each lane, set up automatically from the road", () =>
+            {
+                Change(g, "lane signals", () => g.LaneHeads = true);
+                Rebuild();
+            });
+            ChoiceButton(box, half + 6f, half, "Guide signs", "A big highway sign, which you design", () => AddGuideSign(g));
+            UILabel hint = UIUtils.CreateLabel(box, "You can add the other later, or leave it empty for now.", 0.65f);
+            hint.relativePosition = new Vector3(0f, 74f);
+        }
+
+        private static void ChoiceButton(UIPanel box, float x, float w, string text, string tooltip, Action onClick)
+        {
+            var b = box.AddUIComponent<UIButton>();
+            b.text = text;
+            b.tooltip = tooltip;
+            b.textScale = 1f;
+            b.normalBgSprite = "ButtonMenu";
+            b.hoveredBgSprite = "ButtonMenuHovered";
+            b.pressedBgSprite = "ButtonMenuPressed";
+            b.size = new Vector2(w, 46f);
+            b.relativePosition = new Vector3(x, 24f);
+            b.eventClick += (c, p) => onClick();
+        }
+
+        /// <summary>Puts a new guide sign on a gantry, over the lanes still free on the side the camera sees, and opens it.</summary>
+        public void AddGuideSign(Gantry g)
+        {
+            if (Tool == null || !GantryManager.CanAddGuideSign(g))
+            {
+                return;
+            }
+
+            string design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab"));
+            sbyte facing = SignalPanel.CameraSeesMinusFace(g) ? (sbyte)-1 : (sbyte)1;
+            byte first, last;
+            lock (GantryManager.Lock)
+            {
+                GantryTool.Guide.GuideFit.DefaultRange(g.Lanes, g.GuideSigns, facing, out first, out last);
+            }
+
+            int head = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, design, first, last);
+            if (head >= 0)
+            {
+                Tool.EditHead(g, head);
+            }
+        }
+
+        /// <summary>The controls for what's on the gantry.</summary>
+        private void ContentControls(UIHelper helper, Gantry g)
+        {
+            // Extra signal heads, placed anywhere on the beam.
+            int extras;
+            lock (GantryManager.Lock)
+            {
+                extras = g.ExtraHeads.Count;
+            }
+
+            // With no signals at all, there are no backs to blank: added signs count as signals here.
+            UIComponent backs = null;
+            int extraCount = extras;
+            Action<bool> showBacks = signals =>
+            {
+                backs.isEnabled = signals || extraCount > 0;
+                backs.opacity = backs.isEnabled ? 1f : 0.4f;
+            };
+            Checkbox(helper, "Lane signals (off: a signs-only gantry)", g.LaneHeads, on =>
+            {
+                Change(g, "lane signals", () => g.LaneHeads = on);
+                showBacks(on);
+                Rebuild(); // with nothing left on it, the gantry goes back to the chooser
+            });
+            backs = (UIComponent)helper.AddCheckbox("No red Xs on the back of signals", g.BlankBacks, on =>
+            {
+                Change(g, "signal backs", () => g.BlankBacks = on);
+            });
+            showBacks(g.LaneHeads);
+
+            var addRow = _content.AddUIComponent<UIPanel>();
+            addRow.size = new Vector2(_content.width, 34f);
+            bool canAdd = extras < HeadRef.MaxExtraHeads;
+            float halfRow = (_content.width - 6f) / 2f;
+            RowButton(addRow, 0, halfRow, "Add sign (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
+                canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
+                       : "This gantry has the most added signs allowed", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur == null || Tool == null)
+                    {
+                        return;
+                    }
+
+                    int head = GantryManager.AddExtraHead(cur, cur.Span * 0.5f);
+                    if (head >= 0)
+                    {
+                        Tool.EditHead(cur, head);
+                    }
+                });
+            addRow.components[0].isEnabled = canAdd;
+
+            int guides;
+            lock (GantryManager.Lock)
+            {
+                guides = g.GuideSigns.Count;
+            }
+
+            bool canGuide = guides < GuideData.MaxSigns;
+            RowButton(addRow, 1, halfRow, "Add guide sign (" + guides + " of " + GuideData.MaxSigns + ")",
+                canGuide ? "Add a big printed highway sign to this gantry" : "This gantry has the most guide signs allowed", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur != null)
+                    {
+                        AddGuideSign(cur);
+                    }
+                });
+            addRow.components[1].isEnabled = canGuide;
         }
 
         /// <summary>Re-reads the gantry (after undo or a move). Hides the panel if the gantry is gone.</summary>

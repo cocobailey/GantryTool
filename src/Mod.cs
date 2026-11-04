@@ -9,7 +9,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev12";
+        public const string Version = "2.0.0-dev14";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -47,6 +47,16 @@ namespace GantryTool
                 AddSlider(newGroup, "Truss depth", 1f, 2.5f, 0.1f, s.BeamDepth, " m",
                     "Height of the truss beam, for gantries placed from now on.",
                     v => s.BeamDepth = v, false);
+                string[] startNames = { "Ask each time", "Lane signals", "Guide signs" };
+                var startDrop = (UIDropDown)newGroup.AddDropdown("New gantries start with", startNames, Math.Min((int)s.NewGantries, startNames.Length - 1), index =>
+                {
+                    if (index >= 0 && index < startNames.Length)
+                    {
+                        s.NewGantries = (byte)index;
+                        Settings.Current.Save();
+                    }
+                });
+                GantryTool.UI.DropdownToggle.Attach(startDrop);
                 newGroup.AddButton("Apply height and depth to all existing gantries", () =>
                 {
                     int n = GantryRenderer.Active ? GantryManager.ApplyDefaultsToAll() : 0;

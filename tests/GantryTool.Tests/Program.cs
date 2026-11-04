@@ -69,6 +69,7 @@ namespace GantryTool.Tests
             Run("guide signs: signal backs can go blank; the setting is saved", GuideBlankBacks);
             Run("guide signs: every part can be found by where it was drawn", GuideParts);
             Run("guide signs: your own saved signs", GuideMySigns);
+            Run("bare gantries: only new ones; old saves keep their signals", BareGantries);
             Run("guide signs: only the marked row becomes lane arrows", GuideLaneRow);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
@@ -1009,6 +1010,42 @@ namespace GantryTool.Tests
             Check(GantryTool.Guide.GuideFit.LaneRowIndex(mixedDoc) == 1, "and become the lane row");
             Check(GantryTool.Guide.GuideFit.MakeLaneRow(mixedDoc) == made, "doing it again changes nothing");
             Check(GantryTool.Guide.GuideFit.LaneRowIndex(new Dictionary<string, object> { { "items", new List<object>() } }) == -1, "no arrows at all");
+        }
+
+        private static void BareGantries()
+        {
+            // A gantry from any save older than this block has no record in it, and must come back with its signals.
+            List<Gantry> old = Sample();
+            string err;
+            Check(GuideData.Apply(null, old, out err) == 0 && err == null, "no block in the save");
+            foreach (Gantry g in old)
+            {
+                Check(g.LaneHeads && !g.IsBare, "signals stay on");
+            }
+
+            int version;
+            List<Gantry> read = GantryData.ReadLegacy(GantryData.WriteLegacy(Sample(), new object()), out version, out err);
+            Check(read.Count > 0, "read back");
+            foreach (Gantry g in read)
+            {
+                Check(g.LaneHeads, "the old block alone gives signals");
+            }
+
+            // A gantry saved bare comes back bare; the older blocks don't change for it.
+            List<Gantry> bare = Sample();
+            bare[0].LaneHeads = false;
+            Check(bare[0].IsBare, "no signals, no signs: bare");
+            List<Gantry> loaded = Sample();
+            GuideData.Apply(GuideData.Write(bare, new object()), loaded, out err);
+            Check(err == null && loaded[0].IsBare && !loaded[1].IsBare, "stays bare");
+            Check(SameBytes(GantryData.WriteLegacy(Sample(), new object()), GantryData.WriteLegacy(bare, new object())), "legacy block unchanged");
+            Check(SameBytes(GantryData.WriteExt(Sample()), GantryData.WriteExt(bare)), "extension block unchanged");
+
+            bare[0].GuideSigns.Add(new GuideHead { Id = 1, Scale = 1f, Side = 1, Design = "{}" });
+            Check(!bare[0].IsBare, "a guide sign counts");
+            bare[0].GuideSigns.Clear();
+            bare[0].ExtraHeads.Add(new ExtraHead { Id = 1 });
+            Check(!bare[0].IsBare, "an added sign counts");
         }
 
         private static void GuideMySigns()

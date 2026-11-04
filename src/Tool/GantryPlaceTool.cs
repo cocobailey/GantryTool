@@ -82,6 +82,7 @@ namespace GantryTool.Tool
         private Vector3 _previewOrigin;
         private Vector3 _previewEnd;
         private bool _previewBuilt;
+        private float _previewBeamBottom;
         private Mesh _previewSignals;
         private static readonly List<SignalOverride> NoOverrides = new List<SignalOverride>();
         private readonly List<Vector3> _previewLanePoints = new List<Vector3>();
@@ -93,6 +94,11 @@ namespace GantryTool.Tool
         private int _headLane = -1;
         private int _selectedId;
         private Handle _hoverHandle;
+
+        // A gantry just placed
+        private int _justPlacedId;
+        private int _awaitingScanId;
+        private bool _startGuideSign;
 
         // Dragging a handle
         private Handle _dragHandle;
@@ -215,6 +221,7 @@ namespace GantryTool.Tool
         protected override void OnToolUpdate()
         {
             base.OnToolUpdate();
+            FinishPlacing();
             try
             {
                 if (_headDrag != HeadDrag.None)
@@ -448,6 +455,7 @@ namespace GantryTool.Tool
             // Click a signal head: select it (handles), open the signal editor, and let a drag shift/resize it.
             if (_headGantryId != 0 && _headLane >= 0)
             {
+                _justPlacedId = 0;
                 Gantry edited = GantryManager.Find(_headGantryId);
                 if (edited != null)
                 {
@@ -467,6 +475,7 @@ namespace GantryTool.Tool
             // Click a gantry: select it and open the gantry panel.
             if (_hoveredId != 0)
             {
+                _justPlacedId = 0;
                 Gantry g = GantryManager.Find(_hoveredId);
                 if (g != null)
                 {
@@ -476,11 +485,17 @@ namespace GantryTool.Tool
                 return;
             }
 
-            // Click empty ground with a gantry selected: just deselect (the next click starts a gantry).
+            // Click empty ground with a gantry selected: just deselect (the next click starts a gantry). After one just
+            // placed, it starts the next straight away, so placing several in a row takes no extra clicks.
             if (_selectedId != 0)
             {
+                bool placing = _selectedId == _justPlacedId;
+                _justPlacedId = 0;
                 Deselect();
-                return;
+                if (!placing)
+                {
+                    return;
+                }
             }
 
             // Click empty ground: first post of a new gantry.
@@ -509,16 +524,58 @@ namespace GantryTool.Tool
                 return;
             }
 
+            byte start = Settings.Current.NewGantries;
             Gantry g = GantryManager.Add(_start, pos, GantryManager.DefaultHeight, GantryManager.DefaultBeamDepth);
             lock (GantryManager.Lock)
             {
                 g.HeightAboveRoad = GantryManager.DefaultHeight;
+                g.LaneHeads = start == Settings.StartLaneSignals;
             }
 
             UndoStack.PushAdded(g);
             Log.Info("Placed gantry " + g);
             _hasStart = false;
             _previewBuilt = false;
+
+            if (start != Settings.StartLaneSignals)
+            {
+                // The panel needs the lanes, which are scanned when the gantry is first built: see OnToolUpdate.
+                _justPlacedId = g.Id;
+                _awaitingScanId = g.Id;
+                _startGuideSign = start == Settings.StartGuideSigns;
+                Select(g, openPanel: !_startGuideSign);
+            }
+        }
+
+        /// <summary>Follows up on a gantry just placed, once its lanes are known.</summary>
+        private void FinishPlacing()
+        {
+            if (_awaitingScanId == 0)
+            {
+                return;
+            }
+
+            Gantry g = GantryManager.Find(_awaitingScanId);
+            if (g == null || _selectedId != g.Id)
+            {
+                _awaitingScanId = 0;
+                return;
+            }
+
+            if (g.MeshDirty || GantryPanel == null)
+            {
+                return;
+            }
+
+            _awaitingScanId = 0;
+            if (_startGuideSign)
+            {
+                GantryPanel.AddGuideSign(g);
+            }
+            else
+            {
+                GantryPanel.Rebuild();
+            }
         }
 
         private void OnRightClick()
@@ -1195,11 +1252,15 @@ namespace GantryTool.Tool
                         GantryManager.DefaultBeamDepth, scan.Lanes, NoOverrides, null, SignalMeshBuilder.DefaultSignalSize,
                         _previewSignals, GantryMaterials.AtlasFor(SignStyles.Resolve((byte)SignStyle.Default)));
                     _previewEnd = end;
+                    _previewBeamBottom = bottom;
                     _previewBuilt = true;
                 }
 
                 GantryRenderer.DrawStructure(_previewMesh, _previewOrigin, SpanValid(span) ? ValidTint : InvalidTint);
-                GantryRenderer.DrawSignals(_previewSignals, _previewOrigin, SignStyles.Resolve((byte)SignStyle.Default));
+                if (Settings.Current.NewGantries == Settings.StartLaneSignals)
+                {
+                    GantryRenderer.DrawSignals(_previewSignals, _previewOrigin, SignStyles.Resolve((byte)SignStyle.Default));
+                }
             }
             catch (Exception e)
             {
@@ -1280,7 +1341,7 @@ namespace GantryTool.Tool
                     {
                         int sign = _previewLaneSigns[i];
                         Color c = sign > 0 ? PlusSideColor : sign < 0 ? MinusSideColor : Color.white;
-                        rm.OverlayEffect.DrawCircle(cameraInfo, c, _previewLanePoints[i], 2.5f, -1f, 1280f, false, true);
+                        rm.OverlayEffect.DrawCircle(cameraInfo, c, _previewLanePoints[i], 2.5f, -1f, _previewBeamBottom - 0.05f, false, true);
                     }
                 }
             }
