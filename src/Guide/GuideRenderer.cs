@@ -724,15 +724,15 @@ namespace GantryTool.Guide
         {
             var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight) };
             List<object> at = Json.Arr(item, "at");
-            if (at != null)
+            List<Dictionary<string, object>> arrows = Children(item);
+            for (int i = 0; at != null && i < at.Count && i < arrows.Count && node.At.Count < 64; i++)
             {
-                foreach (object o in at)
+                Node a = at[i] is double ? Build(t, arrows[i], ctx, true) : null;
+                if (a != null)
                 {
-                    if (o is double && node.At.Count < 64)
-                    {
-                        node.At.Add((float)(double)o);
-                        node.Arrows.Add(BuildArrow(t, item, ctx));
-                    }
+                    node.At.Add((float)(double)at[i]);
+                    node.Arrows.Add(a);
+                    node.H = Mathf.Max(node.H, a.H);
                 }
             }
 
@@ -743,6 +743,11 @@ namespace GantryTool.Guide
         {
             float h = Json.Num(item, "height", t.ArrowHeight);
             string dir = Json.Str(item, "direction", "down");
+            if (dir == "none")
+            {
+                return new BlockNode { W = h * 100f / 150f, H = h }; // a lane with no arrow keeps its place
+            }
+
             float unit = h / 150f;
             List<Vector2> pts;
             float vx = 0f, vy = 0f, vw = 100f, vh = 150f;

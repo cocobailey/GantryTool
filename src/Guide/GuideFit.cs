@@ -29,6 +29,9 @@ namespace GantryTool.Guide
         private const float Inset = 0.2f;      // clear of the next sign, each side
         private const float MinWidth = 1.5f;
 
+        /// <summary>Marks the row of arrows in a design that becomes one arrow per lane.</summary>
+        public const string PerLaneKey = "perLane";
+
         /// <summary>The lanes whose drivers see this face (<paramref name="side"/> as in GuideHead), left to right as they see them.</summary>
         public static List<GantryLane> FaceLanes(List<GantryLane> lanes, sbyte side)
         {
@@ -117,6 +120,127 @@ namespace GantryTool.Guide
             return false;
         }
 
+        /// <summary>
+        /// Which line of the design becomes the lane arrows: the row marked for it, or the first row of arrows in a design
+        /// that has no mark (the ready-made signs); -1 if there's neither. Any other arrows stay as they are.
+        /// </summary>
+        public static int LaneRowIndex(Dictionary<string, object> doc)
+        {
+            List<object> items = Json.Arr(doc, "items");
+            int first = -1;
+            for (int i = 0; items != null && i < items.Count; i++)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                if (IsArrows(item))
+                {
+                    if (item.ContainsKey(PerLaneKey))
+                    {
+                        return i;
+                    }
+
+                    first = first < 0 ? i : first;
+                }
+            }
+
+            return first;
+        }
+
+        public static Dictionary<string, object> NewArrow()
+        {
+            return new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
+        }
+
+        /// <summary>The lanes a fitted sign covers on its face.</summary>
+        public static int LaneCount(GuideHead h, List<GantryLane> allLanes)
+        {
+            int n = FaceLanes(allLanes, h.Side).Count;
+            if (h.FitFirst == 0 || n == 0)
+            {
+                return 0;
+            }
+
+            int first = Mathf.Clamp(h.FitFirst - 1, 0, n - 1);
+            return Mathf.Clamp(h.FitLast - 1, first, n - 1) - first + 1;
+        }
+
+        /// <summary>Gives the lane row one arrow per lane, in lane order, new lanes copying the arrow before them.</summary>
+        public static void PadLaneRow(Dictionary<string, object> doc, int lanes)
+        {
+            int where = LaneRowIndex(doc);
+            List<object> items = where >= 0 ? Json.Arr((Dictionary<string, object>)Json.Arr(doc, "items")[where], "items") : null;
+            while (items != null && items.Count < lanes)
+            {
+                items.Add(new Dictionary<string, object>((Dictionary<string, object>)items[items.Count - 1]));
+            }
+        }
+
+        private static List<object> RowArrows(Dictionary<string, object> doc, int index)
+        {
+            var item = (Dictionary<string, object>)Json.Arr(doc, "items")[index];
+            return Json.Str(item, "type") == "row" ? Json.Arr(item, "items") : new List<object> { item };
+        }
+
+        /// <summary>
+        /// Makes a design ready for one arrow per lane; returns the row. A row of arrows is marked for it; arrows in a row
+        /// with other parts move to a new row below it, keeping their order, and the other parts stay. Otherwise it's a new row.
+        /// </summary>
+        public static Dictionary<string, object> MakeLaneRow(Dictionary<string, object> doc)
+        {
+            List<object> items = Json.Arr(doc, "items");
+            if (items == null)
+            {
+                items = new List<object>();
+                doc["items"] = items;
+            }
+
+            int where = LaneRowIndex(doc);
+            Dictionary<string, object> row = where >= 0 ? items[where] as Dictionary<string, object> : null;
+            if (row != null && Json.Str(row, "type") == "row")
+            {
+                row[PerLaneKey] = true;
+                return row;
+            }
+
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var mixed = items[i] as Dictionary<string, object>;
+                List<object> children = mixed != null && Json.Str(mixed, "type") == "row" ? Json.Arr(mixed, "items") : null;
+                var arrows = new List<object>();
+                if (children != null)
+                {
+                    foreach (object c in children)
+                    {
+                        if (Json.Str(c as Dictionary<string, object>, "type") == "arrow")
+                        {
+                            arrows.Add(c);
+                        }
+                    }
+                }
+
+                if (arrows.Count > 0)
+                {
+                    foreach (object a in arrows)
+                    {
+                        children.Remove(a);
+                    }
+
+                    row = new Dictionary<string, object> { { "type", "row" }, { "items", arrows }, { PerLaneKey, true } };
+                    items.Insert(i + 1, row);
+                    return row;
+                }
+            }
+
+            row = new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { NewArrow() } }, { PerLaneKey, true } };
+            int at = items.Count;
+            while (at > 0 && Json.Str(items[at - 1] as Dictionary<string, object>, "type") == "panel")
+            {
+                at--;
+            }
+
+            items.Insert(at, row);
+            return row;
+        }
+
         public static bool IsArrows(Dictionary<string, object> item)
         {
             if (item == null)
@@ -190,14 +314,6 @@ namespace GantryTool.Guide
             float along = (lo + hi) * 0.5f;
             float metres = Mathf.Max(MinWidth, hi - lo - 2f * Inset);
 
-            int arrowsAt = -1;
-            string direction = "down";
-            object arrowHeight = null;
-            if (h.LaneArrows)
-            {
-                arrowsAt = TakeArrows(doc, ref direction, ref arrowHeight);
-            }
-
             // The legend keeps its chosen size where it fits; a sign that can't fit shrinks to the lanes.
             doc.Remove("minLanes");
             doc.Remove("minWidth");
@@ -220,16 +336,25 @@ namespace GantryTool.Guide
             {
                 // Sign x runs left to right as the driver sees it, the same way round as the lanes.
                 float flip = h.Side < 0 ? 1f : -1f;
+                int arrowsAt = LaneRowIndex(doc);
+                PadLaneRow(doc, last - first + 1);
+                List<object> own = arrowsAt >= 0 ? RowArrows(doc, arrowsAt) : null;
                 var at = new List<object>();
+                var arrows = new List<object>();
                 for (int i = first; i <= last; i++)
                 {
                     at.Add(Math.Round((lanes[i].Offset - along) * flip / m, 1));
+                    arrows.Add(own != null && i - first < own.Count ? own[i - first] : NewArrow());
                 }
 
-                var row = new Dictionary<string, object> { { "type", "laneArrows" }, { "direction", direction }, { "at", at } };
-                if (arrowHeight != null)
+                var row = new Dictionary<string, object> { { "type", "laneArrows" }, { "items", arrows }, { "at", at } };
+                if (own != null && own.Count > 0)
                 {
-                    row["height"] = arrowHeight;
+                    object height;
+                    if (((Dictionary<string, object>)own[0]).TryGetValue("height", out height))
+                    {
+                        row["height"] = height;
+                    }
                 }
 
                 List<object> items = Json.Arr(doc, "items");
@@ -250,38 +375,6 @@ namespace GantryTool.Guide
             }
 
             return new GuidePlacement { Design = Json.Write(doc), Along = along, Scale = scale, Fitted = true, Source = h };
-        }
-
-        /// <summary>
-        /// Blanks out the rows of arrows, keeping the first one's look; returns where the first was, or -1. They stay as
-        /// parts that draw nothing, so everything else in the design keeps its place for the editor.
-        /// </summary>
-        private static int TakeArrows(Dictionary<string, object> doc, ref string direction, ref object height)
-        {
-            List<object> items = Json.Arr(doc, "items");
-            int where = -1;
-            for (int i = items == null ? -1 : items.Count - 1; i >= 0; i--)
-            {
-                var item = items[i] as Dictionary<string, object>;
-                if (!IsArrows(item))
-                {
-                    continue;
-                }
-
-                Dictionary<string, object> arrow = item;
-                if (Json.Str(item, "type") == "row")
-                {
-                    arrow = (Dictionary<string, object>)Json.Arr(item, "items")[0];
-                }
-
-                direction = Json.Str(arrow, "direction", "down");
-                object value;
-                height = arrow.TryGetValue("height", out value) ? value : null;
-                items[i] = new Dictionary<string, object> { { "type", "none" } };
-                where = i;
-            }
-
-            return where;
         }
     }
 }

@@ -130,14 +130,24 @@ namespace GantryTool.UI
                     extras = g.ExtraHeads.Count;
                 }
 
+                // With no signals at all, there are no backs to blank: added signs count as signals here.
+                UIComponent backs = null;
+                int extraCount = extras;
+                Action<bool> showBacks = signals =>
+                {
+                    backs.isEnabled = signals || extraCount > 0;
+                    backs.opacity = backs.isEnabled ? 1f : 0.4f;
+                };
                 Checkbox(helper, "Lane signals (off: a signs-only gantry)", g.LaneHeads, on =>
                 {
                     Change(g, "lane signals", () => g.LaneHeads = on);
+                    showBacks(on);
                 });
-                Checkbox(helper, "No red Xs on the back of signals", g.BlankBacks, on =>
+                backs = (UIComponent)helper.AddCheckbox("No red Xs on the back of signals", g.BlankBacks, on =>
                 {
                     Change(g, "signal backs", () => g.BlankBacks = on);
                 });
+                showBacks(g.LaneHeads);
 
                 var addRow = _content.AddUIComponent<UIPanel>();
                 addRow.size = new Vector2(_content.width, 34f);

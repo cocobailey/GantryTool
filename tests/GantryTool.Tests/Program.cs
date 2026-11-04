@@ -69,6 +69,7 @@ namespace GantryTool.Tests
             Run("guide signs: signal backs can go blank; the setting is saved", GuideBlankBacks);
             Run("guide signs: every part can be found by where it was drawn", GuideParts);
             Run("guide signs: your own saved signs", GuideMySigns);
+            Run("guide signs: only the marked row becomes lane arrows", GuideLaneRow);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
             Run("extra heads: old save blocks are unchanged by them", ExtraHeadsLeaveOldBlocksAlone);
@@ -953,6 +954,61 @@ namespace GantryTool.Tests
             Check(first == 1 && last == 3, "none free: all of them");
             GantryTool.Guide.GuideFit.DefaultRange(new List<GantryTool.Detect.GantryLane>(), signs, -1, out first, out last);
             Check(first == 0 && last == 0, "no lanes: placed by hand");
+        }
+
+        private static void GuideLaneRow()
+        {
+            Func<string, Dictionary<string, object>> row = dir => new Dictionary<string, object>
+            {
+                { "type", "row" },
+                { "items", new List<object> { new Dictionary<string, object> { { "type", "arrow" }, { "direction", dir } } } }
+            };
+            Dictionary<string, object> first = row("up-right"), second = row("up");
+            var doc = new Dictionary<string, object> { { "theme", "us" }, { "items", new List<object> { first, second } } };
+            Check(GantryTool.Guide.GuideFit.LaneRowIndex(doc) == 0, "no mark: the first row of arrows");
+            second[GantryTool.Guide.GuideFit.PerLaneKey] = true;
+            Check(GantryTool.Guide.GuideFit.LaneRowIndex(doc) == 1, "the marked row wins");
+
+            var h = new GuideHead { Id = 1, Scale = 1f, Side = -1, Design = GantryTool.Guide.Json.Write(doc), FitFirst = 1, FitLast = 3, LaneArrows = true };
+            var fitted = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design);
+            List<object> items = GantryTool.Guide.Json.Arr(fitted, "items");
+            var lanes = (Dictionary<string, object>)items[1];
+            Check(GantryTool.Guide.Json.Str((Dictionary<string, object>)items[0], "type") == "row", "the single arrow stays");
+            Check(GantryTool.Guide.Json.Str(lanes, "type") == "laneArrows", "the marked row takes the lanes");
+            Check(GantryTool.Guide.Json.Arr(lanes, "at").Count == 3 && GantryTool.Guide.Json.Arr(lanes, "items").Count == 3, "one per lane");
+            Check(GantryTool.Guide.Json.Str((Dictionary<string, object>)GantryTool.Guide.Json.Arr(lanes, "items")[2], "direction") == "up", "new lanes copy the arrow before them");
+
+            // Each lane has its own arrow: an exit lane can split while the others go straight.
+            Dictionary<string, object> split = row("up");
+            GantryTool.Guide.Json.Arr(split, "items").Add(new Dictionary<string, object> { { "type", "arrow" }, { "direction", "none" } });
+            GantryTool.Guide.Json.Arr(split, "items").Add(new Dictionary<string, object> { { "type", "arrow" }, { "direction", "split-right" } });
+            split[GantryTool.Guide.GuideFit.PerLaneKey] = true;
+            h.Design = GantryTool.Guide.Json.Write(new Dictionary<string, object> { { "theme", "us" }, { "items", new List<object> { split } } });
+            fitted = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(GantryTool.Guide.GuideFit.Resolve(h, GuideLanes()).Design);
+            var found = new Dictionary<string, GantryTool.Guide.GuidePart>();
+            foreach (GantryTool.Guide.GuidePart p in GantryTool.Guide.GuideRenderer.Render(fitted).Parts)
+            {
+                found[p.Path] = p;
+            }
+
+            Check(found.ContainsKey("0/0") && found.ContainsKey("0/1") && found.ContainsKey("0/2"), "each lane's arrow can be clicked, even with none drawn");
+            Check(found["0/0"].X < found["0/1"].X && found["0/1"].X < found["0/2"].X, "in lane order");
+            Check(found["0"].Type == "laneArrows" && found["0"].W > found["0/0"].W, "the whole row is there too");
+
+            // Arrows mixed with other parts come out into their own row, the other parts staying.
+            var chip = new Dictionary<string, object> { { "type", "chip" }, { "items", new List<object> { new Dictionary<string, object> { { "type", "text" }, { "text", "50" } } } } };
+            var mixed = new Dictionary<string, object>
+            {
+                { "type", "row" },
+                { "items", new List<object> { new Dictionary<string, object> { { "type", "arrow" }, { "direction", "turn-left" } }, chip, new Dictionary<string, object> { { "type", "arrow" }, { "direction", "up" } } } }
+            };
+            var mixedDoc = new Dictionary<string, object> { { "items", new List<object> { mixed } } };
+            Dictionary<string, object> made = GantryTool.Guide.GuideFit.MakeLaneRow(mixedDoc);
+            Check(GantryTool.Guide.Json.Arr(mixed, "items").Count == 1 && GantryTool.Guide.Json.Arr(mixed, "items")[0] == chip, "the plate stays where it was");
+            Check(GantryTool.Guide.Json.Arr(made, "items").Count == 2 && GantryTool.Guide.Json.Str((Dictionary<string, object>)GantryTool.Guide.Json.Arr(made, "items")[0], "direction") == "turn-left", "the arrows move, in order");
+            Check(GantryTool.Guide.GuideFit.LaneRowIndex(mixedDoc) == 1, "and become the lane row");
+            Check(GantryTool.Guide.GuideFit.MakeLaneRow(mixedDoc) == made, "doing it again changes nothing");
+            Check(GantryTool.Guide.GuideFit.LaneRowIndex(new Dictionary<string, object> { { "items", new List<object>() } }) == -1, "no arrows at all");
         }
 
         private static void GuideMySigns()

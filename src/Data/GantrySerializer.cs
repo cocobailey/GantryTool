@@ -188,6 +188,17 @@ namespace GantryTool.Data
                         Log.Info("Per-gantry settings for " + applied + " of " + loaded.Count + " gantries");
                     }
 
+                    int rampSigns = 0;
+                    foreach (Gantry g in loaded)
+                    {
+                        foreach (SignalOverride o in g.Overrides)
+                        {
+                            rampSigns += (o.Minus == SignalSymbol.RampMetered ? 1 : 0) + (o.Plus == SignalSymbol.RampMetered ? 1 : 0);
+                        }
+                    }
+
+                    Log.Info("Ramp metering signs in this save: " + rampSigns);
+
                     LoadExtraHeads(loaded);
                     LoadGuideSigns(loaded);
                 }

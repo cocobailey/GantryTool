@@ -327,6 +327,7 @@ namespace GantryTool.UI
 
         private void Rebuild(Gantry g)
         {
+            UIUtils.HideTooltip(this); // a button destroyed under the mouse leaves its tooltip on screen
             for (int i = _content.components.Count - 1; i >= 0; i--)
             {
                 UIComponent old = _content.components[i];
@@ -348,6 +349,14 @@ namespace GantryTool.UI
 
             _shown = sign;
             _doc = ParseDesign(sign.Design);
+            if (sign.LaneArrows && sign.FitFirst > 0)
+            {
+                lock (GantryManager.Lock)
+                {
+                    GuideFit.PadLaneRow(_doc, GuideFit.LaneCount(sign, g.Lanes));
+                }
+            }
+
             _selected = _selectedPath != null ? ItemAt(_doc, _selectedPath) : null;
             if (_selected == null)
             {
@@ -855,14 +864,6 @@ namespace GantryTool.UI
             });
             to.tooltip = "The rightmost lane the sign covers, as drivers see it";
             to.relativePosition = new Vector3(half + 6f, 18f);
-            helper.AddCheckbox("One arrow over each lane", sign.LaneArrows, on =>
-            {
-                Change(g, "sign arrows", h =>
-                {
-                    h.LaneArrows = on;
-                    return h;
-                });
-            });
         }
 
         // ------------------------------------------------------------------------------ the sign's content
@@ -883,7 +884,15 @@ namespace GantryTool.UI
                     ShieldControls(box, g);
                     break;
                 case "arrow":
-                    ArrowControls(box, g, "Which way the arrow points", new List<Dictionary<string, object>> { _selected });
+                    if (InLaneRow())
+                    {
+                        ArrowControls(box, g, "The arrow over this lane", new List<Dictionary<string, object>> { _selected }, true);
+                    }
+                    else
+                    {
+                        ArrowControls(box, g, "Which way the arrow points", new List<Dictionary<string, object>> { _selected }, false);
+                    }
+
                     break;
                 case "row":
                     var arrows = new List<Dictionary<string, object>>();
@@ -892,7 +901,7 @@ namespace GantryTool.UI
                         arrows.Add((Dictionary<string, object>)o);
                     }
 
-                    ArrowControls(box, g, "Which way these arrows point", arrows);
+                    ArrowControls(box, g, "All the lane arrows: click one arrow on the sign to change just that lane", arrows, false);
                     break;
                 case "panel":
                 case "chip":
@@ -968,21 +977,34 @@ namespace GantryTool.UI
             _focus = Field(box, half + 6f, 18f, half, value, 4, g, v => item["number"] = v);
         }
 
-        private void ArrowControls(UIPanel box, Gantry g, string title, List<Dictionary<string, object>> arrows)
+        /// <summary>Whether the selected part belongs to the row of one arrow per lane.</summary>
+        private bool InLaneRow()
+        {
+            if (_selectedPath == null || !_shown.LaneArrows || _shown.FitFirst == 0)
+            {
+                return false;
+            }
+
+            int line;
+            return int.TryParse(_selectedPath.Split('/')[0], out line) && line == GuideFit.LaneRowIndex(_doc);
+        }
+
+        private void ArrowControls(UIPanel box, Gantry g, string title, List<Dictionary<string, object>> arrows, bool allowNone)
         {
             UIUtils.CreateLabel(box, title, 0.8f).relativePosition = new Vector3(0f, 0f);
             string current = arrows.Count > 0 ? Json.Str(arrows[0], "direction", "down") : "down";
-            float gap = 3f, cell = (_content.width - gap * (ArrowKeys.Length - 1)) / ArrowKeys.Length;
-            for (int i = 0; i < ArrowKeys.Length; i++)
+            int count = ArrowKeys.Length + (allowNone ? 1 : 0);
+            float gap = 3f, cell = (_content.width - gap * (count - 1)) / count;
+            for (int i = 0; i < count; i++)
             {
-                string key = ArrowKeys[i];
+                string key = i < ArrowKeys.Length ? ArrowKeys[i] : "none";
                 var b = box.AddUIComponent<UIButton>();
                 b.size = new Vector2(cell, 56f);
                 b.relativePosition = new Vector3(i * (cell + gap), 18f);
                 b.normalBgSprite = key == current ? "ButtonMenuPressed" : "ButtonMenu";
                 b.hoveredBgSprite = "ButtonMenuHovered";
                 b.pressedBgSprite = "ButtonMenuPressed";
-                b.tooltip = ArrowLabels[i];
+                b.tooltip = i < ArrowKeys.Length ? ArrowLabels[i] : "No arrow over this lane";
                 b.eventClick += (c, p) =>
                 {
                     foreach (Dictionary<string, object> a in arrows)
@@ -993,6 +1015,13 @@ namespace GantryTool.UI
                     Commit(g, "sign content");
                     _rebuild = true;
                 };
+                if (key == "none")
+                {
+                    b.text = "None";
+                    b.textScale = 0.7f;
+                    continue;
+                }
+
                 Texture2D tex = GuideCache.ArrowPicture(key);
                 if (tex != null)
                 {
@@ -1046,15 +1075,25 @@ namespace GantryTool.UI
 
             MoveButton(box, 0, w, y, "Up", "Move it up the sign", !isTab && CanMove(top, line, -1), () => Swap(g, top, line, -1));
             MoveButton(box, 1, w, y, "Down", "Move it down the sign", !isTab && CanMove(top, line, 1), () => Swap(g, top, line, 1));
-            MoveButton(box, 2, w, y, "Left", "Move it left in its row", at >= 0 && CanMove(siblings, at, -1), () => Swap(g, siblings, at, -1));
-            MoveButton(box, 3, w, y, "Right", "Move it right in its row", at >= 0 && CanMove(siblings, at, 1), () => Swap(g, siblings, at, 1));
-            MoveButton(box, 4, w, y, "Remove", "Take this off the sign", true, () =>
+            bool sideways = at >= 0 && !InLaneRow();
+            MoveButton(box, 2, w, y, "Left", "Move it left in its row", sideways && CanMove(siblings, at, -1), () => Swap(g, siblings, at, -1));
+            MoveButton(box, 3, w, y, "Right", "Move it right in its row", sideways && CanMove(siblings, at, 1), () => Swap(g, siblings, at, 1));
+            MoveButton(box, 4, w, y, InLaneRow() ? "Remove arrows" : "Remove", InLaneRow() ? "Take the row of lane arrows off the sign" : "Take this off the sign", true, () =>
             {
-                RemoveFrom(_doc, item);
+                bool laneRow = InLaneRow();
+                RemoveFrom(_doc, laneRow ? (Dictionary<string, object>)top[line] : item);
                 Prune(_doc);
                 _selected = null;
                 _selectedPath = null;
-                Commit(g, "sign content");
+                if (laneRow)
+                {
+                    SetLaneArrows(g, false, 0, 0);
+                }
+                else
+                {
+                    Commit(g, "sign content");
+                }
+
                 _rebuild = true;
             });
         }
@@ -1086,7 +1125,7 @@ namespace GantryTool.UI
         private void AddButtons(Gantry g)
         {
             List<object> items = Items(_doc);
-            float w = (_content.width - 4f * 6f) / 5f;
+            float w = (_content.width - 5f * 6f) / 6f;
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, RowHeight);
             RowButton(row, 0f, w, "+ Text", "Add a line of text", () =>
@@ -1103,8 +1142,18 @@ namespace GantryTool.UI
                     { "items", new List<object> { shield, Text("NORTH", 15f, "RG2014D") } }
                 }, shield);
             });
-            RowButton(row, 2f * (w + 6f), w, "+ Arrow", "Add an arrow", () => AddArrow(g, items));
-            RowButton(row, 3f * (w + 6f), w, "+ Exit tab", "Add an exit number tab on top of the sign", () =>
+            RowButton(row, 2f * (w + 6f), w, "+ Arrow", "Add a single arrow", () => AddArrow(g, items));
+            bool hasLanes;
+            lock (GantryManager.Lock)
+            {
+                hasLanes = GuideFit.FaceLanes(g.Lanes, _shown.Side).Count > 0;
+            }
+
+            RowButton(row, 3f * (w + 6f), w, "+ Lane arrows",
+                hasLanes ? "One arrow over the middle of each lane. The sign spans its lanes to line them up."
+                    : "No lanes pass under this side of the sign", () => AddLaneArrows(g, items));
+            row.components[3].isEnabled = hasLanes && !(_shown.LaneArrows && _shown.FitFirst > 0 && GuideFit.LaneRowIndex(_doc) >= 0);
+            RowButton(row, 4f * (w + 6f), w, "+ Exit tab", "Add an exit number tab on top of the sign", () =>
             {
                 Dictionary<string, object> text = Text("EXIT 1", 10f, "RG2014E");
                 Insert(g, 0, new Dictionary<string, object>
@@ -1114,8 +1163,8 @@ namespace GantryTool.UI
                     { "items", new List<object> { text } }
                 }, text);
             });
-            row.components[3].isEnabled = !Contains(items, "tab");
-            RowButton(row, 4f * (w + 6f), w, "+ Exit only", "Add the yellow EXIT ONLY band at the bottom", () =>
+            row.components[4].isEnabled = !Contains(items, "tab");
+            RowButton(row, 5f * (w + 6f), w, "+ Exit only", "Add the yellow EXIT ONLY band at the bottom", () =>
             {
                 Dictionary<string, object> text = Text("EXIT ONLY", 12f, "RG2014E");
                 Insert(g, items.Count, new Dictionary<string, object>
@@ -1126,7 +1175,7 @@ namespace GantryTool.UI
                     { "items", new List<object> { text } }
                 }, text);
             });
-            row.components[4].isEnabled = !Contains(items, "panel");
+            row.components[5].isEnabled = !Contains(items, "panel");
         }
 
         /// <summary>A new line goes under the selected one, or above any arrows and bands at the bottom of the sign.</summary>
@@ -1183,10 +1232,11 @@ namespace GantryTool.UI
         private void AddArrow(Gantry g, List<object> items)
         {
             var arrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
+            int laneRow = _shown.LaneArrows && _shown.FitFirst > 0 ? GuideFit.LaneRowIndex(_doc) : -1;
             for (int i = items.Count - 1; i >= 0; i--)
             {
                 var row = items[i] as Dictionary<string, object>;
-                if (row != null && Json.Str(row, "type") == "row" && GuideFit.IsArrows(row))
+                if (i != laneRow && row != null && Json.Str(row, "type") == "row" && GuideFit.IsArrows(row))
                 {
                     Items(row).Add(arrow);
                     row["justify"] = "between";
@@ -1197,13 +1247,58 @@ namespace GantryTool.UI
                 }
             }
 
+            Insert(g, AboveBands(items), new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { arrow } } }, arrow);
+        }
+
+        /// <summary>Turns on one arrow per lane, using the arrows already on the sign, and spans its lanes if it doesn't yet.</summary>
+        private void AddLaneArrows(Gantry g, List<object> items)
+        {
+            CommitText();
+            _selected = GuideFit.MakeLaneRow(_doc);
+
+            byte first = _shown.FitFirst, last = _shown.FitLast;
+            if (first == 0)
+            {
+                lock (GantryManager.Lock)
+                {
+                    var others = new List<GuideHead>(g.GuideSigns);
+                    others.RemoveAll(o => o.Id == HeadRef.GuideId(_head));
+                    GuideFit.DefaultRange(g.Lanes, others, _shown.Side, out first, out last);
+                }
+            }
+
+            SetLaneArrows(g, true, first, last);
+            _rebuild = true;
+        }
+
+        /// <summary>Changes the lane arrows along with the design, as one undo step.</summary>
+        private void SetLaneArrows(Gantry g, bool on, byte first, byte last)
+        {
+            _commitAt = -1f;
+            string design = Json.Write(_doc);
+            Change(g, "sign arrows", h =>
+            {
+                h.Design = design;
+                h.LaneArrows = on;
+                if (on)
+                {
+                    h.FitFirst = first;
+                    h.FitLast = last;
+                }
+
+                return h;
+            });
+        }
+
+        private static int AboveBands(List<object> items)
+        {
             int at = items.Count;
             while (at > 0 && Json.Str(items[at - 1] as Dictionary<string, object>, "type") == "panel")
             {
                 at--;
             }
 
-            Insert(g, at, new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { arrow } }, { "justify", "between" } }, arrow);
+            return at;
         }
 
         /// <summary>Where new content goes: above any arrows and bands at the bottom of the sign.</summary>
