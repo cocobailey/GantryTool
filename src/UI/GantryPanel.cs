@@ -91,6 +91,7 @@ namespace GantryTool.UI
 
             try
             {
+                UIUtils.HideTooltip(this); // a button destroyed under the mouse leaves its tooltip on screen
                 _building = true;
                 _gantryId = g.Id;
                 _title.text = "Gantry #" + g.Id;
@@ -246,6 +247,7 @@ namespace GantryTool.UI
             int head = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, design, first, last);
             if (head >= 0)
             {
+                UIUtils.HideTooltip(this);
                 Tool.EditHead(g, head);
             }
         }

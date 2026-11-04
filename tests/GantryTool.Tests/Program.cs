@@ -70,6 +70,8 @@ namespace GantryTool.Tests
             Run("guide signs: every part can be found by where it was drawn", GuideParts);
             Run("guide signs: your own saved signs", GuideMySigns);
             Run("bare gantries: only new ones; old saves keep their signals", BareGantries);
+            Run("arrangement view: lanes as drivers see them, and where a dragged sign lands", GuideArrangement);
+            Run("guide signs: blank, lane closed and lane ending", GuideSimpleSigns);
             Run("guide signs: only the marked row becomes lane arrows", GuideLaneRow);
             Run("extra heads: round-trip under their own key", ExtraHeadsRoundTrip);
             Run("extra heads: stale, damaged or excess data is dropped safely", ExtraHeadsBadData);
@@ -1010,6 +1012,67 @@ namespace GantryTool.Tests
             Check(GantryTool.Guide.GuideFit.LaneRowIndex(mixedDoc) == 1, "and become the lane row");
             Check(GantryTool.Guide.GuideFit.MakeLaneRow(mixedDoc) == made, "doing it again changes nothing");
             Check(GantryTool.Guide.GuideFit.LaneRowIndex(new Dictionary<string, object> { { "items", new List<object>() } }) == -1, "no arrows at all");
+        }
+
+        private static void GuideSimpleSigns()
+        {
+            GantryTool.Guide.GuideSign blank = GantryTool.Guide.GuideRenderer.Render(GantryTool.Guide.GuideAssets.Template("us", "blank-green"));
+            Check(blank.Width == 200f && blank.Height >= 130f && blank.Parts.Count == 0, "a blank sign has a size and nothing on it");
+
+            Dictionary<string, object> ending = GantryTool.Guide.GuideAssets.Template("us", "lane-ending");
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(ending);
+            Check(s.Height > s.Width && s.Parts.Count == 1 && s.Parts[0].Type == "symbol" && s.Parts[0].Path == "0", "the symbol can be clicked");
+            int black = 0;
+            foreach (Color32 c in s.Pixels)
+            {
+                black += c.a > 200 && c.r < 40 && c.g < 40 && c.b < 40 ? 1 : 0;
+            }
+
+            Check(black > s.PixelWidth, "and it draws (" + black + " dark pixels)");
+            foreach (string name in new[] { "lane-ends-right", "lane-ends-left" })
+            {
+                Check(GantryTool.Guide.GuideAssets.Image("us", name) != null, name);
+            }
+
+            var missing = new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "symbol" }, { "name", "nope" } } } } };
+            GantryTool.Guide.GuideRenderer.Render(missing, 256); // must not throw
+        }
+
+        private static void GuideArrangement()
+        {
+            // Beam 20 m; lanes centred at 5, 8 and 11 m run towards +side, and the one at 14 m the other way.
+            List<GantryTool.Guide.ArrangeLane> minus = GantryTool.Guide.GuideArrange.Lanes(GuideLanes(), 20f, -1);
+            Check(minus.Count == 4 && Mathf.Abs(minus[0].X0 - 3.5f) < 0.01f && minus[0].Facing && !minus[3].Facing, "-side face: left to right along the beam");
+            List<GantryTool.Guide.ArrangeLane> plus = GantryTool.Guide.GuideArrange.Lanes(GuideLanes(), 20f, 1);
+            Check(Mathf.Abs(plus[0].X0 - 4.5f) < 0.01f && plus[0].Facing && !plus[1].Facing, "+side face: mirrored, with the other direction facing");
+
+            List<GantryTool.Guide.ArrangeLane> facing = GantryTool.Guide.GuideArrange.Facing(minus);
+            Check(facing.Count == 3, "only lanes this face's drivers use");
+
+            // Same numbering as a fitted sign's lanes.
+            List<GantryTool.Detect.GantryLane> numbered = GantryTool.Guide.GuideFit.FaceLanes(GuideLanes(), 1);
+            Check(numbered.Count == GantryTool.Guide.GuideArrange.Facing(plus).Count, "the same lanes as fitting uses");
+            Check(Mathf.Abs(GantryTool.Guide.GuideArrange.ViewX(numbered[0].Offset, 20f, 1) - 6f) < 0.01f, "and the same way round");
+
+            int first = 0, last = 1;
+            GantryTool.Guide.GuideArrange.Move(facing, 8.6f, ref first, ref last);
+            Check(first == 1 && last == 2, "moves over, still covering two (" + first + "-" + last + ")");
+            GantryTool.Guide.GuideArrange.Move(facing, -50f, ref first, ref last);
+            Check(first == 0 && last == 1, "stops at the left end");
+            GantryTool.Guide.GuideArrange.Move(facing, 500f, ref first, ref last);
+            Check(first == 1 && last == 2, "stops at the right end");
+            first = 0;
+            last = 8;
+            GantryTool.Guide.GuideArrange.Move(facing, 8f, ref first, ref last);
+            Check(first == 0 && last == 2, "never more lanes than there are");
+
+            Check(GantryTool.Guide.GuideArrange.LeftEdge(facing, 6.4f, 2) == 1, "left edge goes to the nearest lane edge");
+            Check(GantryTool.Guide.GuideArrange.LeftEdge(facing, 500f, 1) == 1, "left edge can't pass the last lane");
+            Check(GantryTool.Guide.GuideArrange.RightEdge(facing, 9.6f, 0) == 1, "right edge goes to the nearest lane edge");
+            Check(GantryTool.Guide.GuideArrange.RightEdge(facing, -500f, 1) == 1, "right edge can't pass the first lane");
+
+            Check(GantryTool.Guide.GuideArrange.SnapToLane(facing, 8.3f) == 8f, "a hand-placed sign settles on a lane's middle");
+            Check(GantryTool.Guide.GuideArrange.SnapToLane(facing, 9.5f) == 9.5f, "and stays put between them");
         }
 
         private static void BareGantries()

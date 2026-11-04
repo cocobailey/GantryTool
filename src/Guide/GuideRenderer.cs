@@ -178,6 +178,7 @@ namespace GantryTool.Guide
                 case "shield": return Json.Num(item, "height", t.ShieldHeight);
                 case "arrow":
                 case "laneArrows": return Json.Num(item, "height", t.ArrowHeight);
+                case "symbol": return Json.Num(item, "height", t.ShieldHeight);
                 case "spacer": return Json.Num(item, "height", 0f);
                 case "row":
                 case "column":
@@ -606,6 +607,12 @@ namespace GantryTool.Guide
                 case "shield": return BuildShield(t, item, ctx);
                 case "arrow": return BuildArrow(t, item, ctx);
                 case "laneArrows": return BuildLaneArrows(t, item, ctx);
+                case "symbol":
+                {
+                    float size = Json.Num(item, "height", t.ShieldHeight);
+                    return new ShieldNode { Shape = "img", Image = GuideAssets.Image(t.Id, Json.Str(item, "name", "")), W = size, H = size };
+                }
+
                 case "row":
                 {
                     StackNode s = BuildStack(t, item, Children(item), ctx, true);

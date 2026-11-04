@@ -778,6 +778,7 @@ namespace GantryTool.UI
             Fit(drop);
         }
 
+        /// <summary>Where the sign sits: spanning whole lanes or by hand, and the picture to drag it around in.</summary>
         private void LaneControls(UIHelper helper, Gantry g, GuideHead sign)
         {
             List<GantryLane> lanes;
@@ -786,84 +787,49 @@ namespace GantryTool.UI
                 lanes = GuideFit.FaceLanes(g.Lanes, sign.Side);
             }
 
-            if (lanes.Count > 0)
+            var span = (UIComponent)helper.AddCheckbox("Span whole lanes (off: place it by hand)", sign.FitFirst > 0 && lanes.Count > 0, on =>
             {
-                helper.AddCheckbox("Span whole lanes (off: place it by hand)", sign.FitFirst > 0, on =>
+                float along = GuideMeshBuilder.Place(g, _shown).Along;
+                byte first = 0, last = 0;
+                if (on)
                 {
-                    float along = GuideMeshBuilder.Place(g, _shown).Along;
-                    byte first = 0, last = 0;
-                    if (on)
+                    lock (GantryManager.Lock)
                     {
-                        lock (GantryManager.Lock)
-                        {
-                            var others = new List<GuideHead>(g.GuideSigns);
-                            others.RemoveAll(o => o.Id == HeadRef.GuideId(_head));
-                            GuideFit.DefaultRange(g.Lanes, others, _shown.Side, out first, out last);
-                        }
+                        var others = new List<GuideHead>(g.GuideSigns);
+                        others.RemoveAll(o => o.Id == HeadRef.GuideId(_head));
+                        GuideFit.DefaultRange(g.Lanes, others, _shown.Side, out first, out last);
                     }
+                }
 
-                    Change(g, "sign fit", h =>
-                    {
-                        h.Along = along;
-                        h.FitFirst = first;
-                        h.FitLast = last;
-                        h.LaneArrows = on && GuideFit.HasArrowRow(_doc);
-                        return h;
-                    });
-                    _rebuild = true;
-                });
-            }
-
-            if (lanes.Count == 0 || sign.FitFirst == 0)
-            {
-                UIUtils.StyledSlider(helper, _content.width, "Position along beam", 0f, Mathf.Max(0.5f, g.Span), 0.05f, sign.Along, " m", "0.00", true, v =>
+                Change(g, "sign fit", h =>
                 {
-                    Change(g, "sign position", h =>
-                    {
-                        h.Along = v;
-                        return h;
-                    });
-                });
-                return;
-            }
-
-            var labels = new string[Mathf.Min(lanes.Count, 255)];
-            for (int i = 0; i < labels.Length; i++)
-            {
-                labels[i] = "Lane " + (i + 1) + (labels.Length > 1 && i == 0 ? " (left)" : labels.Length > 1 && i == labels.Length - 1 ? " (right)" : "");
-            }
-
-            int first0 = Mathf.Clamp(sign.FitFirst - 1, 0, labels.Length - 1);
-            int last0 = Mathf.Clamp(sign.FitLast - 1, first0, labels.Length - 1);
-            var row = _content.AddUIComponent<UIPanel>();
-            row.size = new Vector2(_content.width, RowHeight + 18f);
-            float half = (_content.width - 6f) / 2f;
-            UIUtils.CreateLabel(row, "From", 0.8f).relativePosition = Vector3.zero;
-            UIUtils.CreateLabel(row, "To", 0.8f).relativePosition = new Vector3(half + 6f, 0f);
-            UIDropDown from = Dropdown(row, 0f, half, labels, first0, index =>
-            {
-                Change(g, "sign lanes", h =>
-                {
-                    h.FitFirst = (byte)(index + 1);
-                    h.FitLast = (byte)Mathf.Max(index + 1, h.FitLast);
+                    h.Along = along;
+                    h.FitFirst = first;
+                    h.FitLast = last;
+                    h.LaneArrows = on && GuideFit.HasArrowRow(_doc);
                     return h;
                 });
                 _rebuild = true;
             });
-            from.tooltip = "The leftmost lane the sign covers, as drivers see it";
-            from.relativePosition = new Vector3(0f, 18f);
-            UIDropDown to = Dropdown(row, half + 6f, half, labels, last0, index =>
+            span.isEnabled = lanes.Count > 0;
+            span.opacity = lanes.Count > 0 ? 1f : 0.4f;
+
+            bool fitted = lanes.Count > 0 && sign.FitFirst > 0;
+            string help = lanes.Count == 0
+                ? "No traffic comes this way, so this side has no lanes to span. Drag the sign along the beam."
+                : fitted
+                    ? "As drivers see it. Drag the sign along the lanes, or by its yellow edges to cover more or fewer."
+                    : "As drivers see it. Drag the sign along the beam. Click another sign to edit it.";
+            UILabel caption = UIUtils.CreateLabel(_content, help, 0.7f);
+            caption.autoHeight = false;
+            caption.height = 14f;
+            GuideArrangeView.Create(_content, _content.width, g, _head, sign.Side, (what, change) => Change(g, what, change), head =>
             {
-                Change(g, "sign lanes", h =>
+                if (Tool != null)
                 {
-                    h.FitLast = (byte)(index + 1);
-                    h.FitFirst = (byte)Mathf.Min(index + 1, h.FitFirst);
-                    return h;
-                });
-                _rebuild = true;
+                    Tool.EditHead(g, head);
+                }
             });
-            to.tooltip = "The rightmost lane the sign covers, as drivers see it";
-            to.relativePosition = new Vector3(half + 6f, 18f);
         }
 
         // ------------------------------------------------------------------------------ the sign's content
@@ -906,6 +872,9 @@ namespace GantryTool.UI
                 case "panel":
                 case "chip":
                     PartColour(box, g);
+                    break;
+                case "symbol":
+                    LaneEndsControls(box, g);
                     break;
                 case "tab":
                     UIUtils.CreateLabel(box, "Exit tab: click its text to change it", 0.8f).relativePosition = new Vector3(0f, 8f);
@@ -1031,6 +1000,22 @@ namespace GantryTool.UI
                     FitPicture(picture, tex, cell - 6f, 50f, 3f, 3f);
                 }
             }
+        }
+
+        private void LaneEndsControls(UIPanel box, Gantry g)
+        {
+            Dictionary<string, object> item = _selected;
+            string[] names = { "lane-ends-right", "lane-ends-left" };
+            string[] labels = { "Right lane ends", "Left lane ends" };
+            UIUtils.CreateLabel(box, "Which lane ends", 0.8f).relativePosition = Vector3.zero;
+            Dropdown(box, 0f, 18f, (_content.width - 6f) / 2f, labels, Mathf.Max(0, Array.IndexOf(names, Json.Str(item, "name", ""))), index =>
+            {
+                if (index >= 0 && index < names.Length)
+                {
+                    item["name"] = names[index];
+                    Commit(g, "sign content");
+                }
+            });
         }
 
         private void PartColour(UIPanel box, Gantry g)
