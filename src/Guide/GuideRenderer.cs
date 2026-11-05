@@ -352,16 +352,26 @@ namespace GantryTool.Guide
             {
                 base.Arrange(x, y, w, h);
                 float mid = x + w * 0.5f;
+                float band = Sections.Count > 0 ? ExitSection.Height + ExitSection.Gap : 0f;
                 for (int i = 0; i < Arrows.Count; i++)
                 {
                     Node a = Arrows[i];
                     float left = Mathf.Clamp(mid + At[i] - a.W * 0.5f, x, Mathf.Max(x, x + w - a.W));
-                    a.Arrange(left, y + (H - a.H) * 0.5f, a.W, a.H);
+                    a.Arrange(left, y + (H - band - a.H) * 0.5f, a.W, a.H);
                 }
 
                 foreach (ExitSection s in Sections)
                 {
-                    s.Arrange(mid, x, x + w, y, H, Arrows);
+                    s.Arrange(mid, x, x + w, y + H - ExitSection.Height);
+                }
+            }
+
+            /// <summary>Takes the bands down to the bottom of the sign, or of the part of it this row is in, and out to its sides.</summary>
+            public void ReachEdges(float bottom, float left, float right, float radius)
+            {
+                foreach (ExitSection s in Sections)
+                {
+                    s.ReachEdges(bottom, left, right, radius);
                 }
             }
 
@@ -369,97 +379,84 @@ namespace GantryTool.Guide
             {
                 foreach (ExitSection s in Sections)
                 {
-                    s.DrawPlate(c, ppi);
+                    s.Draw(c, ppi);
                 }
 
                 foreach (Node a in Arrows)
                 {
                     a.Draw(c, ppi);
                 }
-
-                foreach (ExitSection s in Sections)
-                {
-                    s.DrawText(c, ppi);
-                }
             }
         }
 
-        /// <summary>
-        /// A coloured section under neighbouring exit only lanes, as wide as those lanes, its wording in the widest space
-        /// the arrows leave.
-        /// </summary>
+        /// <summary>A coloured band along the bottom of the sign under neighbouring exit only lanes, as wide as those lanes.</summary>
         private sealed class ExitSection
         {
+            public const float Height = 20f;
+            public const float Gap = 3f;
             private const float TextHeight = 12f;
             private const float MinTextHeight = 7f;
-            private const float Inset = 3f;
+            private const float TextMargin = 3f;
 
             public Theme Theme;
             public string Wording, Font;
             public Color32 Bg, Fg;
-            public int First, Last;
             public float Left, Right;   // from the sign's centre
-            private float _x0, _x1, _y, _h;
+            private float _x0, _x1, _y, _radiusLeft, _radiusRight;
+            private bool _atLeft, _atRight;
             private TextNode _text;
 
-            public void Arrange(float mid, float minX, float maxX, float y, float h, List<Node> arrows)
+            public void Arrange(float mid, float minX, float maxX, float y)
             {
-                _x0 = Mathf.Max(minX, mid + Left + Inset);
-                _x1 = Mathf.Min(maxX, mid + Right - Inset);
+                _x0 = Mathf.Max(minX, mid + Left);
+                _x1 = Mathf.Min(maxX, mid + Right);
+                _atLeft = mid + Left <= minX;
+                _atRight = mid + Right >= maxX;
                 _y = y;
-                _h = h;
+                _radiusLeft = _radiusRight = 0f;
+                PlaceText();
+            }
 
-                // The widest space between this section's arrows.
-                float best = -1f, from = _x0, gapStart = _x0, gapEnd = _x1;
-                for (int i = First; i <= Last + 1; i++)
+            public void ReachEdges(float bottom, float left, float right, float radius)
+            {
+                _y = bottom - Height;
+                if (_atLeft)
                 {
-                    bool end = i > Last;
-                    Node a = end ? null : arrows[i];
-                    if (a is BlockNode)
-                    {
-                        continue; // a lane with no arrow leaves its space free
-                    }
-
-                    float to = end ? _x1 : a.X;
-                    if (to - from > best)
-                    {
-                        best = to - from;
-                        gapStart = from;
-                        gapEnd = to;
-                    }
-
-                    if (!end)
-                    {
-                        from = a.X + a.W;
-                    }
+                    _x0 = left;
+                    _radiusLeft = radius;
                 }
 
+                if (_atRight)
+                {
+                    _x1 = right;
+                    _radiusRight = radius;
+                }
+
+                PlaceText();
+            }
+
+            private void PlaceText()
+            {
                 _text = null;
-                if (string.IsNullOrEmpty(Wording) || best <= 0f)
+                float room = _x1 - _x0 - 2f * TextMargin;
+                if (string.IsNullOrEmpty(Wording) || room <= 0f)
                 {
                     return;
                 }
 
-                const float Margin = 3f;
                 TextNode text = BuildText(Theme, Wording, TextHeight, Font, Fg, 0f);
-                float room = best - 2f * Margin;
                 if (text.W > room && text.W > 0f)
                 {
                     text = BuildText(Theme, Wording, Mathf.Max(MinTextHeight, TextHeight * room / text.W), Font, Fg, 0f);
                 }
 
-                text.Arrange((gapStart + gapEnd - text.W) * 0.5f, y + (h - text.H) * 0.5f, text.W, text.H);
+                text.Arrange((_x0 + _x1 - text.W) * 0.5f, _y + (Height - text.H) * 0.5f, text.W, text.H);
                 _text = text;
             }
 
-            public void DrawPlate(SignCanvas c, float ppi)
+            public void Draw(SignCanvas c, float ppi)
             {
-                float r = 2f * ppi;
-                c.FillRoundRect(_x0 * ppi, _y * ppi, _x1 * ppi, (_y + _h) * ppi, r, r, r, r, Bg);
-            }
-
-            public void DrawText(SignCanvas c, float ppi)
-            {
+                c.FillRoundRect(_x0 * ppi, _y * ppi, _x1 * ppi, (_y + Height) * ppi, 0f, 0f, _radiusRight * ppi, _radiusLeft * ppi, Bg);
                 if (_text != null)
                 {
                     _text.Draw(c, ppi);
@@ -835,27 +832,24 @@ namespace GantryTool.Guide
 
         private static Node BuildLaneArrows(Theme t, Dictionary<string, object> item, Ctx ctx)
         {
-            const float SectionPad = 4f;
             var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight) };
             List<object> at = Json.Arr(item, "at");
             List<object> edges = Json.Arr(item, "edges");
             List<Dictionary<string, object>> arrows = Children(item);
             Color32 exitBg, exitFg;
             t.Scheme("yellow", out exitBg, out exitFg);
-            var exitCtx = new Ctx { Font = ctx.Font, Fg = exitFg, Bg = exitBg };
             ExitSection section = null;
             for (int i = 0; at != null && i < at.Count && i < arrows.Count && node.At.Count < 64; i++)
             {
                 bool exitOnly = arrows[i].ContainsKey(GuideFit.ExitOnlyKey) && edges != null && 2 * i + 1 < edges.Count &&
                     edges[2 * i] is double && edges[2 * i + 1] is double;
-                Node a = at[i] is double ? Build(t, arrows[i], exitOnly ? exitCtx : ctx, true) : null;
+                Node a = at[i] is double ? Build(t, arrows[i], ctx, true) : null;
                 if (a == null)
                 {
                     section = null;
                     continue;
                 }
 
-                int index = node.Arrows.Count;
                 node.At.Add((float)(double)at[i]);
                 node.Arrows.Add(a);
                 node.H = Mathf.Max(node.H, a.H);
@@ -874,19 +868,17 @@ namespace GantryTool.Guide
                         Font = "RG2014D",
                         Bg = exitBg,
                         Fg = exitFg,
-                        First = index,
                         Left = (float)(double)edges[2 * i]
                     };
                     node.Sections.Add(section);
                 }
 
-                section.Last = index;
                 section.Right = (float)(double)edges[2 * i + 1];
             }
 
             if (node.Sections.Count > 0)
             {
-                node.H += 2f * SectionPad;
+                node.H += ExitSection.Height + ExitSection.Gap;
             }
 
             return node;
@@ -1362,6 +1354,13 @@ namespace GantryTool.Guide
                 {
                     float extra = k == spareAt ? extraH : 0f;
                     parts[k].Arrange(2f * border + margin, pen + margin + extra * 0.5f, inner - 2f * margin, parts[k].H);
+                    var stack = parts[k] as StackNode;
+                    var laneRow = stack != null && stack.Items.Count > 0 ? stack.Items[stack.Items.Count - 1] as LaneArrowsNode : null;
+                    if (laneRow != null)
+                    {
+                        laneRow.ReachEdges(pen + parts[k].H + 2f * margin + extra, 2f * border, width - 2f * border, k == parts.Count - 1 ? iir : 0f);
+                    }
+
                     parts[k].Draw(canvas, ppu);
                     pen += parts[k].H + 2f * margin + extra;
                 }

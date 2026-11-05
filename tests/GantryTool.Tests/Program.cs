@@ -1386,9 +1386,9 @@ namespace GantryTool.Tests
                 parts[p.Path] = p;
             }
 
-            // Yellow only in the third lane's share of the sign, along the row of arrows.
+            // Yellow only in the third lane's share of the sign, along its bottom.
             float ppu = s.PixelWidth / s.Width;
-            int y = Mathf.RoundToInt((parts["0"].Y + 3f) * ppu);
+            int y = Mathf.RoundToInt((s.Height - 12f) * ppu);   // in the band along the bottom
             int yellowFirst = -1, yellowLast = -1;
             for (int x = 0; x < s.PixelWidth; x++)
             {
