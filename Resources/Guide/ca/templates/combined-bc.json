@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "combined-bc",
+  "name": "Through and exit (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "minWidth": 340,
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 48",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "row",
+              "items": [
+                {
+                  "type": "text",
+                  "text": "Hope"
+                },
+                {
+                  "type": "shield",
+                  "network": "TCH",
+                  "number": "1",
+                  "height": 26
+                },
+                {
+                  "type": "text",
+                  "text": "EAST",
+                  "height": 9,
+                  "font": "RG2014D"
+                }
+              ],
+              "align": "center"
+            },
+            {
+              "type": "row",
+              "items": [
+                {
+                  "type": "arrow",
+                  "direction": "up",
+                  "style": "slim",
+                  "height": 44
+                },
+                {
+                  "type": "arrow",
+                  "direction": "split-right",
+                  "style": "slim",
+                  "height": 44
+                }
+              ],
+              "justify": "between"
+            }
+          ],
+          "align": "center"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "152 St"
+            },
+            {
+              "type": "row",
+              "items": [
+                {
+                  "type": "text",
+                  "text": "Surrey"
+                },
+                {
+                  "type": "column",
+                  "items": [
+                    {
+                      "type": "text",
+                      "text": "CITY",
+                      "height": 7,
+                      "font": "RG2014D"
+                    },
+                    {
+                      "type": "text",
+                      "text": "CENTRE",
+                      "height": 7,
+                      "font": "RG2014D"
+                    }
+                  ],
+                  "align": "start",
+                  "gap": 1.0
+                }
+              ],
+              "align": "center"
+            },
+            {
+              "type": "arrow",
+              "direction": "turn-right",
+              "style": "slim",
+              "height": 38
+            }
+          ],
+          "align": "center"
+        }
+      ],
+      "align": "center",
+      "justify": "between"
+    }
+  ]
+}

@@ -75,6 +75,7 @@ namespace GantryTool.Data
             try
             {
                 serializableDataManager.SaveData(GuideData.Key, GuideData.Write(gantries, GantryManager.Lock));
+                serializableDataManager.SaveData(GantryTool.Guide.GuideThemes.Key, GantryTool.Guide.GuideThemes.Write());
             }
             catch (Exception e)
             {
@@ -87,6 +88,7 @@ namespace GantryTool.Data
             try
             {
                 string error;
+                GantryTool.Guide.GuideThemes.Read(serializableDataManager.LoadData(GantryTool.Guide.GuideThemes.Key));
                 int added = GuideData.Apply(serializableDataManager.LoadData(GuideData.Key), loaded, out error);
                 if (error != null)
                 {

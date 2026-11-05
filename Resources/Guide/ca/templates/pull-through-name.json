@@ -1,0 +1,76 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "pull-through-name",
+  "name": "Pull-through, bridge name (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "autoRoad": "here",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Hope",
+          "auto": "name"
+        },
+        {
+          "type": "shield",
+          "network": "TCH",
+          "number": "1",
+          "height": 26,
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "EAST",
+          "height": 9,
+          "font": "RG2014D",
+          "auto": "direction"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 44
+        },
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 44
+        },
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 44
+        }
+      ],
+      "justify": "between"
+    },
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "items": [
+        {
+          "type": "text",
+          "text": "PORT MANN BRIDGE",
+          "height": 11,
+          "font": "RG2014E"
+        }
+      ]
+    }
+  ]
+}

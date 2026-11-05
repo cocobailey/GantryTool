@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "lane-ending",
+  "name": "Lane ending",
+  "scheme": "yellow",
+  "align": "center",
+  "items": [
+    {
+      "type": "symbol",
+      "name": "lane-ends-right",
+      "height": 124,
+      "margin": {
+        "top": 4,
+        "bottom": 4
+      }
+    }
+  ],
+  "square": true
+}

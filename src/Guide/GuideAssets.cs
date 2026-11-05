@@ -160,6 +160,8 @@ namespace GantryTool.Guide
     public static class GuideAssets
     {
         private const string Prefix = "GantryTool.Guide.";
+        private const string Shared = "us";     // other countries' signs use its fonts and symbols unless they have their own
+        private static List<string> _ids;
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, GlyphFont> Fonts = new Dictionary<string, GlyphFont>();
         private static readonly Dictionary<string, GuideImage> Images = new Dictionary<string, GuideImage>();
@@ -177,7 +179,7 @@ namespace GantryTool.Guide
                 GlyphFont f;
                 if (!Fonts.TryGetValue(key, out f))
                 {
-                    Stream s = Open(theme, family + ".gbf");
+                    Stream s = Open(theme, family + ".gbf") ?? Open(Shared, family + ".gbf");
                     f = s != null ? GlyphFont.Read(s) : null;
                     Fonts[key] = f;
                 }
@@ -194,7 +196,7 @@ namespace GantryTool.Guide
                 GuideImage i;
                 if (!Images.TryGetValue(key, out i))
                 {
-                    Stream s = Open(theme, name + ".gim");
+                    Stream s = Open(theme, name + ".gim") ?? Open(Shared, name + ".gim");
                     i = s != null ? GuideImage.Read(s) : null;
                     Images[key] = i;
                 }
@@ -206,6 +208,28 @@ namespace GantryTool.Guide
         public static Dictionary<string, object> Theme(string theme)
         {
             return ReadJson(Open(theme, "theme.json"));
+        }
+
+        /// <summary>Every country's signs in the mod, by their folder name.</summary>
+        public static List<string> Ids()
+        {
+            if (_ids == null)
+            {
+                const string End = ".theme.json";
+                var ids = new List<string>();
+                foreach (string r in typeof(GuideAssets).Assembly.GetManifestResourceNames())
+                {
+                    if (r.StartsWith(Prefix, StringComparison.Ordinal) && r.EndsWith(End, StringComparison.Ordinal))
+                    {
+                        ids.Add(r.Substring(Prefix.Length, r.Length - Prefix.Length - End.Length));
+                    }
+                }
+
+                ids.Sort(StringComparer.Ordinal);
+                _ids = ids;
+            }
+
+            return _ids;
         }
 
         /// <summary>The templates of a theme, by file name.</summary>

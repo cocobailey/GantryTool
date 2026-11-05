@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "lane-closed",
+  "name": "Lane closed",
+  "scheme": "yellow",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "LANE",
+      "font": "RG2014D",
+      "height": 24
+    },
+    {
+      "type": "text",
+      "text": "CLOSED",
+      "font": "RG2014D",
+      "height": 24
+    }
+  ],
+  "square": true
+}

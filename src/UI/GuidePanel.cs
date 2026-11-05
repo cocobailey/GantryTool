@@ -30,7 +30,11 @@ namespace GantryTool.UI
         private const float SliderSlack = 0.06f;   // a slider moves in steps of 0.1 m
         private const float MaxSignWidth = 12f, MaxSignHeight = 6f;
         private const float TextCommitDelay = 0.05f;   // just enough to take in keys pressed together
-        private const string Theme = "us";
+        private string Theme   // the country of the sign being edited
+        {
+            get { return Json.Str(_doc, "theme", GuideThemes.Current); }
+        }
+
 
         private static readonly string[] ArrowKeys =
         {
@@ -591,7 +595,7 @@ namespace GantryTool.UI
             {
             }
 
-            return new Dictionary<string, object> { { "theme", Theme } };
+            return new Dictionary<string, object> { { "theme", GuideThemes.Current } };
         }
 
         // ------------------------------------------------------------------------------ the sign, its facing and lanes
@@ -758,6 +762,7 @@ namespace GantryTool.UI
         /// <summary>A picture of every sign to start from, the player's own first; clicking one puts it on the gantry.</summary>
         private void SignPicker(Gantry g)
         {
+            CountryPicker();
             var box = _content.AddUIComponent<UIPanel>();
             var scroll = box.AddUIComponent<UIScrollablePanel>();
             scroll.relativePosition = Vector3.zero;
@@ -792,15 +797,16 @@ namespace GantryTool.UI
             }
 
             var builtIn = new List<PickerCell>();
-            foreach (string name in GuideAssets.TemplateNames(Theme))
+            string country = GuideThemes.Current;
+            foreach (string name in GuideAssets.TemplateNames(country))
             {
                 string file = name;
-                Dictionary<string, object> template = GuideAssets.Template(Theme, file);
+                Dictionary<string, object> template = GuideAssets.Template(country, file);
                 builtIn.Add(new PickerCell
                 {
                     Label = Json.Str(template, "name", file),
                     Id = Json.Str(template, "id"),
-                    Picture = GuideCache.Thumbnail(Theme, file),
+                    Picture = GuideCache.Thumbnail(country, file),
                     Use = () => UseTemplate(g, file)
                 });
             }
@@ -911,9 +917,32 @@ namespace GantryTool.UI
             confirm.SetMessage("Delete saved sign", "Delete \"" + name + "\"? Signs already on your gantries stay as they are.");
         }
 
+        /// <summary>Whose signs to pick from; this city's new signs then start from there too.</summary>
+        private void CountryPicker()
+        {
+            List<string> ids = GuideAssets.Ids();
+            var names = new string[ids.Count];
+            for (int i = 0; i < names.Length; i++)
+            {
+                names[i] = GuideThemes.Name(ids[i]);
+            }
+
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            UIUtils.CreateLabel(row, "Signs from", 0.85f).relativePosition = new Vector3(0f, 8f);
+            Dropdown(row, 90f, 260f, names, Mathf.Max(0, ids.IndexOf(GuideThemes.Current)), index =>
+            {
+                if (index >= 0 && index < ids.Count && ids[index] != GuideThemes.Current)
+                {
+                    GuideThemes.Current = ids[index];
+                    _rebuild = true;
+                }
+            });
+        }
+
         private void UseTemplate(Gantry g, string name)
         {
-            Dictionary<string, object> template = GuideAssets.Template(Theme, name);
+            Dictionary<string, object> template = GuideAssets.Template(GuideThemes.Current, name);
             if (Settings.Current.AutoFillSigns)
             {
                 GuideAutoFill.Fill(template, RoadFinder.Find(g, _shown, template));
@@ -1500,7 +1529,7 @@ namespace GantryTool.UI
 
         private void AddArrow(Gantry g, List<object> items)
         {
-            var arrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
+            Dictionary<string, object> arrow = GuideFit.NewArrow(_doc);
             int laneRow = _shown.LaneArrows && _shown.FitFirst > 0 ? GuideFit.LaneRowIndex(_doc) : -1;
             for (int i = items.Count - 1; i >= 0; i--)
             {

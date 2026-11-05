@@ -1,0 +1,128 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-only-bc",
+  "name": "Exit only (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "minWidth": 230,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 44",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "BC",
+              "number": "7",
+              "height": 22,
+              "auto": "shield"
+            },
+            {
+              "type": "text",
+              "text": "EAST",
+              "height": 8,
+              "font": "RG2014D",
+              "auto": "direction"
+            }
+          ],
+          "align": "center",
+          "gap": 1.0
+        },
+        {
+          "type": "text",
+          "text": "United Blvd",
+          "auto": "name"
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "BC",
+              "number": "7",
+              "height": 22,
+              "auto": "shield"
+            },
+            {
+              "type": "text",
+              "text": "EAST",
+              "height": 8,
+              "font": "RG2014D",
+              "auto": "direction"
+            }
+          ],
+          "align": "center",
+          "gap": 1.0
+        }
+      ],
+      "align": "center",
+      "justify": "between"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 36
+        },
+        {
+          "type": "chip",
+          "background": "#006b45",
+          "foreground": "#ffffff",
+          "border": true,
+          "borderWidth": 1.5,
+          "items": [
+            {
+              "type": "text",
+              "text": "600 m",
+              "height": 10,
+              "font": "RG2014D"
+            }
+          ]
+        },
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 36
+        }
+      ],
+      "justify": "between",
+      "align": "center"
+    },
+    {
+      "type": "panel",
+      "scheme": "yellow",
+      "align": "center",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT ONLY",
+          "height": 11,
+          "font": "RG2014E"
+        }
+      ]
+    }
+  ]
+}

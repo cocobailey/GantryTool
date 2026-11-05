@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "autoroute",
+  "name": "Autoroute (QC)",
+  "scheme": "green",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "SORTIE 105",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "QC",
+          "number": "20",
+          "height": 36,
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Est",
+          "height": 15,
+          "font": "RG2014D",
+          "auto": "direction"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Québec",
+      "auto": "name"
+    },
+    {
+      "type": "text",
+      "text": "Montréal",
+      "auto": "name2"
+    }
+  ],
+  "autoRoad": "exit",
+  "directionWords": [
+    "Est",
+    "Nord",
+    "Ouest",
+    "Sud"
+  ]
+}

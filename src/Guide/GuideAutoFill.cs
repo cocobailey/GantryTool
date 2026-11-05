@@ -31,6 +31,7 @@ namespace GantryTool.Guide
         public const string RoadKey = "autoRoad";   // on the sign: which road it's about
         public const string RoadHere = "here";      // the one under the gantry
         public const string RoadExit = "exit";      // the one the next exit leads to
+        public const string WordsKey = "directionWords";
         public const string PartKey = "auto";       // on a part: what it shows
         public const string PartShield = "shield";
         public const string PartDirection = "direction";
@@ -65,7 +66,7 @@ namespace GantryTool.Guide
             RoadFacts first = roads[0];
             string second = roads.Count > 1 && CanWrite(theme, roads[1].Name) ? roads[1].Name : null;
             bool onShield = first.Number != null && HasPart(doc, PartShield);
-            Write(doc, first, second, onShield);
+            Write(doc, doc, first, second, onShield);
             return true;
         }
 
@@ -107,7 +108,16 @@ namespace GantryTool.Guide
             return false;
         }
 
-        private static void Write(Dictionary<string, object> parent, RoadFacts road, string second, bool onShield)
+        /// <summary>A heading in the sign's own words, if it has some ("Est", "Nord", ...: east, north, west, south).</summary>
+        private static string Direction(Dictionary<string, object> doc, Vector2 heading)
+        {
+            string english = Cardinal(heading);
+            List<object> words = Json.Arr(doc, WordsKey);
+            int i = Array.IndexOf(new[] { "EAST", "NORTH", "WEST", "SOUTH" }, english);
+            return words != null && words.Count == 4 && words[i] is string ? (string)words[i] : english;
+        }
+
+        private static void Write(Dictionary<string, object> root, Dictionary<string, object> parent, RoadFacts road, string second, bool onShield)
         {
             List<object> items = Json.Arr(parent, "items");
             if (items == null)
@@ -123,7 +133,7 @@ namespace GantryTool.Guide
                     continue;
                 }
 
-                Write(item, road, second, onShield);
+                Write(root, item, road, second, onShield);
                 bool keep = true;
                 switch (Json.Str(item, PartKey))
                 {
@@ -139,7 +149,7 @@ namespace GantryTool.Guide
                         keep = road.Heading != Vector2.zero;
                         if (keep)
                         {
-                            item["text"] = Cardinal(road.Heading);
+                            item["text"] = Direction(root, road.Heading);
                         }
 
                         break;

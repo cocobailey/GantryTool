@@ -1,0 +1,72 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-only",
+  "name": "Exit only (Ontario)",
+  "scheme": "green",
+  "align": "center",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 64",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "ON",
+          "number": "400",
+          "height": 36,
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "NORTH",
+          "height": 15,
+          "font": "RG2014D",
+          "auto": "direction"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Barrie",
+      "auto": "name"
+    },
+    {
+      "type": "panel",
+      "scheme": "yellow",
+      "align": "center",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "style": "overhead",
+          "height": 18
+        },
+        {
+          "type": "text",
+          "text": "EXIT ONLY",
+          "height": 12,
+          "font": "RG2014E"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "style": "overhead",
+          "height": 18
+        }
+      ]
+    }
+  ],
+  "autoRoad": "exit"
+}

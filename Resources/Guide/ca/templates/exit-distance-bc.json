@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-distance-bc",
+  "name": "Exit with distance (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 50",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "104 Ave",
+      "auto": "name"
+    },
+    {
+      "type": "text",
+      "text": "160 St",
+      "auto": "name2"
+    },
+    {
+      "type": "chip",
+      "background": "#006b45",
+      "foreground": "#ffffff",
+      "border": true,
+      "borderWidth": 1.5,
+      "items": [
+        {
+          "type": "text",
+          "text": "1300 m",
+          "height": 10,
+          "font": "RG2014D"
+        }
+      ]
+    }
+  ]
+}

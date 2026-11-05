@@ -341,7 +341,7 @@ namespace GantryTool.UI
                 GantryTool.Guide.GuideFit.DefaultRange(g.Lanes, g.GuideSigns, facing, out first, out last);
             }
 
-            Dictionary<string, object> template = GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab");
+            Dictionary<string, object> template = GantryTool.Guide.GuideAssets.Template(GantryTool.Guide.GuideThemes.Current, GantryTool.Guide.GuideThemes.DefaultTemplate(GantryTool.Guide.GuideThemes.Current));
             if (Settings.Current.AutoFillSigns)
             {
                 var placing = new GuideHead { Along = g.Span * 0.5f, Side = facing, FitFirst = first, FitLast = last };

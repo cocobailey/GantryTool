@@ -1,0 +1,80 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-two-bc",
+  "name": "Exit, two destinations (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "minWidth": 230,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 48",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "152 St",
+      "auto": "name"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Surrey",
+          "auto": "name2"
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "CITY",
+              "height": 7,
+              "font": "RG2014D"
+            },
+            {
+              "type": "text",
+              "text": "CENTRE",
+              "height": 7,
+              "font": "RG2014D"
+            }
+          ],
+          "align": "start",
+          "gap": 1.0
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "turn-right",
+          "style": "slim",
+          "height": 38
+        },
+        {
+          "type": "arrow",
+          "direction": "turn-right",
+          "style": "slim",
+          "height": 38
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

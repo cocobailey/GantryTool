@@ -1,7 +1,7 @@
 """Bakes guide sign fonts and shields into the small binary files the mod embeds (it has no font or SVG engine).
 
-Fonts: tools/guide/fonts/*.ttf -> Resources/Guide/us/<name>.gbf
-Shields: tools/guide/*.svg -> Resources/Guide/us/<name>.gim
+Fonts: tools/guide/fonts/*.ttf -> Resources/Guide/us/<name>.gbf (other countries' signs can use these too)
+Shields: tools/guide/*.svg -> Resources/Guide/us/<name>.gim, tools/guide/<country>/*.svg -> Resources/Guide/<country>/
 
 Run from the repository root: python tools/guide/make_assets.py (needs Pillow).
 
@@ -21,7 +21,14 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 OUT = os.path.join("Resources", "Guide", "us")
 EM = 112  # px per em: signs bake at about this size, so letters are rarely scaled up
-CHARS = [chr(c) for c in range(32, 127)]
+ASCII = [chr(c) for c in range(32, 127)]
+ACCENTED = [chr(c) for c in range(0xA1, 0x180)]  # those a font has; a missing letter draws as "?"
+
+
+def has_glyph(font, ch):
+    missing = bytes(font.getmask("\uFFFE"))
+    mask = font.getmask(ch)
+    return mask.getbbox() is not None and bytes(mask) != missing
 
 
 def glyph_runs(mask, w, h):
@@ -42,7 +49,8 @@ def glyph_runs(mask, w, h):
 def bake_font(path):
     font = ImageFont.truetype(path, EM)
     glyphs, data = [], []
-    for ch in CHARS:
+    chars = ASCII + [c for c in ACCENTED if has_glyph(font, c)]
+    for ch in chars:
         l, t, r, b = font.getbbox(ch, anchor="ls")
         w, h = max(0, r - l), max(0, b - t)
         runs = b""
@@ -56,8 +64,8 @@ def bake_font(path):
         data.append(runs)
 
     kerns = []
-    letters = [c for c in CHARS if c != " "]
-    single = {c: font.getlength(c) for c in CHARS}
+    letters = [c for c in chars if c != " "]
+    single = {c: font.getlength(c) for c in chars}
     for a in letters:
         for b in letters:
             k = font.getlength(a + b) - single[a] - single[b]
@@ -78,7 +86,7 @@ def bake_font(path):
 
 
 # ---------------------------------------------------------------- SVG (only the path features the shields use)
-TOKEN = re.compile(r"[MmLlHhVvCcZz]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
+TOKEN = re.compile(r"[MmLlHhVvCcQqZz]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
 
 
 def flatten(d):
@@ -137,6 +145,16 @@ def flatten(d):
                 py = u**3 * y0 + 3 * u * u * t * pts[1] + 3 * u * t * t * pts[3] + t**3 * pts[5]
                 cur.append((px, py))
             x, y = pts[4], pts[5]
+        elif c == "Q":
+            pts = [num() for _ in range(4)]
+            if rel:
+                pts = [p + (x if k % 2 == 0 else y) for k, p in enumerate(pts)]
+            x0, y0 = x, y
+            for s in range(1, 25):
+                t = s / 24.0
+                u = 1 - t
+                cur.append((u * u * x0 + 2 * u * t * pts[0] + t * t * pts[2], u * u * y0 + 2 * u * t * pts[1] + t * t * pts[3]))
+            x, y = pts[2], pts[3]
     if cur:
         subs.append(cur)
     return subs
@@ -184,6 +202,11 @@ def bake_shield(path, size=256, ss=4):
                 r = w / 2
                 for x, y in s:
                     d.ellipse([x - r, y - r, x + r, y + r], fill=colour(stroke) + (255,))
+    for m in re.finditer(r"<text\b([^>]*)>([^<]*)</text>", text):
+        props = dict(re.findall(r'(x|y|size|fill|font)="([^"]*)"', m.group(1)))
+        font = ImageFont.truetype(os.path.join("tools", "guide", "fonts", props["font"] + ".ttf"), int(float(props["size"]) * scale))
+        at = ((float(props["x"]) - box[0]) * scale, (float(props["y"]) - box[1]) * scale)
+        ImageDraw.Draw(img).text(at, m.group(2), font=font, fill=colour(props["fill"]) + (255,), anchor="ms")
     img = img.resize((size, size), Image.LANCZOS)
     write_gim(img, os.path.splitext(os.path.basename(path))[0], size)
 
@@ -211,3 +234,9 @@ if __name__ == "__main__":
         bake_font(ttf)
     for svg in sorted(glob.glob(os.path.join("tools", "guide", "*.svg"))):
         bake_shield(svg)
+    for folder in sorted(glob.glob(os.path.join("tools", "guide", "*", ""))):
+        country = os.path.basename(os.path.dirname(folder))
+        if country != "fonts":
+            OUT = os.path.join("Resources", "Guide", country)
+            for svg in sorted(glob.glob(os.path.join(folder, "*.svg"))):
+                bake_shield(svg)

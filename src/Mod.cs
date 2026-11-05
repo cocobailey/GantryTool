@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CitiesHarmony.API;
 using ColossalFramework.UI;
 using GantryTool.Data;
@@ -9,7 +10,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev25";
+        public const string Version = "2.0.0-dev28";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -60,6 +61,22 @@ namespace GantryTool
                 AddCheckbox(newGroup, "Fill in road names on new guide signs", s.AutoFillSigns,
                     "New guide signs start with the name of the road below them, or of the road the next exit leads to. You can change any of it.",
                     v => s.AutoFillSigns = v);
+                List<string> countries = GantryTool.Guide.GuideAssets.Ids();
+                var countryNames = new string[countries.Count];
+                for (int c = 0; c < countryNames.Length; c++)
+                {
+                    countryNames[c] = GantryTool.Guide.GuideThemes.Name(countries[c]);
+                }
+
+                var countryDrop = (UIDropDown)newGroup.AddDropdown("Guide sign country for new cities", countryNames, Math.Max(0, countries.IndexOf(s.DefaultSignCountry)), index =>
+                {
+                    if (index >= 0 && index < countries.Count)
+                    {
+                        s.DefaultSignCountry = countries[index];
+                        Settings.Current.Save();
+                    }
+                });
+                GantryTool.UI.DropdownToggle.Attach(countryDrop);
                 var typeDrop = (UIDropDown)newGroup.AddDropdown("New gantry type", GantryShape.Names, GantryShape.Valid(s.NewGantryType), index =>
                 {
                     if (index >= 0 && index < GantryShape.Count)

@@ -901,12 +901,14 @@ namespace GantryTool.Guide
                 return new BlockNode { W = h * 100f / 150f, H = h }; // a lane with no arrow keeps its place
             }
 
+            // A theme can draw its arrows its own way, under a name the sign's arrow asks for.
+            Dictionary<string, object> style = Json.Obj(Json.Obj(t.Def, "arrowStyles"), Json.Str(item, "style", ""));
             float unit = h / 150f;
             List<Vector2> pts;
             float vx = 0f, vy = 0f, vw = 100f, vh = 150f;
             if (dir.StartsWith("turn-", StringComparison.Ordinal) || dir.StartsWith("split-", StringComparison.Ordinal))
             {
-                pts = PathPoints(dir.StartsWith("turn-", StringComparison.Ordinal) ? TurnPath : SplitPath);
+                pts = PathPoints(dir.StartsWith("turn-", StringComparison.Ordinal) ? Json.Str(style, "turn", TurnPath) : Json.Str(style, "split", SplitPath));
                 if (dir.EndsWith("-right", StringComparison.Ordinal))
                 {
                     for (int i = 0; i < pts.Count; i++)
@@ -917,7 +919,7 @@ namespace GantryTool.Guide
             }
             else
             {
-                pts = PathPoints(Json.Str(t.Def, "arrow", DefaultArrow));
+                pts = PathPoints(Json.Str(style, "arrow", Json.Str(t.Def, "arrow", DefaultArrow)));
                 float rot;
                 if (!Rotations.TryGetValue(dir, out rot))
                 {

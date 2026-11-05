@@ -20,6 +20,7 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("guide signs: other countries", GuideCountries);
             Run("guide signs: on the truss unless a signal is in the way", GuideClearOfSignals);
             Run("guide signs: filled in from the road", GuideAutoFillParts);
             Run("guide signs: finding the next exit", GuideNextExit);
@@ -1254,6 +1255,67 @@ namespace GantryTool.Tests
             second.Side = 1;
             g.GuideSigns[1] = second;
             Check(GantryTool.Render.GuideMeshBuilder.MidY(g, second) < over - 0.5f, "signs facing the other way don't count");
+        }
+
+        private static void GuideCountries()
+        {
+            List<string> ids = GantryTool.Guide.GuideAssets.Ids();
+            Check(ids.Contains("us") && ids.Contains("ca"), "the US and Canada are there");
+            foreach (string id in ids)
+            {
+                Check(GantryTool.Guide.GuideThemes.DefaultTemplate(id) != null, id + " has a sign to start from");
+                foreach (string name in GantryTool.Guide.GuideAssets.TemplateNames(id))
+                {
+                    Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template(id, name);
+                    Check(GantryTool.Guide.Json.Str(doc, "theme") == id, id + "/" + name + " says it's from there");
+                    GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(doc, 512, 1f);
+                    Check(s != null && s.Width > 0f, id + "/" + name + " draws");
+                }
+            }
+
+            GantryTool.Guide.GlyphFont shared = GantryTool.Guide.GuideAssets.Font("ca", "RG2014EM");
+            Check(shared != null && shared.Has('\u00e9') && shared.Has('A'), "Canada uses the shared fonts, with accents");
+            Check(GantryTool.Guide.GuideAssets.Image("ca", "lane-ends-right") != null && GantryTool.Guide.GuideAssets.Image("ca", "bc") != null, "and the shared symbols, with its own shields");
+
+            Dictionary<string, object> auto = GantryTool.Guide.GuideAssets.Template("ca", "autoroute");
+            Check(GantryTool.Guide.GuideAutoFill.Fill(auto, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Rue Montr\u00e9al", Heading = new Vector2(0f, -1f) } }), "accents fill in");
+            string text = GantryTool.Guide.Json.Write(auto);
+            Check(text.Contains("Sud") && !text.Contains("SOUTH"), "directions in the sign's own words");
+
+            Dictionary<string, object> bc = GantryTool.Guide.GuideAssets.Template("ca", "pull-through");
+            Check(GantryTool.Guide.Json.Str(GantryTool.Guide.GuideFit.NewArrow(bc), "direction") == "up", "new arrows on a B.C. sign point up");
+            Check(GantryTool.Guide.Json.Str(GantryTool.Guide.GuideFit.NewArrow(GantryTool.Guide.GuideAssets.Template("ca", "exit-guide")), "direction") == "down", "and on others down");
+            Check(GantryTool.Guide.Json.Str(GantryTool.Guide.GuideFit.NewArrow(bc), "style") == "slim", "and share their shape");
+            var slimArrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", "up" }, { "style", "slim" }, { "height", 40.0 } };
+            var wideArrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", "up" }, { "height", 40.0 } };
+            float slimWidth = GantryTool.Guide.GuideRenderer.Render(new Dictionary<string, object> { { "theme", "ca" }, { "margin", 0.0 }, { "border", 0.0 }, { "items", new List<object> { slimArrow } } }, 1024, 1f, true).Width;
+            float wideWidth = GantryTool.Guide.GuideRenderer.Render(new Dictionary<string, object> { { "theme", "ca" }, { "margin", 0.0 }, { "border", 0.0 }, { "items", new List<object> { wideArrow } } }, 1024, 1f, true).Width;
+            Check(slimWidth < wideWidth, "a slim arrow is narrower than the standard one");
+            var lanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 4; i++)
+            {
+                lanes.Add(new GantryTool.Detect.GantryLane { Offset = 2f + i * 3.6f, Width = 3.6f, TravelSign = 1 });
+            }
+
+            var fitted = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 4, LaneArrows = true, Design = GantryTool.Guide.Json.Write(bc) };
+            string drawn = GantryTool.Guide.GuideFit.Resolve(fitted, lanes).Design;
+            Check(drawn.Contains("laneArrows") && !drawn.Contains("\"down\""), "spanning four lanes, every arrow still points up");
+
+            GantryTool.Guide.GuideThemes.Read(null);
+            string before = GantryTool.Guide.GuideThemes.Current;
+            GantryTool.Guide.GuideThemes.Current = "ca";
+            byte[] saved = GantryTool.Guide.GuideThemes.Write();
+            GantryTool.Guide.GuideThemes.Read(null);
+            Check(GantryTool.Guide.GuideThemes.Current == before, "a city with no choice uses the setting");
+            GantryTool.Guide.GuideThemes.Read(saved);
+            Check(GantryTool.Guide.GuideThemes.Current == "ca", "a city keeps its choice");
+            GantryTool.Guide.GuideThemes.Read(new byte[] { 9, 200, 1 });
+            Check(GantryTool.Guide.GuideThemes.Current == before, "unreadable data is ignored");
+            GantryTool.Guide.GuideThemes.Read(new byte[] { 1, 200, 1 });
+            Check(GantryTool.Guide.GuideThemes.Current == before, "and so is a cut-off block");
+            GantryTool.Guide.GuideThemes.Current = "atlantis";
+            Check(GantryTool.Guide.GuideThemes.Current == before, "and a country the mod doesn't have");
+            GantryTool.Guide.GuideThemes.Read(null);
         }
 
         private static void GuideSimpleSigns()

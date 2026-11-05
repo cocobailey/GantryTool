@@ -1,0 +1,230 @@
+{
+  "formatVersion": 1,
+  "id": "ca",
+  "name": "Canada",
+  "description": "Canadian guide signs: km, bilingual where it applies (Roadgeek 2014 fonts)",
+  "arrow": "M32 0 H68 V88 H100 L50 150 L0 88 H32 Z",
+  "units": "in",
+  "defaults": {
+    "textHeight": 16,
+    "shieldHeight": 36,
+    "arrowHeight": 24,
+    "border": 2,
+    "cornerRadius": 12,
+    "lineGap": 0.75,
+    "margin": 0.75,
+    "itemGap": 0.6,
+    "font": "RG2014EM",
+    "scheme": "green"
+  },
+  "fonts": [
+    {
+      "family": "RG2014EM",
+      "file": "@us/fonts/RG2014EM.ttf",
+      "label": "Series E(M)",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014D",
+      "file": "@us/fonts/RG2014D.ttf",
+      "label": "Series D",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014E",
+      "file": "@us/fonts/RG2014E.ttf",
+      "label": "Series E",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014C",
+      "file": "@us/fonts/RG2014C.ttf",
+      "label": "Series C",
+      "scale": 1.75,
+      "offset": 0.125
+    }
+  ],
+  "schemes": {
+    "green": {
+      "bg": "#006b45",
+      "fg": "#ffffff",
+      "label": "Guide"
+    },
+    "blue": {
+      "bg": "#1f4ea1",
+      "fg": "#ffffff",
+      "label": "Services"
+    },
+    "brown": {
+      "bg": "#6b3f1d",
+      "fg": "#ffffff",
+      "label": "Tourism"
+    },
+    "white": {
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "label": "Regulatory"
+    },
+    "yellow": {
+      "bg": "#ffb000",
+      "fg": "#000000",
+      "label": "Warning / EXIT ONLY"
+    }
+  },
+  "shields": {
+    "BC": {
+      "label": "B.C. highway",
+      "shape": "img",
+      "img": "shields/bc.svg",
+      "aspect": 1.0,
+      "fg": "#1c4fa3",
+      "num": 0.34,
+      "top": 0.4,
+      "default": "99",
+      "font": "RG2014D",
+      "wide": 1.15,
+      "wideFont": "RG2014C"
+    },
+    "ON": {
+      "label": "Ontario King's Highway",
+      "shape": "img",
+      "img": "shields/ontario.svg",
+      "aspect": 1.0,
+      "fg": "#000000",
+      "num": 0.42,
+      "top": 0.32,
+      "default": "401",
+      "font": "RG2014D",
+      "wide": 1.25,
+      "wideFont": "RG2014C"
+    },
+    "QC": {
+      "label": "Quebec autoroute",
+      "shape": "img",
+      "img": "shields/quebec.svg",
+      "aspect": 1.0,
+      "fg": "#ffffff",
+      "num": 0.42,
+      "top": 0.36,
+      "default": "20",
+      "font": "RG2014D",
+      "wide": 1.25,
+      "wideFont": "RG2014C"
+    },
+    "TCH": {
+      "label": "Trans-Canada Highway",
+      "shape": "img",
+      "img": "shields/tch.svg",
+      "aspect": 1.0,
+      "fg": "#006b45",
+      "num": 0.3,
+      "top": 0.34,
+      "default": "1",
+      "font": "RG2014D"
+    }
+  },
+  "exitTab": {
+    "font": "RG2014E",
+    "height": 10
+  },
+  "laneWidth": 157.48031496062993,
+  "presets": [
+    {
+      "label": "Sortie tab",
+      "item": {
+        "type": "tab",
+        "align": "right",
+        "items": [
+          {
+            "type": "text",
+            "text": "SORTIE 1",
+            "height": 10,
+            "font": "RG2014E"
+          }
+        ]
+      }
+    },
+    {
+      "label": "Exit only",
+      "item": {
+        "type": "panel",
+        "scheme": "yellow",
+        "align": "center",
+        "items": [
+          {
+            "type": "arrow",
+            "direction": "down",
+            "height": 18
+          },
+          {
+            "type": "text",
+            "text": "EXIT ONLY",
+            "height": 12,
+            "font": "RG2014E"
+          },
+          {
+            "type": "arrow",
+            "direction": "down",
+            "height": 18
+          }
+        ]
+      }
+    },
+    {
+      "label": "Cardinal",
+      "item": {
+        "type": "text",
+        "text": "NORTH",
+        "height": 15,
+        "font": "RG2014D"
+      }
+    },
+    {
+      "label": "Distance",
+      "item": {
+        "type": "text",
+        "text": "2 km",
+        "height": 12,
+        "font": "RG2014D"
+      }
+    },
+    {
+      "label": "Lane arrows",
+      "item": {
+        "type": "row",
+        "align": "center",
+        "items": [
+          {
+            "type": "arrow",
+            "direction": "turn-left",
+            "height": 30.0
+          },
+          {
+            "type": "arrow",
+            "direction": "up",
+            "style": "lane",
+            "height": 30.0
+          },
+          {
+            "type": "arrow",
+            "direction": "up",
+            "style": "lane",
+            "height": 30.0
+          }
+        ],
+        "justify": "even"
+      }
+    }
+  ],
+  "defaultSign": "exit-guide-bc",
+  "arrowStyles": {
+    "slim": {
+      "arrow": "M43 0 H57 V104 H76 L50 150 L24 104 H43 Z",
+      "turn": "M76.0 150.0 L76.0 96.0 L75.6 89.0 L74.4 82.5 L72.5 76.3 L69.9 70.4 L66.7 64.7 L62.9 59.2 L58.7 53.8 L54.0 48.4 L48.9 43.0 L43.5 37.5 L56.9 24.1 L6.0 10.0 L20.1 60.9 L33.5 47.5 L38.8 52.8 L43.6 57.9 L47.8 62.7 L51.5 67.4 L54.7 71.9 L57.3 76.5 L59.3 81.1 L60.8 85.8 L61.7 90.8 L62.0 96.0 L62.0 150.0 Z",
+      "split": "M76.0 150.0 L76.0 44.0 L92.0 44.0 L69.0 0.0 L46.0 44.0 L62.0 44.0 L62.0 84.0 L60.1 81.7 L57.9 79.6 L55.6 77.6 L53.0 75.6 L50.3 73.6 L47.4 71.4 L44.4 69.2 L41.2 66.6 L37.9 63.8 L34.5 60.5 L43.6 51.4 L4.0 40.0 L15.4 79.6 L24.6 70.5 L28.4 73.9 L32.8 77.3 L37.7 80.7 L42.7 84.2 L47.6 87.8 L52.1 91.6 L56.1 95.7 L59.2 100.1 L61.3 104.8 L62.0 110.0 L62.0 150.0 Z"
+    }
+  }
+}

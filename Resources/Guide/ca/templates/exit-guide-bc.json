@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-guide-bc",
+  "name": "Exit guide (B.C.)",
+  "scheme": "green",
+  "align": "center",
+  "cornerRadius": 6,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 37",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Gaglardi",
+      "auto": "name"
+    },
+    {
+      "type": "text",
+      "text": "Way",
+      "auto": "name2"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "turn-right",
+          "style": "slim",
+          "height": 38
+        },
+        {
+          "type": "chip",
+          "background": "#006b45",
+          "foreground": "#ffffff",
+          "border": true,
+          "borderWidth": 1.5,
+          "items": [
+            {
+              "type": "text",
+              "text": "EXIT",
+              "height": 10,
+              "font": "RG2014D"
+            }
+          ]
+        }
+      ],
+      "justify": "between",
+      "align": "end"
+    }
+  ]
+}

@@ -31,6 +31,8 @@ namespace GantryTool.Guide
         private const float MinWidth = 1.5f;
 
         /// <summary>Marks the row of arrows in a design that becomes one arrow per lane.</summary>
+        public const string ArrowKey = "arrowDirection";
+        public const string ArrowStyleKey = "arrowStyle";
         public const string WidthKey = "signWidth";    // the player's own size, metres; in the design, so it needs no save data
         public const string HeightKey = "signHeight";
         public const string SquareKey = "square";       // the sign stays square, growing with the gantry's other signs
@@ -267,14 +269,21 @@ namespace GantryTool.Guide
             {
                 { "type", "row" },
                 { "justify", "between" },
-                { "items", new List<object> { NewArrow(), chip, NewArrow() } }
+                { "items", new List<object> { NewArrow(doc), chip, NewArrow(doc) } }
             });
             return text;
         }
 
-        public static Dictionary<string, object> NewArrow()
+        /// <summary>An arrow for a sign, pointing the way that sign's arrows point (down, unless it says otherwise).</summary>
+        public static Dictionary<string, object> NewArrow(Dictionary<string, object> doc)
         {
-            return new Dictionary<string, object> { { "type", "arrow" }, { "direction", "down" }, { "height", 24.0 } };
+            var arrow = new Dictionary<string, object> { { "type", "arrow" }, { "direction", Json.Str(doc, ArrowKey, "down") }, { "height", 24.0 } };
+            if (Json.Has(doc, ArrowStyleKey))
+            {
+                arrow["style"] = Json.Str(doc, ArrowStyleKey);
+            }
+
+            return arrow;
         }
 
         /// <summary>The lanes a fitted sign covers on its face.</summary>
@@ -359,7 +368,7 @@ namespace GantryTool.Guide
                 }
             }
 
-            row = new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { NewArrow() } }, { PerLaneKey, true } };
+            row = new Dictionary<string, object> { { "type", "row" }, { "items", new List<object> { NewArrow(doc) } }, { PerLaneKey, true } };
             int at = items.Count;
             while (at > 0 && Json.Str(items[at - 1] as Dictionary<string, object>, "type") == "panel")
             {
@@ -522,7 +531,7 @@ namespace GantryTool.Guide
                     float half = lanes[i].Width * 0.5f;
                     edges.Add(Math.Round((lanes[i].Offset - along) * flip / m - half / m, 1));
                     edges.Add(Math.Round((lanes[i].Offset - along) * flip / m + half / m, 1));
-                    arrows.Add(own != null && i - first < own.Count ? own[i - first] : NewArrow());
+                    arrows.Add(own != null && i - first < own.Count ? own[i - first] : NewArrow(doc));
                 }
 
                 var row = new Dictionary<string, object> { { "type", "laneArrows" }, { "items", arrows }, { "at", at }, { "edges", edges } };

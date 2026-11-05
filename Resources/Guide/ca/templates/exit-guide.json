@@ -1,0 +1,52 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "exit-guide",
+  "name": "Exit guide (Ontario)",
+  "scheme": "green",
+  "items": [
+    {
+      "type": "tab",
+      "align": "right",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 373",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "ON",
+          "number": "401",
+          "height": 36,
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "EAST",
+          "height": 15,
+          "font": "RG2014D",
+          "auto": "direction"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Toronto",
+      "auto": "name"
+    },
+    {
+      "type": "text",
+      "text": "2 km",
+      "height": 12,
+      "font": "RG2014D"
+    }
+  ],
+  "autoRoad": "exit"
+}
