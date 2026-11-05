@@ -100,6 +100,17 @@ namespace GantryTool.Data
             {
                 Log.Error("GantryUpdater.OnUpdate failed", e);
             }
+
+            try
+            {
+                GantryTool.Detect.GuideRoadWatch.Tick(Time.realtimeSinceStartup);
+                LiveSigns.Tick(Time.realtimeSinceStartup);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Keeping road names and live signs up to date failed", e);
+                GantryTool.Detect.GuideRoadWatch.PausedUntil = Time.realtimeSinceStartup + 60f;
+            }
         }
 
         private static void MatchChanges(float now)

@@ -15,6 +15,7 @@ namespace GantryTool.Render
     public sealed class GantryRenderer : IRenderableManager
     {
         private const float MaxRenderDistance = 3000f;
+        private const float NearDistance = 1200f;    // past this, sign shadows and blinking lights don't show anyway
         private const int MaxRebuildsPerFrame = 8;
         private const float BlinkPeriod = 1.0f;
 
@@ -39,6 +40,7 @@ namespace GantryTool.Render
         private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
         private readonly int _idColor = Shader.PropertyToID("_Color");
         private readonly int _idObjectIndex = Shader.PropertyToID("_ObjectIndex");
+        private readonly int _idAciMap = Shader.PropertyToID("_ACIMap");
         private DrawCallData _drawCallData;
         private bool _errorLogged;
 
@@ -69,6 +71,8 @@ namespace GantryTool.Render
             {
                 return;
             }
+
+            GuideCache.Tick(Time.realtimeSinceStartup);
 
             try
             {
@@ -104,14 +108,18 @@ namespace GantryTool.Render
                     SignStyle style = SignStyles.Resolve(g.Style);
                     DrawSignals(g.SignalMesh, g.Origin, style);
                     DrawGuideSteel(g.GuideBackMesh, g.Origin, ShadowCastingMode.Off, SteelTint(g));
-                    DrawGuideSteel(g.GuideCasterMesh, g.Origin, ShadowCastingMode.ShadowsOnly, Color.white);
+                    bool near = cameraInfo.CheckRenderDistance(g.Bounds.center, NearDistance);
+                    if (near)
+                    {
+                        DrawGuideSteel(g.GuideCasterMesh, g.Origin, ShadowCastingMode.ShadowsOnly, Color.white);
+                    }
 
                     foreach (GuideDraw d in g.GuideDraws)
                     {
-                        DrawGuide(d, g.Origin);
+                        DrawGuide(d, g.Origin, g.SignLights);
                     }
 
-                    if (blinkOn)
+                    if (blinkOn && near)
                     {
                         DrawSignals(g.BlinkMesh, g.Origin, style);
                     }
@@ -175,9 +183,30 @@ namespace GantryTool.Render
             _instance._drawCallData.m_defaultCalls++;
         }
 
+        /// <summary>A catwalk runs along the side with more signs to look after; 0 for none.</summary>
+        private static sbyte CatwalkSide(Gantry g)
+        {
+            if (!g.Catwalk)
+            {
+                return 0;
+            }
+
+            int balance = 0;
+            lock (GantryManager.Lock)
+            {
+                foreach (GuideHead h in g.GuideSigns)
+                {
+                    balance += h.Side;
+                }
+            }
+
+            return balance < 0 ? (sbyte)-1 : (sbyte)1;
+        }
+
         private static Color SteelTint(Gantry g)
         {
-            return g.Look == GantryShape.BoxTruss || g.Look == GantryShape.FlatTruss ? Color.white : TubeTint;
+            Color steel = g.Look == GantryShape.BoxTruss || g.Look == GantryShape.FlatTruss || g.Look == GantryShape.TriChord ? Color.white : TubeTint;
+            return steel * GantryShape.PaintTint(g.Paint);
         }
 
         /// <summary>Draws a guide sign's back, or the sheet that casts its shadow (see <see cref="GuideMeshBuilder"/>).</summary>
@@ -198,7 +227,7 @@ namespace GantryTool.Render
         }
 
         /// <summary>Draws a guide sign face, lit like the signal faces so it reads at night.</summary>
-        private static void DrawGuide(GuideDraw d, Vector3 origin)
+        private static void DrawGuide(GuideDraw d, Vector3 origin, bool lit)
         {
             if (_instance == null || d.Material == null || d.Mesh == null)
             {
@@ -211,6 +240,11 @@ namespace GantryTool.Render
             Vector4 index = RenderManager.DefaultColorLocation;
             index.z = 1f;
             block.SetVector(_instance._idObjectIndex, index);
+            if (lit)
+            {
+                block.SetTexture(_instance._idAciMap, GantryMaterials.GuideLitMap);
+            }
+
             Graphics.DrawMesh(d.Mesh, Matrix4x4.TRS(origin, Quaternion.identity, Vector3.one), d.Material, GantryMaterials.Layer, null, 0, block, ShadowCastingMode.Off);
             _instance._drawCallData.m_defaultCalls++;
         }
@@ -258,7 +292,7 @@ namespace GantryTool.Render
                 }
 
                 g.Mesh = GantryMeshBuilder.Build(g.Start, g.End, g.BeamBottomY, g.BeamDepth, g.Mesh, out g.Origin, g.Type,
-                    GantryShape.PostPosition(g.PostAlong, g.Lanes, g.Span), g.Look);
+                    GantryShape.PostPosition(g.PostAlong, g.Lanes, g.Span), g.Look, CatwalkSide(g));
                 Bounds b = g.Mesh.bounds;
                 b.center += g.Origin;
                 g.Bounds = b;
@@ -295,7 +329,7 @@ namespace GantryTool.Render
                     g.SignalsDirty = false;
                     GantryManager.RefreshExtraLinks(g);
                     g.SignalMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas, false, g.LaneHeads, g.BlankBacks);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.SignalMesh, atlas, false, g.LaneHeads, g.BlankBacks, g.Look, LiveSigns.FilterFor(g));
                     GuideMeshBuilder.Build(g);
                     if (g.Mesh != null)
                     {
@@ -315,7 +349,7 @@ namespace GantryTool.Render
                     }
 
                     g.BlinkMesh = SignalMeshBuilder.Build(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
-                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, true, g.LaneHeads, g.BlankBacks);
+                        g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, g.BlinkMesh, atlas, true, g.LaneHeads, g.BlankBacks, g.Look, LiveSigns.FilterFor(g));
                     SignalMeshBuilder.BuildRampBeacons(g.Start, g.End, g.Origin, g.BeamBottomY, g.BeamDepth,
                         g.Lanes, g.Overrides, g.ExtraHeads, g.SignalSize, atlas, g.RampBeacons, g.LaneHeads);
                 }

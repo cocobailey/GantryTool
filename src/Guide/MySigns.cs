@@ -25,6 +25,8 @@ namespace GantryTool.Guide
         public const int MaxNameLength = 40;
         private const string FilePrefix = "sign-";
         private const string PicturesKey = "pictures";
+        public const string PackExtension = ".signpack";
+        private const long MaxPackLength = 64L * 1024 * 1024;
         private const long MaxFileLength = 8L * 1024 * 1024;
 
         public static string CleanName(string name)
@@ -195,6 +197,164 @@ namespace GantryTool.Guide
                     Log.Warn("Skipped a damaged picture in a saved sign");
                 }
             }
+        }
+
+        /// <summary>Writes all the saved signs, with their pictures, into one file to pass around. Returns its path, or null if there's nothing to put in one.</summary>
+        public static string ExportPack(string folder)
+        {
+            try
+            {
+                List<MySign> signs = List(folder);
+                if (signs.Count == 0)
+                {
+                    return null;
+                }
+
+                var all = new List<object>();
+                foreach (MySign sign in signs)
+                {
+                    var copy = (Dictionary<string, object>)Json.Parse(Json.Write(sign.Design));
+                    PutPictures(copy);
+                    all.Add(copy);
+                }
+
+                string path = Path.Combine(folder, "signs-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + PackExtension);
+                File.WriteAllText(path, Json.Write(new Dictionary<string, object> { { "signs", all } }), Encoding.UTF8);
+                return path;
+            }
+            catch (Exception e)
+            {
+                Log.Error("Could not write a sign pack", e);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Takes in the signs from every pack in the folder. A sign it already has is left alone; a different one with a
+        /// name in use gets a number after its name. Returns how many were new. Never throws.
+        /// </summary>
+        public static int ImportPacks(string folder)
+        {
+            int added = 0;
+            try
+            {
+                if (!Directory.Exists(folder))
+                {
+                    return 0;
+                }
+
+                foreach (string file in Directory.GetFiles(folder, "*" + PackExtension))
+                {
+                    added += ImportPack(folder, file);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Could not read sign packs", e);
+            }
+
+            return added;
+        }
+
+        private static int ImportPack(string folder, string file)
+        {
+            int added = 0;
+            try
+            {
+                if (new FileInfo(file).Length > MaxPackLength)
+                {
+                    return 0;
+                }
+
+                var pack = Json.Parse(File.ReadAllText(file, Encoding.UTF8)) as Dictionary<string, object>;
+                List<object> signs = pack != null ? Json.Arr(pack, "signs") : null;
+                if (signs == null)
+                {
+                    return 0;
+                }
+
+                List<MySign> have = List(folder);
+                foreach (object o in signs)
+                {
+                    var doc = o as Dictionary<string, object>;
+                    if (doc == null)
+                    {
+                        continue;
+                    }
+
+                    TakePictures(doc);
+                    string name = CleanName(Json.Str(doc, "name", "Imported sign"));
+                    if (name.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    string free = name;
+                    bool same = false;
+                    for (int n = 2; ; n++)
+                    {
+                        MySign existing = have.Find(s => string.Equals(s.Name, free, StringComparison.OrdinalIgnoreCase));
+                        if (existing == null)
+                        {
+                            break;
+                        }
+
+                        if (SameDesign(existing.Design, doc))
+                        {
+                            same = true;
+                            break;
+                        }
+
+                        string suffix = " " + n;
+                        free = CleanName(name.Substring(0, Math.Min(name.Length, MaxNameLength - suffix.Length)) + suffix);
+                    }
+
+                    if (!same && Save(folder, free, doc))
+                    {
+                        added++;
+                        have = List(folder);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn("Skipped sign pack " + Path.GetFileName(file) + ": " + e.Message);
+            }
+
+            return added;
+        }
+
+        private static bool SameDesign(Dictionary<string, object> a, Dictionary<string, object> b)
+        {
+            var x = (Dictionary<string, object>)Json.Parse(Json.Write(a));
+            var y = (Dictionary<string, object>)Json.Parse(Json.Write(b));
+            foreach (Dictionary<string, object> d in new[] { x, y })
+            {
+                d.Remove("name");
+                d.Remove("id");
+            }
+
+            return Json.Write(Sorted(x)) == Json.Write(Sorted(y));
+        }
+
+        private static object Sorted(object value)
+        {
+            var map = value as Dictionary<string, object>;
+            if (map != null)
+            {
+                var keys = new List<string>(map.Keys);
+                keys.Sort(StringComparer.Ordinal);
+                var sorted = new Dictionary<string, object>();
+                foreach (string k in keys)
+                {
+                    sorted[k] = Sorted(map[k]);
+                }
+
+                return sorted;
+            }
+
+            var list = value as List<object>;
+            return list != null ? list.ConvertAll(Sorted) : value;
         }
 
         public static void Delete(string folder, string name)

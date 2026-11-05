@@ -33,6 +33,7 @@ namespace GantryTool.Guide
         /// <summary>Marks the row of arrows in a design that becomes one arrow per lane.</summary>
         public const string BarKey = "bar";
         public const string OwnWidthKey = "ownWidth";  // a sign that isn't made to stretch across the lanes it's over
+        public const string BannerKey = "banner";
         public const string CompactKey = "compact";    // a small plate: keeps its own size, not the default or its neighbours'
         public const string ExitOnlyWord = "exitOnly";
         public const string ExitTabWord = "exitTab";
@@ -384,6 +385,181 @@ namespace GantryTool.Guide
             return row;
         }
 
+        /// <summary>
+        /// What moves when a part is lined up left, centre or right: the part, or the row it's in, as a line of its column.
+        /// Null if it can't be lined up (on a tab or band, or in a row spread across the sign). Says where it sits now.
+        /// </summary>
+        public static Dictionary<string, object> LineOf(Dictionary<string, object> doc, string path, out string place)
+        {
+            place = null;
+            var chain = new List<Dictionary<string, object>> { doc };
+            foreach (string step in (path ?? "").Split('/'))
+            {
+                int i;
+                List<object> items = Json.Arr(chain[chain.Count - 1], "items");
+                if (items == null || !int.TryParse(step, out i) || i < 0 || i >= items.Count || !(items[i] is Dictionary<string, object>))
+                {
+                    return null;
+                }
+
+                chain.Add((Dictionary<string, object>)items[i]);
+            }
+
+            for (int k = chain.Count - 1; k > 0; k--)
+            {
+                Dictionary<string, object> parent = chain[k - 1];
+                string type = Json.Str(parent, "type");
+                if (parent == doc || type == "column")
+                {
+                    Dictionary<string, object> line = chain[k];
+                    string own = Json.Str(line, "type");
+                    if (own == "tab" || own == "panel" || Json.Has(line, "justify"))
+                    {
+                        return null;
+                    }
+
+                    string start = Json.Str(parent, "align", "start");
+                    place = Json.Str(line, "place", start);
+                    place = place == "right" ? "end" : place == "left" ? "start" : place;
+                    return line;
+                }
+
+                if (type != "row")
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>A copy of a part straight after it; returns the copy, or null if there's no such part. It's the player's own, so it no longer follows the road.</summary>
+        public static Dictionary<string, object> Duplicate(Dictionary<string, object> doc, string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            Dictionary<string, object> parent = doc;
+            string[] steps = path.Split('/');
+            for (int i = 0; i < steps.Length - 1; i++)
+            {
+                int step;
+                List<object> inner = Json.Arr(parent, "items");
+                if (inner == null || !int.TryParse(steps[i], out step) || step < 0 || step >= inner.Count)
+                {
+                    return null;
+                }
+
+                parent = inner[step] as Dictionary<string, object>;
+            }
+
+            int at;
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null || !int.TryParse(steps[steps.Length - 1], out at) || at < 0 || at >= items.Count)
+            {
+                return null;
+            }
+
+            var copy = Json.Parse(Json.Write(items[at])) as Dictionary<string, object>;
+            if (copy != null)
+            {
+                Unfollow(copy);
+                items.Insert(at + 1, copy);
+            }
+
+            return copy;
+        }
+
+        private static void Unfollow(Dictionary<string, object> item)
+        {
+            item.Remove(GuideAutoFill.PartKey);
+            List<object> inner = Json.Arr(item, "items");
+            if (inner != null)
+            {
+                foreach (object o in inner)
+                {
+                    var child = o as Dictionary<string, object>;
+                    if (child != null)
+                    {
+                        Unfollow(child);
+                    }
+                }
+            }
+        }
+
+        /// <summary>True for the strip that carries a road's name across all the signs on a side of a gantry.</summary>
+        public static bool IsBanner(string design)
+        {
+            return design != null && design.IndexOf("\"" + BannerKey + "\"", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>A strip with a road's name on it, to go over every lane on a side of a gantry, above the signs there.</summary>
+        public static Dictionary<string, object> NewBanner(string theme)
+        {
+            Dictionary<string, object> start = GuideAssets.Template(theme, GuideThemes.DefaultTemplate(theme));
+            return new Dictionary<string, object>
+            {
+                { "formatVersion", 1 },
+                { "theme", theme },
+                { "id", "banner" },
+                { "name", "Road name across the signs" },
+                { "scheme", Json.Str(start, "scheme", "green") },
+                { "align", "center" },
+                { BannerKey, true },
+                { CompactKey, true },
+                { GuideAutoFill.RoadKey, GuideAutoFill.RoadHere },
+                {
+                    "items", new List<object>
+                    {
+                        new Dictionary<string, object> { { "type", "text" }, { "text", "Road name" }, { "height", 14.0 }, { GuideAutoFill.PartKey, GuideAutoFill.PartName } }
+                    }
+                }
+            };
+        }
+
+        /// <summary>How far ahead something is, the way that country's signs say it.</summary>
+        public static string DistanceWords(string theme, float metres)
+        {
+            if (theme == "us" || theme == "uk")
+            {
+                bool caps = theme == "us";
+                float miles = metres / 1609.34f;
+                string amount = miles < 0.375f ? "1/4" : miles < 0.625f ? "1/2" : miles < 0.875f ? "3/4" : Mathf.RoundToInt(miles).ToString();
+                string word = theme == "uk" ? "m" : Mathf.RoundToInt(miles) > 1 ? "MILES" : "MILE";
+                return caps || theme == "uk" ? amount + " " + word : amount;
+            }
+
+            return metres < 950f
+                ? Mathf.Max(100, Mathf.RoundToInt(metres / 100f) * 100) + " m"
+                : (metres < 9500f ? (Mathf.Round(metres / 100f) / 10f).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : Mathf.RoundToInt(metres / 1000f).ToString()) + " km";
+        }
+
+        /// <summary>A copy of a sign saying how far ahead it is, to go on a gantry before it.</summary>
+        public static Dictionary<string, object> AdvanceCopy(Dictionary<string, object> doc, float metres)
+        {
+            var copy = (Dictionary<string, object>)Json.Parse(Json.Write(doc));
+            List<object> items = Json.Arr(copy, "items");
+            int at = items.Count;
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                string type = Json.Str(item, "type");
+                if (type == "panel" || IsArrows(item))
+                {
+                    at = i;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            items.Insert(at, new Dictionary<string, object> { { "type", "text" }, { "text", DistanceWords(Json.Str(copy, "theme", "us"), metres) }, { "height", 12.0 } });
+            return copy;
+        }
+
         /// <summary>True if arrows are built into the sign's layout, each under what it points to, so lane arrows would repeat them.</summary>
         public static bool HasBuiltInArrows(Dictionary<string, object> doc)
         {
@@ -659,6 +835,7 @@ namespace GantryTool.Guide
             foreach (GuideHead h in signs)
             {
                 GuidePlacement p = Resolve(h, lanes, h.Side < 0 ? minus : plus);
+                p.Design = GuidePages.Equalize(p.Design);
                 Measure(ref p);
                 placed[h.Id] = p;
             }

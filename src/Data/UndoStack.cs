@@ -23,6 +23,11 @@ namespace GantryTool.Data
         public bool BlankBacks;
         public byte Type;
         public byte Look;
+        public byte Paint;
+        public bool Catwalk;
+        public bool SignLights;
+        public bool LiveSpeed;
+        public readonly List<FaceMessages> Messages = new List<FaceMessages>();
         public float PostAlong = float.NaN;
 
         /// <summary>Call under GantryManager.Lock.</summary>
@@ -47,6 +52,15 @@ namespace GantryTool.Data
             s.BlankBacks = g.BlankBacks;
             s.Type = g.Type;
             s.Look = g.Look;
+            s.Paint = g.Paint;
+            s.Catwalk = g.Catwalk;
+            s.SignLights = g.SignLights;
+            s.LiveSpeed = g.LiveSpeed;
+            foreach (FaceMessages m in g.Messages)
+            {
+                s.Messages.Add(m.Copy());
+            }
+
             s.PostAlong = g.PostAlong;
             return s;
         }
@@ -72,6 +86,16 @@ namespace GantryTool.Data
             g.BlankBacks = BlankBacks;
             g.Type = Type;
             g.Look = Look;
+            g.Paint = Paint;
+            g.Catwalk = Catwalk;
+            g.SignLights = SignLights;
+            g.LiveSpeed = LiveSpeed;
+            g.Messages.Clear();
+            foreach (FaceMessages m in Messages)
+            {
+                g.Messages.Add(m.Copy());
+            }
+
             g.PostAlong = PostAlong;
             g.MeshDirty = true;
         }
@@ -82,9 +106,17 @@ namespace GantryTool.Data
                 !SameFloat(g.HeightAboveRoad, HeightAboveRoad) || !SameFloat(g.SignalSizeOverride, SignalSizeOverride) ||
                 g.Style != Style || g.Overrides.Count != Overrides.Count || g.ExtraHeads.Count != ExtraHeads.Count ||
                 g.GuideSigns.Count != GuideSigns.Count || g.LaneHeads != LaneHeads || g.BlankBacks != BlankBacks ||
-                g.Type != Type || g.Look != Look || !SameFloat(g.PostAlong, PostAlong))
+                g.Type != Type || g.Look != Look || g.Paint != Paint || g.Catwalk != Catwalk || g.SignLights != SignLights || g.LiveSpeed != LiveSpeed || g.Messages.Count != Messages.Count || !SameFloat(g.PostAlong, PostAlong))
             {
                 return false;
+            }
+
+            for (int i = 0; i < Messages.Count; i++)
+            {
+                if (!Messages[i].Same(g.Messages[i]))
+                {
+                    return false;
+                }
             }
 
             for (int i = 0; i < Overrides.Count; i++)
@@ -129,12 +161,16 @@ namespace GantryTool.Data
 
     /// <summary>
     /// Undo history for the current city session (cleared on unload, not saved). Records gantries placed,
-    /// deleted and changed (moves, settings, signs). Main thread only.
+    /// deleted and changed (moves, settings, signs), and what was undone, until something new is done. Main thread only.
     /// </summary>
     public static class UndoStack
     {
         private const int MaxEntries = 50;
         private const float CoalesceSeconds = 1.5f;
+        private const float NotRecent = -1000000f;
+
+        /// <summary>The time now; tests outside the game give their own.</summary>
+        public static Func<float> Clock = () => UnityEngine.Time.realtimeSinceStartup;
 
         private enum Kind
         {
@@ -149,15 +185,34 @@ namespace GantryTool.Data
             public GantryState Before;
             public string Key;
             public float Time;
+            public int Group;
         }
 
         private static readonly List<Entry> Entries = new List<Entry>();
+        private static readonly List<Entry> Redos = new List<Entry>();
+        private static List<Entry> _redosBeforePush;
+
+        private static int _group, _lastGroup;
 
         public static int Count => Entries.Count;
+
+        /// <summary>Everything recorded until <see cref="EndGroup"/> undoes and redoes as one step.</summary>
+        public static void BeginGroup()
+        {
+            _group = ++_lastGroup;
+        }
+
+        public static void EndGroup()
+        {
+            _group = 0;
+        }
+        public static int RedoCount => Redos.Count;
 
         public static void Clear()
         {
             Entries.Clear();
+            Redos.Clear();
+            _redosBeforePush = null;
         }
 
         public static void PushAdded(Gantry g)
@@ -176,13 +231,14 @@ namespace GantryTool.Data
         /// </summary>
         public static void PushModified(Gantry g, string key, bool coalesce = true)
         {
-            float now = UnityEngine.Time.realtimeSinceStartup;
+            float now = Clock();
             if (coalesce && key != null && Entries.Count > 0)
             {
                 Entry top = Entries[Entries.Count - 1];
                 if (top.Kind == Kind.Modified && top.Before.Id == g.Id && top.Key == key && now - top.Time < CoalesceSeconds)
                 {
                     top.Time = now;
+                    Redos.Clear();
                     return;
                 }
             }
@@ -207,32 +263,74 @@ namespace GantryTool.Data
 
             if (same)
             {
+                // Nothing happened after all, so what was undone can still be redone.
                 Entries.RemoveAt(Entries.Count - 1);
+                if (_redosBeforePush != null)
+                {
+                    Redos.AddRange(_redosBeforePush);
+                    _redosBeforePush = null;
+                }
             }
         }
 
         /// <summary>Undoes the last action. Returns a short description for the log, or null if nothing to undo.</summary>
         public static string Undo()
         {
-            if (Entries.Count == 0)
+            return Step(Entries, Redos);
+        }
+
+        /// <summary>Puts back the last thing undone. Returns a short description for the log, or null if there's nothing to redo.</summary>
+        public static string Redo()
+        {
+            return Step(Redos, Entries);
+        }
+
+        /// <summary>Takes back the last step of one list, and notes in the other how to take that back in turn.</summary>
+        private static string Step(List<Entry> from, List<Entry> to)
+        {
+            if (from.Count == 0)
             {
                 return null;
             }
 
-            Entry e = Entries[Entries.Count - 1];
-            Entries.RemoveAt(Entries.Count - 1);
+            // Changes made together go back together.
+            int group = from[from.Count - 1].Group;
+            string what = StepOne(from, to);
+            while (group != 0 && from.Count > 0 && from[from.Count - 1].Group == group)
+            {
+                what = StepOne(from, to) ?? what;
+            }
+
+            return what;
+        }
+
+        private static string StepOne(List<Entry> from, List<Entry> to)
+        {
+            Entry e = from[from.Count - 1];
+            from.RemoveAt(from.Count - 1);
+            if (from.Count > 0)
+            {
+                from[from.Count - 1].Time = NotRecent;  // the next change is a step of its own
+            }
+
             try
             {
+                Gantry g = GantryManager.Find(e.Before.Id);
+                GantryState now = g != null ? Capture(g) : e.Before;
+                string what;
                 switch (e.Kind)
                 {
                     case Kind.Added:
                         GantryManager.Remove(e.Before.Id);
-                        return "removed placed gantry #" + e.Before.Id;
+                        to.Add(new Entry { Kind = Kind.Deleted, Before = now, Key = e.Key, Time = NotRecent, Group = e.Group });
+                        what = "removed gantry #" + e.Before.Id;
+                        break;
                     case Kind.Deleted:
                         GantryManager.Restore(e.Before);
-                        return "restored deleted gantry #" + e.Before.Id;
+                        to.Add(new Entry { Kind = Kind.Added, Before = e.Before, Key = e.Key, Time = NotRecent, Group = e.Group });
+                        what = "restored gantry #" + e.Before.Id;
+                        break;
                     default:
-                        Gantry g = GantryManager.Find(e.Before.Id);
                         if (g == null)
                         {
                             GantryManager.Restore(e.Before);
@@ -246,12 +344,21 @@ namespace GantryTool.Data
                             }
                         }
 
-                        return "reverted " + (e.Key ?? "change") + " on gantry #" + e.Before.Id;
+                        to.Add(new Entry { Kind = Kind.Modified, Before = now, Key = e.Key, Time = NotRecent, Group = e.Group });
+                        what = "changed back " + (e.Key ?? "change") + " on gantry #" + e.Before.Id;
+                        break;
                 }
+
+                if (to.Count > MaxEntries)
+                {
+                    to.RemoveAt(0);
+                }
+
+                return what;
             }
             catch (Exception ex)
             {
-                Log.Error("Undo failed", ex);
+                Log.Error("Undo or redo failed", ex);
                 return null;
             }
         }
@@ -266,6 +373,9 @@ namespace GantryTool.Data
 
         private static void Push(Entry e)
         {
+            _redosBeforePush = new List<Entry>(Redos);
+            Redos.Clear();
+            e.Group = _group;
             Entries.Add(e);
             if (Entries.Count > MaxEntries)
             {

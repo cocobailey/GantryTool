@@ -29,9 +29,11 @@ namespace GantryTool.Guide
         {
             public byte[] Bytes;
             public GuideImage Image;
+            public bool Tried;
         }
 
         private static readonly Dictionary<string, Entry> Pictures = new Dictionary<string, Entry>();
+        private static volatile bool _pending;
 
         /// <summary>Turns stored bytes into pixels. Set by the game side, which alone can read PNG and JPG files.</summary>
         public static Func<byte[], GuideImage> Decoder;
@@ -54,37 +56,123 @@ namespace GantryTool.Guide
         /// <summary>Keeps a picture and returns its name, or null if it's empty or too big. Main thread only.</summary>
         public static string Add(byte[] bytes)
         {
+            string id = Keep(bytes);
+            if (id != null)
+            {
+                DecodePending();
+            }
+
+            return id;
+        }
+
+        /// <summary>
+        /// Turns kept pictures into pixels. Main thread only: reading a picture uses a Unity texture, and doing that on the
+        /// thread a city loads on crashes the game outright, past any try/catch. So loading only keeps the bytes, and
+        /// whatever draws signs calls this first.
+        /// </summary>
+        public static void DecodePending()
+        {
+            if (!_pending || Decoder == null)
+            {
+                return;
+            }
+
+            var waiting = new List<Entry>();
+            lock (Pictures)
+            {
+                _pending = false;
+                foreach (Entry e in Pictures.Values)
+                {
+                    if (e.Image == null && !e.Tried)
+                    {
+                        waiting.Add(e);
+                    }
+                }
+            }
+
+            foreach (Entry e in waiting)
+            {
+                GuideImage image = null;
+                try
+                {
+                    if (TooBig(e.Bytes))
+                    {
+                        Log.Warn("Skipped a guide sign picture too big to be one of ours");
+                    }
+                    else
+                    {
+                        image = Decoder(e.Bytes);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("A guide sign picture could not be read: " + ex.Message);
+                }
+
+                lock (Pictures)
+                {
+                    e.Image = image;
+                    e.Tried = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// A small file can claim to be a huge picture, and reading one would run the game out of memory. Pictures brought
+        /// in here are never over 1024 px, so one in a shared city or sign pack that says it is gets left out.
+        /// </summary>
+        public static bool TooBig(byte[] b)
+        {
+            const int Most = 2048;
+            int w = 0, h = 0;
+            if (b.Length > 24 && b[0] == 0x89 && b[1] == (byte)'P' && b[2] == (byte)'N' && b[3] == (byte)'G')
+            {
+                w = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19];
+                h = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23];
+                return w <= 0 || h <= 0 || w > Most || h > Most;
+            }
+
+            if (b.Length > 4 && b[0] == 0xFF && b[1] == 0xD8)
+            {
+                int at = 2;
+                while (at + 8 < b.Length && b[at] == 0xFF)
+                {
+                    byte marker = b[at + 1];
+                    int length = (b[at + 2] << 8) | b[at + 3];
+                    if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC)
+                    {
+                        h = (b[at + 5] << 8) | b[at + 6];
+                        w = (b[at + 7] << 8) | b[at + 8];
+                        return w > Most || h > Most;
+                    }
+
+                    if (length < 2)
+                    {
+                        break;
+                    }
+
+                    at += 2 + length;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Keeps a picture's bytes, on any thread. Returns its name, or null if it's empty or too big.</summary>
+        private static string Keep(byte[] bytes)
+        {
             if (bytes == null || bytes.Length == 0 || bytes.Length > MaxBytes)
             {
                 return null;
             }
 
             string id = IdFor(bytes);
-            Entry entry;
             lock (Pictures)
             {
-                if (!Pictures.TryGetValue(id, out entry))
+                if (!Pictures.ContainsKey(id))
                 {
-                    entry = new Entry { Bytes = bytes };
-                    Pictures[id] = entry;
-                }
-            }
-
-            if (entry.Image == null && Decoder != null)
-            {
-                GuideImage image = null;
-                try
-                {
-                    image = Decoder(bytes);
-                }
-                catch (Exception e)
-                {
-                    Log.Warn("A guide sign picture could not be read: " + e.Message);
-                }
-
-                lock (Pictures)
-                {
-                    entry.Image = image;
+                    Pictures[id] = new Entry { Bytes = bytes };
+                    _pending = true;
                 }
             }
 
@@ -179,6 +267,23 @@ namespace GantryTool.Guide
                     IdsIn(o as Dictionary<string, object>, ids);
                 }
             }
+
+            // A message sign's other messages.
+            List<object> pages = Json.Arr(item, GuidePages.PagesKey);
+            if (pages != null)
+            {
+                foreach (object page in pages)
+                {
+                    var lines = page as List<object>;
+                    if (lines != null)
+                    {
+                        foreach (object o in lines)
+                        {
+                            IdsIn(o as Dictionary<string, object>, ids);
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>The names of the pictures on these gantries' signs.</summary>
@@ -235,7 +340,7 @@ namespace GantryTool.Guide
             }
         }
 
-        /// <summary>Takes in saved pictures, keeping whatever could be read. Returns how many; never throws.</summary>
+        /// <summary>Takes in saved pictures, keeping whatever could be read. Returns how many; never throws. Safe on the thread a city loads on.</summary>
         public static int Read(byte[] data, out string error)
         {
             error = null;
@@ -266,7 +371,7 @@ namespace GantryTool.Guide
                             return added;
                         }
 
-                        if (Add(r.ReadBytes(length)) != null)
+                        if (Keep(r.ReadBytes(length)) != null)
                         {
                             added++;
                         }

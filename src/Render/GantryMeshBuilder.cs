@@ -30,6 +30,12 @@ namespace GantryTool.Render
         private const float BracingRadius = 0.05f;
         private const float RoundPostRadius = 0.26f;
         private const float CurveBend = 3.2f;
+        private const float TriChordHalfWidth = 0.42f;
+        private const float BridgeBarRadius = 0.07f;
+        private const float CatwalkWidth = 0.7f;
+        private const float CatwalkDrop = 0.15f;      // how far below the beam it hangs
+        private const float CatwalkRail = 1.0f;
+        private const float CatwalkPostEvery = 2.5f;
         private const float TieEvery = 7f;        // double tubes: uprights along the beam between the end bracing
 
         private static readonly List<Vector3> Verts = new List<Vector3>();
@@ -79,7 +85,7 @@ namespace GantryTool.Render
         }
 
         /// <summary>As above for any kind of gantry; <paramref name="postAlong"/> is a median T's post, from the start.</summary>
-        public static Mesh Build(Vector3 start, Vector3 end, float bottomY, float beamDepth, Mesh mesh, out Vector3 origin, byte type, float postAlong, byte look = GantryShape.BoxTruss)
+        public static Mesh Build(Vector3 start, Vector3 end, float bottomY, float beamDepth, Mesh mesh, out Vector3 origin, byte type, float postAlong, byte look = GantryShape.BoxTruss, sbyte catwalk = 0)
         {
             Verts.Clear();
             Normals.Clear();
@@ -102,11 +108,24 @@ namespace GantryTool.Render
             float bottom = bottomY - origin.y;
             float top = topY - origin.y;
 
+            if (type == GantryShape.OnBridge)
+            {
+                // Just the bars the signs are fixed to.
+                Vector3 flatStart = new Vector3(s.x, 0f, s.z);
+                float bars = (bottom + top) * 0.5f;
+                AddPipe(flatStart + Vector3.up * bars, flatStart + dir * span + Vector3.up * bars, BridgeBarRadius, side);
+                AddCatwalk(catwalk, flatStart, dir, side, span, bottom, look);
+                return Finish(mesh);
+            }
+
             if (look != GantryShape.BoxTruss)
             {
                 AddLook(look, type, s, e, start, dir, side, span, bottom, top, postAlong, origin);
+                AddCatwalk(catwalk, new Vector3(s.x, 0f, s.z), dir, side, span, bottom, look);
                 return Finish(mesh);
             }
+
+            AddCatwalk(catwalk, new Vector3(s.x, 0f, s.z), dir, side, span, bottom, look);
 
             // Posts: from below ground to the top of the beam.
             float postDepth = BeamWidth + 0.2f;
@@ -235,6 +254,25 @@ namespace GantryTool.Render
                 return;
             }
 
+            if (look == GantryShape.CurvedTube)
+            {
+                // On one post (the median T): it splits into a Y.
+                float ground = GroundAt(start + dir * postAlong) - origin.y, stemTop;
+                foreach (List<Vector2> arm in GantryShape.CurvedArms(span, postAlong, mid, ground, CurveBend, out stemTop))
+                {
+                    var line = new List<Vector3>();
+                    foreach (Vector2 p in arm)
+                    {
+                        line.Add(at(p.x, p.y));
+                    }
+
+                    AddPipe(line, CurvedTubeRadius, side);
+                }
+
+                AddPipe(at(postAlong, ground - PostSink), at(postAlong, stemTop), CurvedTubeRadius, side);
+                return;
+            }
+
             // The beam.
             switch (look)
             {
@@ -243,6 +281,9 @@ namespace GantryTool.Render
                     break;
                 case GantryShape.CurvedTube:
                     AddPipe(at(0f, mid), at(span, mid), CurvedTubeRadius, side);
+                    break;
+                case GantryShape.TriChord:
+                    AddTriChord(span, bottom, top, at, side);
                     break;
                 default:
                     AddChordsAndBracing(look, type, span, postAlong, bottom, top, at, side);
@@ -265,6 +306,60 @@ namespace GantryTool.Render
             {
                 float ground = GroundAt(start + dir * postAlong) - origin.y;
                 AddPipe(at(postAlong, ground - PostSink), at(postAlong, postTop), RoundPostRadius, side);
+            }
+        }
+
+        /// <summary>Three runs along the beam, two below and one above, braced panel by panel on all three faces.</summary>
+        private static void AddTriChord(float span, float bottom, float top, Func<float, float, Vector3> at, Vector3 side)
+        {
+            float radius = ChordSize * 0.6f, low = bottom + radius, high = top - radius;
+            Vector3 w = side * TriChordHalfWidth;
+            AddPipe(at(0f, low) - w, at(span, low) - w, radius, side);
+            AddPipe(at(0f, low) + w, at(span, low) + w, radius, side);
+            AddPipe(at(0f, high), at(span, high), radius, side);
+            int panels = Mathf.Max(1, Mathf.RoundToInt(span / Mathf.Max(0.5f, top - bottom)));
+            for (int i = 0; i <= panels; i++)
+            {
+                float a = span * i / panels;
+                AddPipe(at(a, low) - w, at(a, low) + w, BracingRadius, dirOf(w));
+                if (i == panels)
+                {
+                    break;
+                }
+
+                float b = span * (i + 1) / panels;
+                bool rising = (i & 1) == 0;
+                AddPipe(at(a, rising ? low : high) - (rising ? w : Vector3.zero), at(b, rising ? high : low) - (rising ? Vector3.zero : w), BracingRadius, side);
+                AddPipe(at(a, rising ? low : high) + (rising ? w : Vector3.zero), at(b, rising ? high : low) + (rising ? Vector3.zero : w), BracingRadius, side);
+            }
+        }
+
+        private static Vector3 dirOf(Vector3 w)
+        {
+            return Vector3.Cross(w, Vector3.up).normalized;
+        }
+
+        /// <summary>A walkway under the beam on one side, with a rail along its outer edge.</summary>
+        private static void AddCatwalk(sbyte which, Vector3 flatStart, Vector3 dir, Vector3 side, float span, float bottom, byte look)
+        {
+            if (which == 0 || span < 2f)
+            {
+                return;
+            }
+
+            float halfBeam = look == GantryShape.BoxTruss ? BeamWidth * 0.5f : look == GantryShape.TriChord ? TriChordHalfWidth : 0.2f;
+            Vector3 inner = side * which * halfBeam, outer = side * which * (halfBeam + CatwalkWidth), middle = (inner + outer) * 0.5f;
+            Func<float, float, Vector3, Vector3> at = (along, y, across) => flatStart + dir * along + Vector3.up * y + across;
+            float floor = bottom - CatwalkDrop, first = 0.15f, last = span - 0.15f;
+            AddBar(at(first, floor, middle), at(last, floor, middle), CatwalkWidth, 0.05f, Vector3.up);
+            AddPipe(at(first, floor + CatwalkRail, outer), at(last, floor + CatwalkRail, outer), BracingRadius, side);
+            AddPipe(at(first, floor + CatwalkRail * 0.5f, outer), at(last, floor + CatwalkRail * 0.5f, outer), BracingRadius * 0.7f, side);
+            int posts = Mathf.Max(1, Mathf.RoundToInt(span / CatwalkPostEvery));
+            for (int i = 0; i <= posts; i++)
+            {
+                float x = Mathf.Lerp(first, last, (float)i / posts);
+                AddPipe(at(x, floor, outer), at(x, floor + CatwalkRail, outer), BracingRadius, side);
+                AddPipe(at(x, floor, inner), at(x, bottom + 0.05f, inner), BracingRadius, side);
             }
         }
 

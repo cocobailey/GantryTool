@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "message",
+  "name": "Variable message sign",
+  "background": "#0a0a0a",
+  "foreground": "#3c3c3c",
+  "messageSign": true,
+  "cornerRadius": 2,
+  "align": "center",
+  "minWidth": 240,
+  "items": [
+    {
+      "type": "text",
+      "text": "ROAD WORK",
+      "height": 22,
+      "led": true,
+      "color": "#ffb000"
+    },
+    {
+      "type": "text",
+      "text": "AHEAD",
+      "height": 22,
+      "led": true,
+      "color": "#ffb000"
+    },
+    {
+      "type": "text",
+      "text": "USE CAUTION",
+      "height": 22,
+      "led": true,
+      "color": "#ffb000"
+    }
+  ]
+}

@@ -11,9 +11,10 @@ namespace GantryTool.Data
         public const byte CantileverStart = 1; // one post, at the end placed first
         public const byte CantileverEnd = 2;   // one post, at the end placed second
         public const byte MedianT = 3;         // one post part way along, the beam reaching out both sides
-        public const byte Count = 4;
+        public const byte OnBridge = 4;        // no posts: fixed to something already there, like an overpass
+        public const byte Count = 5;
 
-        public static readonly string[] Names = { "Span", "Cantilever", "Cantilever, other end", "Median T" };
+        public static readonly string[] Names = { "Span", "Cantilever", "Cantilever, other end", "Median T", "On a bridge" };
 
         // What the structure is built from, on any kind of gantry.
         public const byte BoxTruss = 0;    // four chords
@@ -21,9 +22,49 @@ namespace GantryTool.Data
         public const byte DoubleTube = 2;  // two pipes, one above the other, with light bracing
         public const byte SingleTube = 3;  // one thick pipe ("monotube")
         public const byte CurvedTube = 4;  // one pipe that bends down into its posts
-        public const byte LookCount = 5;
+        public const byte TriChord = 5;    // three chords, two below and one above
+        public const byte LookCount = 6;
 
-        public static readonly string[] LookNames = { "Box truss", "Flat truss", "Double tube", "Single tube", "Curved tube" };
+        public static readonly string[] LookNames = { "Box truss", "Flat truss", "Double tube", "Single tube", "Curved tube", "Tri-chord" };
+
+        // What colour the steel is painted.
+        public static readonly string[] PaintNames = { "Bare steel", "Dark", "Green", "Blue", "Brown", "Weathered" };
+        private static readonly Color[] PaintTints =
+        {
+            Color.white,
+            new Color(0.34f, 0.35f, 0.37f, 1f),
+            new Color(0.38f, 0.58f, 0.42f, 1f),
+            new Color(0.36f, 0.5f, 0.72f, 1f),
+            new Color(0.58f, 0.44f, 0.32f, 1f),
+            new Color(0.72f, 0.46f, 0.3f, 1f)
+        };
+
+        public static byte ValidPaint(byte paint)
+        {
+            return paint < PaintNames.Length ? paint : (byte)0;
+        }
+
+        /// <summary>Multiplies the steel's own colour.</summary>
+        public static Color PaintTint(byte paint)
+        {
+            return PaintTints[ValidPaint(paint)];
+        }
+
+        /// <summary>Round pipes and flat frames leave room for a slimmer signal box than a box truss.</summary>
+        public static float SignalDepth(byte look, float full)
+        {
+            switch (look)
+            {
+                case FlatTruss:
+                case DoubleTube:
+                    return 0.45f;
+                case SingleTube:
+                case CurvedTube:
+                    return 0.75f;
+                default:
+                    return full;
+            }
+        }
 
         public static byte ValidLook(byte look)
         {
@@ -72,6 +113,46 @@ namespace GantryTool.Data
             }
 
             return path;
+        }
+
+        /// <summary>
+        /// A curved tube on one post: the post splits into two arms that bend out into the beam, like a Y. Each line runs
+        /// from the top of the stem, as (distance along the beam, height), out to its end of the beam. Also says where the stem ends.
+        /// </summary>
+        public static List<List<Vector2>> CurvedArms(float span, float post, float beamY, float ground, float bend, out float stemTop)
+        {
+            const int Steps = 8;
+            post = Mathf.Clamp(post, 0f, span);
+            float room = Mathf.Max(post, span - post);
+            float r = Mathf.Max(0.1f, Mathf.Min(bend, Mathf.Min(room, beamY - ground)));
+            stemTop = beamY - r;
+            var arms = new List<List<Vector2>>();
+            foreach (int side in new[] { -1, 1 })
+            {
+                float end = side < 0 ? 0f : span, reach = Mathf.Abs(end - post);
+                if (reach < 0.05f)
+                {
+                    continue;
+                }
+
+                // A short side bends only as far as it reaches, and joins the beam at its end.
+                float own = Mathf.Min(r, reach);
+                var arm = new List<Vector2> { new Vector2(post, stemTop) };
+                for (int i = 1; i <= Steps; i++)
+                {
+                    float a = 0.5f * Mathf.PI * i / Steps;
+                    arm.Add(new Vector2(post + side * (own - own * Mathf.Cos(a)), beamY - r + r * Mathf.Sin(a)));
+                }
+
+                if (reach > own)
+                {
+                    arm.Add(new Vector2(end, beamY));
+                }
+
+                arms.Add(arm);
+            }
+
+            return arms;
         }
 
         public static byte Valid(byte type)

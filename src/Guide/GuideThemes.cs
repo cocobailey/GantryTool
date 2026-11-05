@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using GantryTool.Data;
 
 namespace GantryTool.Guide
 {
@@ -27,10 +28,24 @@ namespace GantryTool.Guide
                 }
 
                 string chosen = Settings.Current.DefaultSignCountry;
-                return IsKnown(chosen) ? chosen : Fallback;
+                return IsKnown(chosen) ? chosen : CountryForStyle((SignStyle)Settings.Current.DefaultStyle);
             }
 
             set { _city = value; }
+        }
+
+        /// <summary>The signs that go with a style of lane signals.</summary>
+        public static string CountryForStyle(SignStyle style)
+        {
+            switch (style)
+            {
+                case SignStyle.Europe: return "de";
+                case SignStyle.Netherlands: return "nl";
+                case SignStyle.UnitedKingdom: return "uk";
+                case SignStyle.Canada: return "ca";
+                case SignStyle.AustraliaNz: return "au";
+                default: return Fallback;
+            }
         }
 
         public static bool IsKnown(string id)

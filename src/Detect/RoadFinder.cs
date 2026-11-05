@@ -78,6 +78,7 @@ namespace GantryTool.Detect
         public static bool Fill(Gantry g, GuideHead sign, Dictionary<string, object> design, out bool partly)
         {
             partly = false;
+            GuideAutoFill.ForgetEdits(design);
             string which = Json.Str(design, GuideAutoFill.RoadKey);
             if (which != GuideAutoFill.RoadBoth)
             {
@@ -88,6 +89,114 @@ namespace GantryTool.Detect
             bool filled = GuideAutoFill.FillSections(design, Find(g, sign, GuideAutoFill.RoadHere), Find(g, sign, GuideAutoFill.RoadExit), out missing);
             partly = filled && missing > 0;
             return filled;
+        }
+
+        /// <summary>Brings a sign's design up to date with the map. True if that changed anything.</summary>
+        public static bool Refresh(Gantry g, GuideHead sign, Dictionary<string, object> design)
+        {
+            string before = Json.Write(design);
+            var found = new Dictionary<string, List<RoadFacts>>();
+            GuideAutoFill.Refresh(design, which =>
+            {
+                List<RoadFacts> roads;
+                if (!found.TryGetValue(which, out roads))
+                {
+                    roads = Find(g, sign, which);
+                    found[which] = roads;
+                }
+
+                return roads;
+            });
+            return Json.Write(design) != before;
+        }
+
+        /// <summary>The way traffic under this side of a gantry is going.</summary>
+        public static Vector2 Heading(Gantry g, sbyte side)
+        {
+            Vector2 d = new Vector2(g.End.x - g.Start.x, g.End.z - g.Start.z).normalized;
+            return new Vector2(-d.y, d.x) * -side;
+        }
+
+        /// <summary>The name of the road under a sign; null if there's no named road there.</summary>
+        public static string RoadName(Gantry g, GuideHead sign)
+        {
+            List<GantryLane> lanes;
+            lock (GantryManager.Lock)
+            {
+                lanes = GuideFit.FaceLanes(g.Lanes, sign.Side);
+            }
+
+            if (lanes.Count == 0)
+            {
+                return null;
+            }
+
+            string name = new GameNetwork().Name(LaneUnder(lanes, sign).Segment);
+            return string.IsNullOrEmpty(name) ? null : name;
+        }
+
+        /// <summary>Another gantry over the same road, the same way: how far ahead of the first it is (behind it if negative), and which side faces that traffic.</summary>
+        public struct RoadGantry
+        {
+            public Gantry Gantry;
+            public sbyte Side;
+            public float Ahead;
+        }
+
+        /// <summary>The other gantries over the road under a sign, for traffic going the same way.</summary>
+        public static List<RoadGantry> SameRoad(Gantry g, GuideHead sign)
+        {
+            var result = new List<RoadGantry>();
+            List<GantryLane> own;
+            lock (GantryManager.Lock)
+            {
+                own = GuideFit.FaceLanes(g.Lanes, sign.Side);
+            }
+
+            if (own.Count == 0 || string.IsNullOrEmpty(new GameNetwork().Name(LaneUnder(own, sign).Segment)))
+            {
+                return result;
+            }
+
+            ushort road = LaneUnder(own, sign).Segment;
+            var net = new GameNetwork();
+            Vector2 heading = Heading(g, sign.Side);
+            Vector3 here = (g.Start + g.End) * 0.5f;
+            var all = new List<Gantry>();
+            GantryManager.GetAll(all);
+            foreach (Gantry other in all)
+            {
+                if (other == g)
+                {
+                    continue;
+                }
+
+                foreach (sbyte side in new sbyte[] { -1, 1 })
+                {
+                    if (Vector2.Dot(Heading(other, side), heading) < 0.3f)
+                    {
+                        continue;
+                    }
+
+                    List<GantryLane> lanes;
+                    lock (GantryManager.Lock)
+                    {
+                        lanes = GuideFit.FaceLanes(other.Lanes, side);
+                    }
+
+                    foreach (GantryLane lane in lanes)
+                    {
+                        if (net.SameName(lane.Segment, road))
+                        {
+                            Vector3 there = (other.Start + other.End) * 0.5f - here;
+                            result.Add(new RoadGantry { Gantry = other, Side = side, Ahead = Vector2.Dot(new Vector2(there.x, there.z), heading) });
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return result;
         }
 
         private static List<RoadFacts> Find(Gantry g, GuideHead sign, string which)

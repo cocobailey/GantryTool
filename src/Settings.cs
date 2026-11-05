@@ -26,8 +26,13 @@ namespace GantryTool
         public byte NewGantries;               // what a newly placed gantry starts with: Start* below
         public byte NewGantryType;             // GantryShape of a newly placed gantry
         public byte NewGantryLook;             // and what it's built from
+        public bool NewNoRedXs;                // new gantries start with no red Xs on the back of signals
+        public float NewSignSize = 1f;         // new guide signs' text and symbol size
         public bool AutoFillSigns = true;      // new guide signs start with the road's name and the next exit's
-        public string DefaultSignCountry = "us"; // for cities that haven't chosen
+        public bool LiveRoadNames = true;      // and keep up when a road is renamed
+        public string DefaultSignCountry = "";  // for cities that haven't chosen; empty = the country of the default signal style
+        public int HeavyTraffic = 50;          // the road density (0-100) speed signals start dropping at
+        public bool GuideTipSeen;              // the sign editor's first-use tip has been dismissed
         public string LastSeenNotes = "";      // "what's new" release the player has closed
 
         public const byte StartAsk = 0;        // bare, with the gantry panel open to choose

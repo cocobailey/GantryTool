@@ -23,7 +23,9 @@ namespace GantryTool.UI
         private const float Margin = 12f;
         private const float PreviewHeight = 210f;
         private const float MaxPickerHeight = 370f;
-        private const float InspectorHeight = 168f;
+        private const float InspectorHeight = 178f;
+        private const float ControlsY = 52f;
+        private static readonly string[] SwatchColours = { "#ffffff", "#000000", "#ffb000", "#006b45", "#1a5ca8", "#c8102e", "#6b3e1e", "#f47920" };
         private const float MinPartSize = 10f;
         private const float DragStart = 6f;
         private const float RowHeight = 34f;
@@ -48,8 +50,6 @@ namespace GantryTool.UI
             "Down", "Up", "Left", "Right", "Down left", "Down right", "Up left", "Up right", "Turn left", "Turn right", "Split left", "Split right"
         };
 
-        private static readonly string[] SizeLabels = { "Small", "Medium", "Normal", "Large" };
-        private static readonly float[] SizeHeights = { 10f, 12f, 16f, 20f };
 
         public GantryPlaceTool Tool;
 
@@ -80,11 +80,14 @@ namespace GantryTool.UI
         private bool _dragging, _dragged;
         private readonly UISprite[] _dropLine = new UISprite[1];
         private bool _saving;
+        private string _copyNote;
+        private string _packNote;
+        private string _signSearch = "";
+        private UIButton _redoButton;
         private bool _choosingPicture;
         private string _pictureNote;
         private bool _changingPicture;                       // the next picture replaces the selected part's; otherwise it's added
         private bool _coverMode;                             // the next picture covers the whole sign
-        private const float PictureStep = 1.2f;
         private string _notice;
 
         private static string MySignsFolder => Path.Combine(Path.Combine(DataLocation.localApplicationData, "GantryTool"), "GuideSigns");
@@ -167,13 +170,21 @@ namespace GantryTool.UI
                 return;
             }
 
-            if (_commitAt < 0f && (_rebuild || Differs(now, _shown)))
+            // Never while the mouse is held: the button being clicked would be gone before the click finished.
+            if (_commitAt < 0f && (_rebuild || Differs(now, _shown)) && !Input.GetMouseButton(0))
             {
                 _rebuild = false;
                 Show(g);
             }
 
             CopyPasteKeys(g);
+            GuideRoadWatch.PausedUntil = Time.realtimeSinceStartup + 1f;
+            LiveSigns.Editing(g.Id, HeadRef.GuideId(_head));
+            if (_redoButton != null)
+            {
+                _redoButton.isEnabled = UndoStack.RedoCount > 0;
+            }
+
             if (_copiedUntil >= 0f && Time.realtimeSinceStartup >= _copiedUntil)
             {
                 _copiedUntil = -1f;
@@ -621,18 +632,26 @@ namespace GantryTool.UI
             Heading("This sign");
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, 34f);
-            float quarter = (_content.width - 18f) / 4f;
-            RowButton(row, 0f, quarter, "Undo", "Undo the last change (Ctrl+Z)", () =>
+            float fifth = (_content.width - 24f) / 5f;
+            RowButton(row, 0f, fifth, "Undo", "Undo the last change (Ctrl+Z)", () =>
             {
                 if (Tool != null)
                 {
                     Tool.UndoLast();
                 }
             });
-            _copyButton = RowButton(row, quarter + 6f, quarter, CopyLabel, "Copy this sign, to paste on any gantry (Ctrl+C)", () => CopySign(g));
-            _pasteButton = RowButton(row, 2f * (quarter + 6f), quarter, "Paste sign", "Replace this sign with the one you copied; it stays where it is (Ctrl+V, and Ctrl+Z brings this one back)", () => PasteSign(g));
+            _redoButton = RowButton(row, fifth + 6f, fifth, "Redo", "Put back what you just undid (Ctrl+Y)", () =>
+            {
+                if (Tool != null)
+                {
+                    Tool.RedoLast();
+                }
+            });
+            _redoButton.isEnabled = UndoStack.RedoCount > 0;
+            _copyButton = RowButton(row, 2f * (fifth + 6f), fifth, CopyLabel, "Copy this sign, to paste on any gantry (Ctrl+C)", () => CopySign(g));
+            _pasteButton = RowButton(row, 3f * (fifth + 6f), fifth, "Paste sign", "Replace this sign with the one you copied; it stays where it is (Ctrl+V, and Ctrl+Z brings this one back)", () => PasteSign(g));
             _pasteButton.isEnabled = GuideClipboard.HasSign;
-            RowButton(row, 3f * (quarter + 6f), quarter, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
+            RowButton(row, 4f * (fifth + 6f), fifth, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
             {
                 Gantry cur = GantryManager.Find(_gantryId);
                 if (cur != null)
@@ -727,6 +746,7 @@ namespace GantryTool.UI
             {
                 CommitText();
                 _placementPage = placement;
+                _copyNote = null;
                 _picking = false;
                 _saving = false;
                 _choosingPicture = false;
@@ -741,8 +761,158 @@ namespace GantryTool.UI
             }
         }
 
+        /// <summary>A short welcome the first time, until it's dismissed.</summary>
+        private void FirstTip()
+        {
+            if (Settings.Current.GuideTipSeen)
+            {
+                return;
+            }
+
+            var tip = _content.AddUIComponent<UIPanel>();
+            tip.size = new Vector2(_content.width, 48f);
+            const float Button = 70f;
+            UILabel text = UIUtils.CreateLabel(tip, "Click any part of the sign to change it, or drag it to move it. Add parts with the buttons below. Placement sets its size and lanes.", 0.8f);
+            text.autoSize = false;
+            text.wordWrap = true;
+            text.size = new Vector2(_content.width - Button - 8f, 44f);
+            text.relativePosition = new Vector3(2f, 2f);
+            RowButton(tip, _content.width - Button, Button, "Got it", "Don't show this again", () =>
+            {
+                Settings.Current.GuideTipSeen = true;
+                Settings.Current.Save();
+                _rebuild = true;
+            });
+        }
+
+        /// <summary>A variable message sign's messages: which one you're editing, and how the sign changes between them.</summary>
+        private void MessageControls(Gantry g)
+        {
+            if (!Json.Has(_doc, GuideRenderer.MessageSignKey))
+            {
+                return;
+            }
+
+            Heading("Messages: the sign changes between them by itself");
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, 40f);
+            int count = GuidePages.Count(_doc), current = GuidePages.Current(_doc);
+            const float Number = 30f, Gap = 4f;
+            float x = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                int page = i;
+                UIButton b = RowButton(row, x, Number, (i + 1).ToString(), "Edit message " + (i + 1), () =>
+                {
+                    CommitText();
+                    GuidePages.SwitchTo(_doc, page);
+                    ChangedMessages(g);
+                });
+                if (i == current)
+                {
+                    b.normalBgSprite = "ButtonMenuPressed";
+                }
+
+                x += Number + Gap;
+            }
+
+            UIButton add = RowButton(row, x, 52f, "+ Add", "Add another message, up to " + GuidePages.MaxPages, () =>
+            {
+                CommitText();
+                Dictionary<string, object> line = GuidePages.Add(_doc);
+                if (line != null)
+                {
+                    ChangedMessages(g);
+                    _selected = line;
+                }
+            });
+            add.isEnabled = count < GuidePages.MaxPages;
+            x += 52f + Gap;
+            UIButton remove = RowButton(row, x, 60f, "Remove", "Take this message off the sign (Ctrl+Z brings it back)", () =>
+            {
+                CommitText();
+                GuidePages.RemoveCurrent(_doc);
+                ChangedMessages(g);
+            });
+            remove.isEnabled = count > 1;
+            float right = 5f * (Number + Gap) + 52f + 60f + 2f * Gap;
+            float when = 120f, slider = _content.width - right - when - 12f;
+            MiniSlider(row, right + 6f, 0f, slider, "Seconds each", GuidePages.MinSeconds, GuidePages.MaxSeconds, 1f, GuidePages.Seconds(_doc), v =>
+            {
+                _doc[GuidePages.SecondsKey] = (double)v;
+                Commit(g, "message time");
+            });
+            bool busy = Json.Str(_doc, GuidePages.WhenKey) == GuidePages.WhenBusy;
+            UIButton show = RowButton(row, _content.width - when, when, busy ? "In heavy traffic" : "Always on", "Always on, or blank unless the road below has heavy traffic", () =>
+            {
+                CommitText();
+                if (busy)
+                {
+                    _doc.Remove(GuidePages.WhenKey);
+                }
+                else
+                {
+                    _doc[GuidePages.WhenKey] = GuidePages.WhenBusy;
+                }
+
+                ChangedMessages(g);
+            });
+            show.textScale = 0.7f;
+            if (busy)
+            {
+                var heavy = _content.AddUIComponent<UIPanel>();
+                heavy.size = new Vector2(_content.width, 40f);
+                MiniSlider(heavy, 0f, 0f, _content.width * 0.6f, "Shows when the road is this full (%)", 5f, 100f, 5f, Json.Num(_doc, GuidePages.BusyAtKey, GuidePages.DefaultBusyAt), v =>
+                {
+                    _doc[GuidePages.BusyAtKey] = (double)v;
+                    Commit(g, "message traffic");
+                });
+                UIUtils.CreateLabel(heavy, "Road below right now: " + g.LiveDensity + "%", 0.75f).relativePosition = new Vector3(_content.width * 0.6f + 12f, 14f);
+            }
+        }
+
+        private void ChangedMessages(Gantry g)
+        {
+            _selected = null;
+            _selectedPath = null;
+            Commit(g, "sign messages");
+            _rebuild = true;
+        }
+
+        /// <summary>Passing saved signs around as one file.</summary>
+        private void PackControls()
+        {
+            float third = (_content.width - 12f) / 3f;
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            RowButton(row, 0f, third, "Export my signs", "Put all your saved signs and their pictures into one file to share", () =>
+            {
+                string path = MySigns.ExportPack(MySignsFolder);
+                _packNote = path != null ? "Saved " + Path.GetFileName(path) + " in your signs folder." : "No saved signs to export yet.";
+                _rebuild = true;
+            });
+            RowButton(row, third + 6f, third, "Import sign packs", "Add the signs from any " + MySigns.PackExtension + " files in your signs folder", () =>
+            {
+                int added = MySigns.ImportPacks(MySignsFolder);
+                _packNote = added > 0 ? "Added " + added + " sign" + (added == 1 ? "" : "s") + "." : "No new signs found. Put " + MySigns.PackExtension + " files in the folder first.";
+                _rebuild = true;
+            });
+            RowButton(row, 2f * (third + 6f), third, "Open signs folder", MySignsFolder, () =>
+            {
+                Directory.CreateDirectory(MySignsFolder);
+                ColossalFramework.Utils.OpenInFileBrowser(MySignsFolder);
+            });
+            if (_packNote != null)
+            {
+                var note = _content.AddUIComponent<UIPanel>();
+                note.size = new Vector2(_content.width, 20f);
+                UIUtils.CreateLabel(note, _packNote, 0.75f).relativePosition = new Vector3(2f, 2f);
+            }
+        }
+
         private void DesignPage(Gantry g)
         {
+            FirstTip();
             var top = _content.AddUIComponent<UIPanel>();
             top.size = new Vector2(_content.width, RowHeight);
             float third = (_content.width - 12f) / 3f;
@@ -761,7 +931,12 @@ namespace GantryTool.UI
                 _notice = null;
                 _rebuild = true;
             });
-            SchemeDropdown(top, 2f * (third + 6f), third, g);
+            if (!Json.Has(_doc, GuideRenderer.MessageSignKey))
+            {
+                SchemeDropdown(top, 2f * (third + 6f), third, g);
+            }
+
+            MessageControls(g);
             if (Json.Has(_doc, GuideAutoFill.RoadKey))
             {
                 var fill = _content.AddUIComponent<UIPanel>();
@@ -854,11 +1029,53 @@ namespace GantryTool.UI
         private void SignPicker(Gantry g)
         {
             CountryPicker();
+            var searchRow = _content.AddUIComponent<UIPanel>();
+            searchRow.size = new Vector2(_content.width, RowHeight);
+            UIUtils.CreateLabel(searchRow, "Search", 0.85f).relativePosition = new Vector3(0f, 8f);
+            UITextField search = UIUtils.CreateTextField(searchRow, 260f, 30);
+            search.relativePosition = new Vector3(90f, 2f);
+            search.tooltip = "Type part of a sign's name";
             UIPanel box;
             float width;
             UIScrollablePanel scroll = PickerScroll(out box, out width);
+            _signSearch = "";
+            float wanted = FillSignPicker(g, scroll, width);
+            UIScrollbar bar = FinishPickerScroll(box, scroll, wanted);
+            search.eventTextChanged += (c, v) =>
+            {
+                if (_building)
+                {
+                    return;
+                }
+
+                _signSearch = v.Trim();
+                foreach (UIComponent old in new List<UIComponent>(scroll.components))
+                {
+                    scroll.RemoveUIComponent(old);
+                    UnityEngine.Object.Destroy(old.gameObject);
+                }
+
+                float found = FillSignPicker(g, scroll, width);
+                scroll.scrollPosition = Vector2.zero;
+                bar.isVisible = found > scroll.height;
+            };
+
+            PackControls();
+            var back = _content.AddUIComponent<UIPanel>();
+            back.size = new Vector2(_content.width, RowHeight);
+            RowButton(back, 0f, _content.width, "Keep the current sign", "Go back without changing the sign", () =>
+            {
+                _picking = false;
+                _rebuild = true;
+            });
+        }
+
+        /// <summary>The signs to pick from that match what's been searched for; returns the height they take.</summary>
+        private float FillSignPicker(Gantry g, UIScrollablePanel scroll, float width)
+        {
             float wanted = 0f;
             List<MySign> mine = MySigns.List(MySignsFolder);
+            mine.RemoveAll(m => !MatchesSearch(m.Name));
             if (mine.Count > 0)
             {
                 var cells = new List<PickerCell>();
@@ -884,6 +1101,11 @@ namespace GantryTool.UI
             {
                 string file = name;
                 Dictionary<string, object> template = GuideAssets.Template(country, file);
+                if (!MatchesSearch(Json.Str(template, "name", file)))
+                {
+                    continue;
+                }
+
                 builtIn.Add(new PickerCell
                 {
                     Label = Json.Str(template, "name", file),
@@ -893,17 +1115,25 @@ namespace GantryTool.UI
                 });
             }
 
-            wanted += PickerSection(scroll, "Ready-made signs", builtIn, width);
-
-            FinishPickerScroll(box, scroll, wanted);
-
-            var back = _content.AddUIComponent<UIPanel>();
-            back.size = new Vector2(_content.width, RowHeight);
-            RowButton(back, 0f, _content.width, "Keep the current sign", "Go back without changing the sign", () =>
+            if (builtIn.Count > 0)
             {
-                _picking = false;
-                _rebuild = true;
-            });
+                wanted += PickerSection(scroll, "Ready-made signs", builtIn, width);
+            }
+
+            if (wanted <= 0f)
+            {
+                var none = scroll.AddUIComponent<UIPanel>();
+                none.size = new Vector2(width, 24f);
+                UIUtils.CreateLabel(none, "No signs match that search", 0.8f).relativePosition = new Vector3(0f, 4f);
+                wanted = 24f;
+            }
+
+            return wanted;
+        }
+
+        private bool MatchesSearch(string name)
+        {
+            return _signSearch.Length == 0 || name.IndexOf(_signSearch, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private UIScrollablePanel PickerScroll(out UIPanel box, out float width)
@@ -922,7 +1152,7 @@ namespace GantryTool.UI
             return scroll;
         }
 
-        private void FinishPickerScroll(UIPanel box, UIScrollablePanel scroll, float wanted)
+        private UIScrollbar FinishPickerScroll(UIPanel box, UIScrollablePanel scroll, float wanted)
         {
             float h = Mathf.Min(wanted, MaxPickerHeight);
             scroll.height = h;
@@ -943,6 +1173,7 @@ namespace GantryTool.UI
             bar.thumbObject = thumb;
             scroll.verticalScrollbar = bar;
             bar.isVisible = wanted > h;
+            return bar;
         }
 
         /// <summary>The pictures in the Signs folder; clicking one puts it on the sign, or swaps the one being changed.</summary>
@@ -1029,12 +1260,37 @@ namespace GantryTool.UI
             }
         }
 
+        /// <summary>Any colours for the whole sign, on top of its colour scheme.</summary>
+        private void SignColours(UIPanel box, Gantry g)
+        {
+            string[] keys = { "background", "foreground" };
+            string[] titles = { "Sign", "Text" };
+            for (int i = 0; i < keys.Length; i++)
+            {
+                string key = keys[i];
+                var row = box.AddUIComponent<UIPanel>();
+                row.size = new Vector2(_content.width, RowHeight);
+                row.relativePosition = new Vector3(0f, i * RowHeight);
+                ColourStrip(row, 0f, titles[i], Json.Str(_doc, key), g, v =>
+                {
+                    if (v == null)
+                    {
+                        _doc.Remove(key);
+                    }
+                    else
+                    {
+                        _doc[key] = v;
+                    }
+                });
+            }
+        }
+
         /// <summary>The picture covering the sign has no part to click, so its buttons show when nothing's selected.</summary>
         private void CoverControls(UIPanel box, Gantry g)
         {
             var row = box.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, RowHeight);
-            row.relativePosition = new Vector3(0f, 88f);
+            row.relativePosition = new Vector3(0f, 118f);
             float half = (_content.width - 6f) / 2f;
             RowButton(row, 0f, half, "Change whole-sign picture...", "Swap in a different picture", () =>
             {
@@ -1151,16 +1407,12 @@ namespace GantryTool.UI
             row.size = new Vector2(_content.width, RowHeight);
             row.relativePosition = new Vector3(0f, 18f);
             float third = (_content.width - 12f) / 3f;
-            RowButton(row, 0f, third, "Smaller", "Make the picture smaller", () => ResizePicture(g, item, 1f / PictureStep));
-            RowButton(row, third + 6f, third, "Bigger", "Make the picture bigger", () => ResizePicture(g, item, PictureStep));
-            RowButton(row, 2f * (third + 6f), third, "Change picture...", "Swap in a different picture", () => ChoosePicture(true));
-        }
-
-        private void ResizePicture(Gantry g, Dictionary<string, object> item, float by)
-        {
-            float height = Mathf.Clamp(Json.Num(item, "height", GuidePictures.NewHeight) * by, GuidePictures.MinHeight, GuidePictures.MaxHeight);
-            item["height"] = Math.Round(height, 1);
-            Commit(g, "sign content");
+            RowButton(row, 0f, third, "Change picture...", "Swap in a different picture", () => ChoosePicture(true));
+            MiniSlider(box, third + 12f, ControlsY - 34f, 2f * third - 6f, "Size", GuidePictures.MinHeight, GuidePictures.MaxHeight, 1f, Json.Num(item, "height", GuidePictures.NewHeight), v =>
+            {
+                item["height"] = (double)v;
+                Commit(g, "sign picture size");
+            });
         }
 
         private sealed class PickerCell
@@ -1303,6 +1555,145 @@ namespace GantryTool.UI
                     return h;
                 });
             });
+            CopyControls(g, sign);
+        }
+
+        /// <summary>Putting the same sign elsewhere: the other way, along the road, or before it with how far it is.</summary>
+        private void CopyControls(Gantry g, GuideHead sign)
+        {
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            float third = (_content.width - 12f) / 3f;
+            bool room = GantryManager.CanAddGuideSign(g);
+            UIButton opposite = RowButton(row, 0f, third, "Copy to the other side", "A copy facing the other way, with road names for that side (Ctrl+Z takes it back)", () => CopyOpposite(g));
+            opposite.isEnabled = room && !GuideFit.IsBanner(sign.Design);
+            bool banner = GuideFit.IsBanner(sign.Design);
+            List<RoadFinder.RoadGantry> road = RoadFinder.SameRoad(g, sign);
+            UIButton along = RowButton(row, third + 6f, third, "Copy along this road" + (road.Count > 0 ? " (" + road.Count + ")" : ""), "A copy on every other gantry over this road, the same way (Ctrl+Z takes them all back)", () => AskCopyAlongRoad(g));
+            along.isEnabled = road.Count > 0;
+            bool before = false;
+            foreach (RoadFinder.RoadGantry r in road)
+            {
+                before |= r.Ahead < 0f;
+            }
+
+            UIButton advance = RowButton(row, 2f * (third + 6f), third, "Add advance sign", "A copy on the gantry before this one, saying how far ahead this is (Ctrl+Z takes it back)", () => AddAdvance(g));
+            advance.isEnabled = before && !banner;
+            if (_copyNote != null)
+            {
+                var note = _content.AddUIComponent<UIPanel>();
+                note.size = new Vector2(_content.width, 20f);
+                UIUtils.CreateLabel(note, _copyNote, 0.75f).relativePosition = new Vector3(2f, 2f);
+            }
+        }
+
+        /// <summary>A copy of this sign on a gantry, on free lanes, with the roads there. False if there's no room for it.</summary>
+        private bool AddCopy(Gantry target, sbyte side, Dictionary<string, object> design, float scale, bool laneArrows)
+        {
+            if (!GantryManager.CanAddGuideSign(target))
+            {
+                return false;
+            }
+
+            byte first, last;
+            lock (GantryManager.Lock)
+            {
+                GuideFit.DefaultRange(target.Lanes, target.GuideSigns, side, out first, out last);
+            }
+
+            var doc = (Dictionary<string, object>)Json.Parse(Json.Write(design));
+            var placing = new GuideHead { Along = target.Span * 0.5f, Side = side, FitFirst = first, FitLast = last };
+            RoadFinder.Refresh(target, placing, doc);
+            string written = Json.Write(doc);
+            if (written.Length > GuideData.MaxDesignLength)
+            {
+                return false; // too long to keep in a save
+            }
+
+            int head = GantryManager.AddGuideSign(target, target.Span * 0.5f, side, written, first, last);
+            if (head < 0)
+            {
+                return false;
+            }
+
+            GantryManager.UpdateGuideSign(target, head, null, h =>
+            {
+                h.Scale = scale;
+                h.LaneArrows = laneArrows && first > 0 && GuideFit.HasArrowRow(doc);
+                return h;
+            });
+            return true;
+        }
+
+        private void CopyOpposite(Gantry g)
+        {
+            CommitText();
+            bool added = AddCopy(g, (sbyte)-_shown.Side, _doc, _shown.Scale, _shown.LaneArrows);
+            _copyNote = added ? "Copied to the other side of this gantry." : "No room for another sign on this gantry.";
+            _rebuild = true;
+        }
+
+        private void AskCopyAlongRoad(Gantry g)
+        {
+            CommitText();
+            List<RoadFinder.RoadGantry> road = RoadFinder.SameRoad(g, _shown);
+            ConfirmPanel confirm = UIView.library.ShowModal<ConfirmPanel>("ConfirmPanel", (c, result) =>
+            {
+                if (result == 1)
+                {
+                    CopyAlongRoad(road);
+                }
+            });
+            confirm.SetMessage("Copy along this road", "Add a copy of this sign to " + road.Count + " other gantr" + (road.Count == 1 ? "y" : "ies") + " over " + RoadFinder.RoadName(g, _shown) + "? Ctrl+Z takes them all back in one go.");
+        }
+
+        private void CopyAlongRoad(List<RoadFinder.RoadGantry> road)
+        {
+            int added = 0, full = 0;
+            UndoStack.BeginGroup();
+            try
+            {
+                foreach (RoadFinder.RoadGantry r in road)
+                {
+                    if (AddCopy(r.Gantry, r.Side, _doc, _shown.Scale, _shown.LaneArrows))
+                    {
+                        added++;
+                    }
+                    else
+                    {
+                        full++;
+                    }
+                }
+            }
+            finally
+            {
+                UndoStack.EndGroup();
+            }
+
+            _copyNote = "Added to " + added + " gantr" + (added == 1 ? "y" : "ies") + (full > 0 ? "; " + full + " had no room" : "") + ".";
+            _rebuild = true;
+        }
+
+        private void AddAdvance(Gantry g)
+        {
+            CommitText();
+            bool found = false;
+            RoadFinder.RoadGantry nearest = default(RoadFinder.RoadGantry);
+            foreach (RoadFinder.RoadGantry r in RoadFinder.SameRoad(g, _shown))
+            {
+                if (r.Ahead < 0f && (!found || r.Ahead > nearest.Ahead))
+                {
+                    nearest = r;
+                    found = true;
+                }
+            }
+
+            if (found)
+            {
+                bool added = AddCopy(nearest.Gantry, nearest.Side, GuideFit.AdvanceCopy(_doc, -nearest.Ahead), _shown.Scale, _shown.LaneArrows);
+                _copyNote = added ? "Added to gantry #" + nearest.Gantry.Id + ", " + GuideFit.DistanceWords(Theme, -nearest.Ahead) + " before this one." : "No room for another sign on the gantry before this one.";
+                _rebuild = true;
+            }
         }
 
         /// <summary>The sign's own width and height; left alone, it has the default size and matches the signs beside it.</summary>
@@ -1425,9 +1816,11 @@ namespace GantryTool.UI
             {
                 case "text":
                     TextControls(box, g);
+                    LineControls(box, g);
                     break;
                 case "shield":
                     ShieldControls(box, g);
+                    LineControls(box, g);
                     break;
                 case "arrow":
                     if (InLaneRow())
@@ -1458,6 +1851,7 @@ namespace GantryTool.UI
                     if (Json.Has(_selected, GuidePictures.PartKey))
                     {
                         PictureControls(box, g);
+                        LineControls(box, g);
                     }
                     else if (Json.Str(_selected, "name", "").StartsWith("lane-ends", StringComparison.Ordinal))
                     {
@@ -1478,39 +1872,242 @@ namespace GantryTool.UI
                         CoverControls(box, g);
                     }
 
+                    SignColours(box, g);
                     UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click any part of the sign above to change it, or drag it somewhere else:\nit snaps above, below or beside the other parts. Add something new below.", 0.85f);
-                    hint.relativePosition = new Vector3(0f, 30f);
+                    hint.relativePosition = new Vector3(0f, 72f);
                     return;
             }
 
             MoveButtons(box, g);
         }
 
+        /// <summary>Left, centre and right for the line this part is on, where that means anything; returns their row.</summary>
+        private UIPanel LineControls(UIPanel box, Gantry g)
+        {
+            var row = box.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, RowHeight);
+            row.relativePosition = new Vector3(0f, ControlsY + 40f);
+            _selectedPath = PathOf(_doc, _selected, "");
+            string place;
+            Dictionary<string, object> line = GuideFit.LineOf(_doc, _selectedPath, out place);
+            if (line == null)
+            {
+                return row;
+            }
+
+            UIUtils.CreateLabel(row, "Line up", 0.75f).relativePosition = new Vector3(0f, 10f);
+            string[] places = { "start", "center", "end" };
+            string[] labels = { "Left", "Centre", "Right" };
+            const float X = 50f, W = 62f;
+            for (int i = 0; i < places.Length; i++)
+            {
+                string to = places[i];
+                UIButton b = RowButton(row, X + i * (W + 4f), W, labels[i], "Line this up on the " + labels[i].ToLowerInvariant() + " of the sign or its section", () =>
+                {
+                    line["place"] = to;
+                    Commit(g, "sign content");
+                    _rebuild = true;
+                });
+                if (place == to)
+                {
+                    b.normalBgSprite = "ButtonMenuPressed";
+                }
+            }
+
+            return row;
+        }
+
         private void TextControls(UIPanel box, Gantry g)
         {
             Dictionary<string, object> item = _selected;
             UIUtils.CreateLabel(box, "Text", 0.8f).relativePosition = new Vector3(0f, 0f);
-            float sizeWidth = 110f;
-            _focus = Field(box, 0f, 18f, _content.width - sizeWidth - 6f, Json.Str(item, "text", ""), 48, g, v => item["text"] = v);
-            UIUtils.CreateLabel(box, "Size", 0.8f).relativePosition = new Vector3(_content.width - sizeWidth, 0f);
-            float height = Json.Num(item, "height", 16f);
-            int nearest = 0;
-            for (int i = 1; i < SizeHeights.Length; i++)
+            _focus = Field(box, 0f, 18f, _content.width, Json.Str(item, "text", ""), 48, g, v =>
             {
-                if (Mathf.Abs(SizeHeights[i] - height) < Mathf.Abs(SizeHeights[nearest] - height))
+                item["text"] = v;
+                MarkEdited(item);
+            });
+
+            float third = (_content.width - 24f) / 3f;
+            float height = Json.Num(item, "height", 16f);
+            MiniSlider(box, 0f, ControlsY, third, "Size", 8f, 60f, 1f, height, v =>
+            {
+                item["height"] = (double)v;
+                Commit(g, "sign text size");
+            });
+            MiniSlider(box, third + 12f, ControlsY, third, "Letter spacing", -5f, 40f, 1f, Json.Num(item, "tracking", 0f), v =>
+            {
+                item["tracking"] = (double)v;
+                Commit(g, "sign text spacing");
+            });
+
+            _selectedPath = PathOf(_doc, _selected, "");
+            string place;
+            Dictionary<string, object> line = GuideFit.LineOf(_doc, _selectedPath, out place);
+            if (line != null && !IsFirstOfColumn(line))
+            {
+                MiniSlider(box, 2f * (third + 12f), ControlsY, third, "Gap above", 0f, 60f, 1f, Json.Num(line, "gapBefore", height * 0.75f), v =>
                 {
-                    nearest = i;
-                }
+                    line["gapBefore"] = (double)v;
+                    Commit(g, "sign line spacing");
+                });
             }
 
-            Dropdown(box, _content.width - sizeWidth, 18f, sizeWidth, SizeLabels, nearest, index =>
+            UIPanel row = LineControls(box, g);
+            ColourStrip(row, 260f, "Colour", Json.Str(item, "color"), g, v =>
             {
-                if (index >= 0 && index < SizeHeights.Length)
+                if (v == null)
                 {
-                    item["height"] = (double)SizeHeights[index];
-                    Commit(g, "sign content");
+                    item.Remove("color");
+                }
+                else
+                {
+                    item["color"] = v;
                 }
             });
+        }
+
+        /// <summary>The player wrote this themselves, so it stops following the road.</summary>
+        private static void MarkEdited(Dictionary<string, object> item)
+        {
+            if (Json.Has(item, GuideAutoFill.PartKey))
+            {
+                item[GuideAutoFill.EditedKey] = true;
+            }
+        }
+
+        private bool IsFirstOfColumn(Dictionary<string, object> line)
+        {
+            Dictionary<string, object> at = _doc;
+            foreach (string step in _selectedPath.Split('/'))
+            {
+                int i;
+                List<object> items = Json.Arr(at, "items");
+                if (items == null || !int.TryParse(step, out i) || i < 0 || i >= items.Count)
+                {
+                    return false;
+                }
+
+                if (items[i] == line)
+                {
+                    // Tabs and bands aren't lines of the column: the first line after them has nothing to be a gap from.
+                    for (int k = 0; k < i; k++)
+                    {
+                        string type = Json.Str(items[k] as Dictionary<string, object>, "type");
+                        if (type != "tab" && type != "panel")
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                at = items[i] as Dictionary<string, object>;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// A small slider with its label over it, placed by hand among the other controls. The label is its own: the one in the
+        /// game's slider template is tied to the template's size, so it ends up behind the bar at this height.
+        /// </summary>
+        private void MiniSlider(UIPanel box, float x, float y, float w, string text, float min, float max, float step, float value, Action<float> apply)
+        {
+            UILabel title = UIUtils.CreateLabel(box, text + ": " + Mathf.Clamp(value, min, max).ToString("0"), 0.75f);
+            title.relativePosition = new Vector3(x, y);
+            UISlider slider = UIUtils.StyledSlider(new UIHelper(box), w, text, min, max, step, value, "", "0", true, v =>
+            {
+                title.text = text + ": " + v.ToString("0");
+                if (!_building)
+                {
+                    apply(v);
+                }
+            }, 0.75f);
+            var holder = slider.parent as UIPanel;
+            if (holder != null)
+            {
+                holder.autoLayout = false;
+            }
+
+            UILabel own = slider.parent.Find<UILabel>("Label");
+            if (own != null)
+            {
+                own.isVisible = false;
+            }
+
+            slider.anchor = UIAnchorStyle.None;
+            slider.parent.relativePosition = new Vector3(x, y + 16f);
+            slider.parent.height = 20f;
+            slider.width = w - 4f;
+            slider.relativePosition = Vector3.zero;
+        }
+
+        /// <summary>Small colour squares and a box for any colour; null means back to the sign's own colour.</summary>
+        private void ColourStrip(UIPanel row, float x, string title, string current, Gantry g, Action<string> apply)
+        {
+            UILabel label = UIUtils.CreateLabel(row, title, 0.75f);
+            label.relativePosition = new Vector3(x, 10f);
+            x += 50f;
+            Action<string> use = v =>
+            {
+                Log.Debug("Sign colour: " + title + " set to " + (v ?? "auto"));
+                apply(v);
+                Commit(g, "sign colour");
+                _rebuild = true;
+            };
+            foreach (string colour in SwatchColours)
+            {
+                string c = colour;
+                UIButton swatch = RowButton(row, x, 20f, "", c, () => use(c));
+                swatch.size = new Vector2(20f, 20f);
+                swatch.relativePosition = new Vector3(x, 8f);
+                Color32 tint = HexColour(c);
+                swatch.normalBgSprite = swatch.hoveredBgSprite = swatch.pressedBgSprite = swatch.focusedBgSprite = "EmptySprite";
+                swatch.color = tint;
+                swatch.hoveredColor = tint;
+                swatch.pressedColor = tint;
+                swatch.focusedColor = tint;
+                x += 23f;
+            }
+
+            UITextField hex = UIUtils.CreateTextField(row, 86f, 7);
+            hex.relativePosition = new Vector3(x + 2f, 3f);
+            hex.height = 28f;
+            hex.textScale = 0.75f;
+            hex.padding = new RectOffset(5, 3, 8, 6);
+            hex.text = current ?? "";
+            hex.tooltip = "Any colour, like #ffb000";
+            hex.selectOnFocus = true;
+            hex.submitOnFocusLost = true;
+            hex.eventTextSubmitted += (c, v) =>
+            {
+                string typed = v.Trim();
+                if (_building || typed == (current ?? ""))
+                {
+                    return;
+                }
+
+                if (typed.Length == 0)
+                {
+                    use(null);
+                }
+                else if (GuideRenderer.IsColour(typed))
+                {
+                    use(typed.ToLowerInvariant());
+                }
+                else
+                {
+                    hex.text = current ?? "";
+                }
+            };
+            RowButton(row, x + 92f, 40f, "Auto", "Back to the sign's own colour", () => use(null)).relativePosition = new Vector3(x + 92f, 3f);
+        }
+
+        private static Color32 HexColour(string hex)
+        {
+            int v = int.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber);
+            return new Color32((byte)(v >> 16), (byte)(v >> 8), (byte)v, 255);
         }
 
         private void ShieldControls(UIPanel box, Gantry g)
@@ -1541,7 +2138,16 @@ namespace GantryTool.UI
             object number;
             string value = item.TryGetValue("number", out number) && number != null ? Convert.ToString(number, System.Globalization.CultureInfo.InvariantCulture) : "";
             UIUtils.CreateLabel(box, "Route number", 0.8f).relativePosition = new Vector3(half + 6f, 0f);
-            _focus = Field(box, half + 6f, 18f, half, value, 4, g, v => item["number"] = v);
+            _focus = Field(box, half + 6f, 18f, half, value, 4, g, v =>
+            {
+                item["number"] = v;
+                MarkEdited(item);
+            });
+            MiniSlider(box, 0f, ControlsY, half, "Size", 12f, 90f, 1f, Json.Num(item, "height", 30f), v =>
+            {
+                item["height"] = (double)v;
+                Commit(g, "sign shield size");
+            });
         }
 
         /// <summary>Whether the selected part belongs to the row of one arrow per lane.</summary>
@@ -1681,7 +2287,7 @@ namespace GantryTool.UI
         {
             Dictionary<string, object> item = _selected;
             string[] steps = _selectedPath.Split('/');
-            float w = (_content.width - 4f * 6f) / 5f, y = InspectorHeight - 34f;
+            float w = (_content.width - 5f * 6f) / 6f, y = InspectorHeight - 34f;
             UIUtils.CreateLabel(box, "Move or remove this part", 0.75f).relativePosition = new Vector3(2f, y - 16f);
             List<object> top = Items(_doc);
             int line;
@@ -1700,7 +2306,19 @@ namespace GantryTool.UI
             bool sideways = at >= 0 && !stacked && !InLaneRow();
             MoveButton(box, 2, w, y, "Left", "Move it left in its row", sideways && CanMove(siblings, at, -1), () => Swap(g, siblings, at, -1));
             MoveButton(box, 3, w, y, "Right", "Move it right in its row", sideways && CanMove(siblings, at, 1), () => Swap(g, siblings, at, 1));
-            MoveButton(box, 4, w, y, InLaneRow() ? "Remove arrows" : "Remove", InLaneRow() ? "Take the row of lane arrows off the sign" : "Take this off the sign", true, () =>
+            MoveButton(box, 4, w, y, "Duplicate", "Add a copy of this part right after it", !isTab && !InLaneRow(), () =>
+            {
+                CommitText();
+                _selectedPath = PathOf(_doc, _selected, "");
+                Dictionary<string, object> copy = GuideFit.Duplicate(_doc, _selectedPath);
+                if (copy != null)
+                {
+                    _selected = copy;
+                    Commit(g, "sign content");
+                    _rebuild = true;
+                }
+            });
+            MoveButton(box, 5, w, y, InLaneRow() ? "Remove arrows" : "Remove", InLaneRow() ? "Take the row of lane arrows off the sign" : "Take this off the sign", true, () =>
             {
                 bool laneRow = InLaneRow();
                 RemoveFrom(_doc, laneRow ? (Dictionary<string, object>)top[line] : item);
@@ -1754,6 +2372,13 @@ namespace GantryTool.UI
             RowButton(row, 0f, w, "+ Text", "Add a line of text", () =>
             {
                 Dictionary<string, object> text = Text("New text", 0f, null);
+                if (Json.Has(_doc, GuideRenderer.MessageSignKey))
+                {
+                    text[GuideRenderer.LedKey] = true;
+                    text["height"] = 22.0;
+                    text["color"] = "#ffb000";
+                }
+
                 Insert(g, NewLineIndex(items), text, text);
             });
             RowButton(row, w + 6f, w, "+ Shield", "Add a route shield and direction", () =>
@@ -1862,7 +2487,10 @@ namespace GantryTool.UI
                 if (index >= 0 && index < keys.Count)
                 {
                     _doc["scheme"] = keys[index];
+                    _doc.Remove("background");
+                    _doc.Remove("foreground");
                     Commit(g, "sign content");
+                    _rebuild = true;
                 }
             });
             drop.tooltip = "The sign's colour";
@@ -2198,18 +2826,22 @@ namespace GantryTool.UI
             field.text = text;
             field.selectOnFocus = true;
             field.submitOnFocusLost = true;
+            // Only what's really been changed counts: clicking away from the box changes nothing, and marks nothing as edited.
+            string seen = text;
             field.eventTextChanged += (c, v) =>
             {
-                if (!_building)
+                if (!_building && v != seen)
                 {
+                    seen = v;
                     apply(v);
                     _commitAt = Time.realtimeSinceStartup + TextCommitDelay;
                 }
             };
             field.eventTextSubmitted += (c, v) =>
             {
-                if (!_building)
+                if (!_building && v != seen)
                 {
+                    seen = v;
                     apply(v);
                     _commitAt = -1f;
                     Commit(g, "sign text");

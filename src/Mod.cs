@@ -10,7 +10,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev40";
+        public const string Version = "2.0.0-dev50";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -58,21 +58,38 @@ namespace GantryTool
                     }
                 });
                 GantryTool.UI.DropdownToggle.Attach(startDrop);
+                AddCheckbox(newGroup, "New gantries have no red Xs on the back of signals", s.NewNoRedXs,
+                    "The back of a signal shows nothing instead of a red X, on new gantries. You can change it per gantry.",
+                    v => s.NewNoRedXs = v);
+                newGroup.AddSlider("New guide signs' text and symbol size (%)", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, UnityEngine.Mathf.Clamp(s.NewSignSize, GuideData.MinScale, GuideData.MaxScale) * 100f, v =>
+                {
+                    s.NewSignSize = v / 100f;
+                    Settings.Current.Save();
+                });
+                newGroup.AddSlider("Speed signals drop when a road is this full (%), for gantries with that switched on", 10f, 100f, 5f, s.HeavyTraffic, v =>
+                {
+                    s.HeavyTraffic = (int)v;
+                    Settings.Current.Save();
+                });
                 AddCheckbox(newGroup, "Fill in road names on new guide signs", s.AutoFillSigns,
                     "New guide signs start with the name of the road below them, or of the road the next exit leads to. You can change any of it.",
                     v => s.AutoFillSigns = v);
+                AddCheckbox(newGroup, "Keep guide signs up to date when a road is renamed", s.LiveRoadNames,
+                    "Road names on guide signs follow the map, except any words you've changed yourself. Fill in from the road makes a sign follow it again.",
+                    v => s.LiveRoadNames = v);
                 List<string> countries = GantryTool.Guide.GuideAssets.Ids();
-                var countryNames = new string[countries.Count];
-                for (int c = 0; c < countryNames.Length; c++)
+                var countryNames = new string[countries.Count + 1];
+                countryNames[0] = "Same as the default lane signals";
+                for (int c = 0; c < countries.Count; c++)
                 {
-                    countryNames[c] = GantryTool.Guide.GuideThemes.Name(countries[c]);
+                    countryNames[c + 1] = GantryTool.Guide.GuideThemes.Name(countries[c]);
                 }
 
-                var countryDrop = (UIDropDown)newGroup.AddDropdown("Guide sign country for new cities", countryNames, Math.Max(0, countries.IndexOf(s.DefaultSignCountry)), index =>
+                var countryDrop = (UIDropDown)newGroup.AddDropdown("Guide sign country for new cities", countryNames, countries.IndexOf(s.DefaultSignCountry) + 1, index =>
                 {
-                    if (index >= 0 && index < countries.Count)
+                    if (index >= 0 && index <= countries.Count)
                     {
-                        s.DefaultSignCountry = countries[index];
+                        s.DefaultSignCountry = index == 0 ? "" : countries[index - 1];
                         Settings.Current.Save();
                     }
                 });

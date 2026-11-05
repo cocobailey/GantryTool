@@ -38,6 +38,8 @@ namespace GantryTool.Guide
         public const string PartDirection = "direction";
         public const string PartName = "name";
         public const string PartSecondName = "name2";
+        public const string FilledKey = "autoFilled"; // on the sign: its words came from the map, so it can follow the map
+        public const string EditedKey = "autoEdited"; // on a part: the player wrote this themselves, so leave it be
         public const string PartSample = "sample";  // only there to show what the sign can look like; goes once it's filled in
 
         public static string Cardinal(Vector2 heading)
@@ -59,7 +61,13 @@ namespace GantryTool.Guide
                 return false;
             }
 
-            return FillPart(doc, doc, roads);
+            bool filled = FillPart(doc, doc, roads);
+            if (filled)
+            {
+                doc[FilledKey] = true;
+            }
+
+            return filled;
         }
 
         /// <summary>
@@ -71,6 +79,11 @@ namespace GantryTool.Guide
             missing = 0;
             int filled = 0;
             FillSections(doc, doc, here, exit, ref filled, ref missing);
+            if (filled > 0)
+            {
+                doc[FilledKey] = true;
+            }
+
             return filled > 0;
         }
 
@@ -101,6 +114,140 @@ namespace GantryTool.Guide
                 else
                 {
                     missing++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Brings a filled-in sign up to date with the map: what's on it follows the roads, except what the player wrote
+        /// themselves. Nothing's added or taken off. Which roads to use is asked per part of the sign.
+        /// </summary>
+        public static void Refresh(Dictionary<string, object> doc, Func<string, List<RoadFacts>> roads)
+        {
+            string which = Json.Str(doc, RoadKey);
+            if (which == null || !Json.Has(doc, FilledKey))
+            {
+                return;
+            }
+
+            if (which == RoadBoth)
+            {
+                RefreshSections(doc, doc, roads);
+            }
+            else
+            {
+                RefreshPart(doc, doc, roads(which));
+            }
+        }
+
+        private static void RefreshSections(Dictionary<string, object> doc, Dictionary<string, object> parent, Func<string, List<RoadFacts>> roads)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (object o in items)
+            {
+                var item = o as Dictionary<string, object>;
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (Json.Has(item, RoadKey))
+                {
+                    RefreshPart(doc, item, roads(Json.Str(item, RoadKey)));
+                }
+                else
+                {
+                    RefreshSections(doc, item, roads);
+                }
+            }
+        }
+
+        private static void RefreshPart(Dictionary<string, object> doc, Dictionary<string, object> part, List<RoadFacts> roads)
+        {
+            if (roads == null || roads.Count == 0 || string.IsNullOrEmpty(roads[0].Name))
+            {
+                return;
+            }
+
+            string theme = Json.Str(doc, "theme", "us");
+            if (CanWrite(theme, roads[0].Name))
+            {
+                string second = roads.Count > 1 && CanWrite(theme, roads[1].Name) ? roads[1].Name : null;
+                Update(doc, part, roads[0], second);
+            }
+        }
+
+        private static void Update(Dictionary<string, object> root, Dictionary<string, object> parent, RoadFacts road, string second)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (object o in items)
+            {
+                var item = o as Dictionary<string, object>;
+                if (item == null)
+                {
+                    continue;
+                }
+
+                Update(root, item, road, second);
+                if (Json.Has(item, EditedKey))
+                {
+                    continue;
+                }
+
+                switch (Json.Str(item, PartKey))
+                {
+                    case PartShield:
+                        if (road.Number != null)
+                        {
+                            item["number"] = road.Number;
+                        }
+
+                        break;
+                    case PartDirection:
+                        if (road.Heading != Vector2.zero)
+                        {
+                            item["text"] = Direction(root, road.Heading);
+                        }
+
+                        break;
+                    case PartName:
+                        item["text"] = road.Name;
+                        break;
+                    case PartSecondName:
+                        if (second != null)
+                        {
+                            item["text"] = second;
+                        }
+
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Asked to fill in from the road again: it follows the road again everywhere.</summary>
+        public static void ForgetEdits(Dictionary<string, object> item)
+        {
+            item.Remove(EditedKey);
+            List<object> items = Json.Arr(item, "items");
+            if (items != null)
+            {
+                foreach (object o in items)
+                {
+                    var child = o as Dictionary<string, object>;
+                    if (child != null)
+                    {
+                        ForgetEdits(child);
+                    }
                 }
             }
         }

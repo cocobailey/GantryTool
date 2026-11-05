@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "message",
+  "name": "Variable message sign",
+  "background": "#0a0a0a",
+  "foreground": "#3c3c3c",
+  "messageSign": true,
+  "cornerRadius": 2,
+  "align": "center",
+  "minWidth": 240,
+  "items": [
+    {
+      "type": "text",
+      "text": "QUEUE AHEAD",
+      "height": 22,
+      "led": true,
+      "color": "#ffb000"
+    },
+    {
+      "type": "text",
+      "text": "SLOW DOWN",
+      "height": 22,
+      "led": true,
+      "color": "#ffb000"
+    }
+  ]
+}

@@ -265,6 +265,11 @@ namespace GantryTool.Data
             {
                 foreach (Gantry g in gantries)
                 {
+                    foreach (FaceMessages m in g.Messages)
+                    {
+                        used.UnionWith(m.Ids);
+                    }
+
                     foreach (SignalOverride o in g.Overrides)
                     {
                         if (o.Minus == SignalSymbol.Custom)

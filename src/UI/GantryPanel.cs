@@ -123,6 +123,7 @@ namespace GantryTool.UI
 
                 TypeButtons(g);
                 LookButtons(g);
+                PaintButtons(g);
                 if (g.Type == GantryShape.MedianT)
                 {
                     float post = GantryShape.PostPosition(g.PostAlong, g.Lanes, g.Span);
@@ -174,7 +175,7 @@ namespace GantryTool.UI
                         });
                         Rebuild();
                     });
-                RowButton(row, 1, third, "Undo", "Undo the last change (Ctrl+Z)", () =>
+                RowButton(row, 1, third, "Undo", "Undo the last change (Ctrl+Z; Ctrl+Y puts it back)", () =>
                 {
                     if (Tool != null)
                     {
@@ -253,9 +254,37 @@ namespace GantryTool.UI
                     TypeBlock(b, (x0 + x1) * 0.5f - 2f, beamY, 4f, ground - beamY);
                 }
 
-                UILabel label = UIUtils.CreateLabel(b, type == GantryShape.CantileverEnd ? "Cantilever 2" : GantryShape.Names[type], 0.6f);
+                UILabel label = UIUtils.CreateLabel(b, type == GantryShape.CantileverEnd ? "Cantilever 2" : type == GantryShape.OnBridge ? "On bridge" : GantryShape.Names[type], 0.6f);
                 label.isInteractive = false;
                 label.relativePosition = new Vector3(5f, Height - 14f);
+            }
+        }
+
+        /// <summary>What colour the steel is.</summary>
+        private void PaintButtons(Gantry g)
+        {
+            const float Gap = 4f;
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, 30f);
+            int count = GantryShape.PaintNames.Length;
+            float w = (_content.width - Gap * (count - 1)) / count;
+            for (byte paint = 0; paint < count; paint++)
+            {
+                byte chosen = paint;
+                var b = row.AddUIComponent<UIButton>();
+                b.text = GantryShape.PaintNames[paint];
+                b.textScale = 0.65f;
+                b.size = new Vector2(w, 28f);
+                b.relativePosition = new Vector3(paint * (w + Gap), 0f);
+                b.normalBgSprite = g.Paint == paint ? "ButtonMenuPressed" : "ButtonMenu";
+                b.hoveredBgSprite = "ButtonMenuHovered";
+                b.pressedBgSprite = "ButtonMenuPressed";
+                b.tooltip = "Paint the steel: " + GantryShape.PaintNames[paint];
+                b.eventClick += (c, p) =>
+                {
+                    Change(g, "gantry colour", () => g.Paint = chosen);
+                    Rebuild();
+                };
             }
         }
 
@@ -395,6 +424,122 @@ namespace GantryTool.UI
             }
         }
 
+        /// <summary>What guide signs the gantry has, to open or delete one, and the strip that carries a road's name over them.</summary>
+        private void GuideSignList(Gantry g, bool canAdd)
+        {
+            var signs = new List<GuideHead>();
+            lock (GantryManager.Lock)
+            {
+                signs.AddRange(g.GuideSigns);
+            }
+
+            if (signs.Count == 0)
+            {
+                return;
+            }
+
+            bool hasBanner = false;
+            foreach (GuideHead sign in signs)
+            {
+                GuideHead h = sign;
+                hasBanner |= GantryTool.Guide.GuideFit.IsBanner(h.Design);
+                Dictionary<string, object> doc = null;
+                try
+                {
+                    doc = GantryTool.Guide.Json.Parse(h.Design) as Dictionary<string, object>;
+                }
+                catch (FormatException)
+                {
+                    // it still gets a row, to delete it by
+                }
+
+                string name = doc != null ? GantryTool.Guide.Json.Str(doc, "name", "Guide sign") : "Guide sign";
+                var row = _content.AddUIComponent<UIPanel>();
+                row.size = new Vector2(_content.width, 34f);
+                Texture2D thumb = doc != null ? GantryTool.Render.GuideCache.Thumbnail("list:" + h.Design.GetHashCode(), () => doc) : null;
+                if (thumb != null)
+                {
+                    var picture = row.AddUIComponent<UITextureSprite>();
+                    picture.isInteractive = false;
+                    picture.texture = thumb;
+                    float scale = Mathf.Min(60f / thumb.width, 30f / thumb.height);
+                    picture.size = new Vector2(thumb.width * scale, thumb.height * scale);
+                    picture.relativePosition = new Vector3((60f - picture.width) * 0.5f, 2f + (30f - picture.height) * 0.5f);
+                }
+
+                Vector2 heading = GantryTool.Detect.RoadFinder.Heading(g, h.Side);
+                string where = GantryTool.Detect.LaneScanner.Compass(heading) + "-bound" + (h.FitFirst > 0 ? ", lanes " + h.FitFirst + "-" + h.FitLast : "");
+                UILabel label = UIUtils.CreateLabel(row, (name.Length > 22 ? name.Substring(0, 21) + "..." : name) + " (" + where + ")", 0.7f);
+                label.relativePosition = new Vector3(66f, 10f);
+                float w = 62f;
+                RowButton(row, 0, w, "Open", "Edit this sign", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur != null && Tool != null)
+                    {
+                        UIUtils.ClearTooltips(_content);
+                        Tool.EditHead(cur, HeadRef.OfGuide(h.Id));
+                    }
+                });
+                row.components[row.components.Count - 1].relativePosition = new Vector3(_content.width - 2f * w - 6f, 3f);
+                row.components[row.components.Count - 1].width = w;
+                RowButton(row, 0, w, "Delete", "Delete this sign (Ctrl+Z brings it back)", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur != null)
+                    {
+                        GantryManager.RemoveGuideSign(cur, HeadRef.OfGuide(h.Id));
+                        Rebuild();
+                    }
+                });
+                row.components[row.components.Count - 1].relativePosition = new Vector3(_content.width - w, 3f);
+                row.components[row.components.Count - 1].width = w;
+            }
+
+            if (!hasBanner)
+            {
+                var row = _content.AddUIComponent<UIPanel>();
+                row.size = new Vector2(_content.width, 34f);
+                RowButton(row, 0, _content.width, "Add a road name across the signs", "A strip above all the signs on the side you're looking at, with the road's name on it", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur != null)
+                    {
+                        AddBanner(cur);
+                    }
+                });
+                row.components[0].width = _content.width;
+                row.components[0].isEnabled = canAdd;
+            }
+        }
+
+        private void AddBanner(Gantry g)
+        {
+            if (Tool == null || !GantryManager.CanAddGuideSign(g))
+            {
+                return;
+            }
+
+            sbyte facing = SignalPanel.CameraSeesMinusFace(g) ? (sbyte)-1 : (sbyte)1;
+            int lanes;
+            lock (GantryManager.Lock)
+            {
+                lanes = Mathf.Min(GantryTool.Guide.GuideFit.FaceLanes(g.Lanes, facing).Count, 255);
+            }
+
+            Dictionary<string, object> banner = GantryTool.Guide.GuideFit.NewBanner(GantryTool.Guide.GuideThemes.Current);
+            byte first = (byte)(lanes > 0 ? 1 : 0), last = (byte)lanes;
+            var placing = new GuideHead { Along = g.Span * 0.5f, Side = facing, FitFirst = first, FitLast = last };
+            bool partly;
+            GantryTool.Detect.RoadFinder.Fill(g, placing, banner, out partly);
+            int head = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, GantryTool.Guide.Json.Write(banner), first, last);
+            if (head >= 0)
+            {
+                UIUtils.ClearTooltips(_content);
+                Tool.EditHead(g, head);
+            }
+        }
+
         /// <summary>The controls for what's on the gantry.</summary>
         private void ContentControls(UIHelper helper, Gantry g)
         {
@@ -424,6 +569,16 @@ namespace GantryTool.UI
                 Change(g, "signal backs", () => g.BlankBacks = on);
             });
             showBacks(g.LaneHeads);
+            Checkbox(helper, "Lower speed signals in heavy traffic (signs only: cars don't slow down)", g.LiveSpeed, on =>
+            {
+                Change(g, "live speed", () =>
+                {
+                    g.LiveSpeed = on;
+                    g.LiveSteps.Clear();
+                });
+            });
+            Checkbox(helper, "Catwalk along the beam", g.Catwalk, on => Change(g, "catwalk", () => g.Catwalk = on));
+            Checkbox(helper, "Lamps on guide signs (they show up better at night)", g.SignLights, on => Change(g, "sign lamps", () => g.SignLights = on));
 
             var addRow = _content.AddUIComponent<UIPanel>();
             addRow.size = new Vector2(_content.width, 34f);
@@ -465,6 +620,7 @@ namespace GantryTool.UI
                 });
             addRow.components[1].isEnabled = canGuide;
             PasteRow(g, canGuide);
+            GuideSignList(g, canGuide);
         }
 
         /// <summary>Re-reads the gantry (after undo or a move). Hides the panel if the gantry is gone.</summary>

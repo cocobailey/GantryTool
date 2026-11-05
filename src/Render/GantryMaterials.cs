@@ -186,6 +186,22 @@ namespace GantryTool.Render
             return a;
         }
 
+        /// <summary>Makes a guide sign light up as if lamps were on it, in place of the map its material has.</summary>
+        public static Texture2D GuideLitMap
+        {
+            get
+            {
+                if (_guideAciLit == null)
+                {
+                    _guideAciLit = SolidTexture("GantryGuideACILit", new Color(0f, 0f, 0.85f, 1f));
+                }
+
+                return _guideAciLit;
+            }
+        }
+
+        private static Texture2D _guideAciLit;
+
         /// <summary>A material showing a printed guide sign (reads as a reflective sign at night, like the Canada sign).</summary>
         public static Material CreateGuideMaterial(Texture2D face)
         {
@@ -259,6 +275,8 @@ namespace GantryTool.Render
             GuideCache.Release();
             DestroySafe(_guideAci);
             _guideAci = null;
+            DestroySafe(_guideAciLit);
+            _guideAciLit = null;
             DestroySafe(Structure);
             DestroySafe(_mainTex);
             DestroySafe(_xysTex);

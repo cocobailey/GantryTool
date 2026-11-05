@@ -67,6 +67,7 @@ namespace GantryTool.Render
         /// <summary>True once a design has been dealt with (its entry is null if it can't be drawn); if not, starts on it.</summary>
         public static bool TryGet(string design, out GuideCacheEntry entry)
         {
+            GuidePictures.DecodePending();
             Pump();
             if (Entries.TryGetValue(design, out entry))
             {
@@ -133,6 +134,7 @@ namespace GantryTool.Render
                 }
 
                 done.Milliseconds = watch.ElapsedMilliseconds;
+                _slowestDraw = Math.Max(_slowestDraw, done.Milliseconds);
                 lock (Sync)
                 {
                     _drawing = null;
@@ -184,6 +186,40 @@ namespace GantryTool.Render
             }
         }
 
+        /// <summary>Notes in the log how much signs are using, once a city's signs have been drawn. Main thread.</summary>
+        public static void Tick(float now)
+        {
+            if (now < _nextReport || Entries.Count == 0 || Entries.Count == _reportedCount)
+            {
+                return;
+            }
+
+            lock (Sync)
+            {
+                if (_working || Wanted.Count > 0)
+                {
+                    return;
+                }
+            }
+
+            float bytes = 0f;
+            foreach (GuideCacheEntry e in Entries.Values)
+            {
+                if (e != null && e.Texture != null)
+                {
+                    bytes += e.Texture.width * e.Texture.height * 5.33f;
+                }
+            }
+
+            _reportedCount = Entries.Count;
+            _nextReport = now + 60f;
+            Log.Info("Guide signs: " + _reportedCount + " different pictures, about " + (bytes / (1024f * 1024f)).ToString("0.0") + " MB; slowest drawn " + _slowestDraw + " ms");
+        }
+
+        private static float _nextReport;
+        private static int _reportedCount = -1;
+        private static long _slowestDraw;
+
         private static GuideCacheEntry Bake(GuideSign sign, Color32[] pixels)
         {
             Texture2D tex = ToTexture(pixels, sign.PixelWidth, sign.PixelHeight);
@@ -211,6 +247,7 @@ namespace GantryTool.Render
         /// <summary>The same for any design, under a key of the caller's; <see cref="ForgetThumbnail"/> if the design changes.</summary>
         public static Texture2D Thumbnail(string key, Func<Dictionary<string, object>> design)
         {
+            GuidePictures.DecodePending();
             Texture2D tex;
             if (Thumbnails.TryGetValue(key, out tex))
             {
@@ -328,6 +365,7 @@ namespace GantryTool.Render
                     foreach (GuidePlacement p in g.GuidePlacements.Values)
                     {
                         used.Add(p.Design);
+                        used.UnionWith(GuidePages.AllShown(p.Design));
                     }
 
                     foreach (GuideDraw d in g.GuideDraws)
@@ -426,6 +464,8 @@ namespace GantryTool.Render
         /// True if any sign facing this way would sit over a signal, along the beam. Signs facing one way stay in line,
         /// so if one has to stand on top of the truss, they all do.
         /// </summary>
+        private const float BannerGap = 0.08f;
+
         private static bool Clashes(Gantry g, sbyte side)
         {
             lock (GantryManager.Lock)
@@ -451,7 +491,7 @@ namespace GantryTool.Render
                     foreach (GuideHead h in g.GuideSigns)
                     {
                         float along, width, height;
-                        if (h.Side == side && Layout(g, h, out along, out width, out height) &&
+                        if (h.Side == side && !GuideFit.IsBanner(h.Design) && Layout(g, h, out along, out width, out height) &&
                             Mathf.Abs(along - headAlong) < (width + size) * 0.5f + SignalClearance)
                         {
                             return true;
@@ -477,7 +517,33 @@ namespace GantryTool.Render
         public static float MidY(Gantry g, GuideHead h)
         {
             GuidePlacement p = Place(g, h);
-            return CentreY(g, p.PanelMetres, Clashes(g, h.Side)) + (p.HeightMetres - p.PanelMetres) * 0.5f;
+            bool clear = Clashes(g, h.Side);
+            if (GuideFit.IsBanner(h.Design))
+            {
+                // A road's name across the signs stands above them, and their exit tabs.
+                float top = float.MinValue;
+                var others = new List<GuideHead>();
+                lock (GantryManager.Lock)
+                {
+                    others.AddRange(g.GuideSigns);
+                }
+
+                foreach (GuideHead s in others)
+                {
+                    if (s.Side == h.Side && !GuideFit.IsBanner(s.Design))
+                    {
+                        GuidePlacement q = Place(g, s);
+                        top = Mathf.Max(top, CentreY(g, q.PanelMetres, clear) + q.PanelMetres * 0.5f + (q.HeightMetres - q.PanelMetres));
+                    }
+                }
+
+                if (top > float.MinValue)
+                {
+                    return top + BannerGap + p.HeightMetres * 0.5f;
+                }
+            }
+
+            return CentreY(g, p.PanelMetres, clear) + (p.HeightMetres - p.PanelMetres) * 0.5f;
         }
 
         /// <summary>A sign's placement; all of a gantry's are remembered until a sign, or the lanes, change. Main thread.</summary>
@@ -513,13 +579,19 @@ namespace GantryTool.Render
         }
 
         /// <summary>True once every sign on the gantry has its picture; until then the old signs stay up.</summary>
+        /// <summary>What a sign on a gantry shows right now: a message sign changes by itself.</summary>
+        private static string Shown(Gantry g, GuideHead h, string design)
+        {
+            return GuidePages.Shown(design, LiveSigns.PageClock, g.LiveDensity, LiveSigns.IsEditing(g.Id, h.Id));
+        }
+
         public static bool Ready(Gantry g)
         {
             bool ready = true;
             foreach (GuideHead h in g.GuideSigns)
             {
                 GuideCacheEntry e;
-                ready &= GuideCache.TryGet(Place(g, h).Design, out e);
+                ready &= GuideCache.TryGet(Shown(g, h, Place(g, h).Design), out e);
             }
 
             return ready;
@@ -567,7 +639,7 @@ namespace GantryTool.Render
                 }
 
                 GuidePlacement placed = Place(g, h);
-                GuideCacheEntry e = GuideCache.Get(placed.Design);
+                GuideCacheEntry e = GuideCache.Get(Shown(g, h, placed.Design));
                 if (e == null)
                 {
                     continue;
@@ -587,9 +659,14 @@ namespace GantryTool.Render
                     AddSign(face, back, caster, outline, e, centre, right, normal, m);
                 }
 
-                if (g.Look != GantryShape.BoxTruss)
+                if (g.Look != GantryShape.BoxTruss || g.Type == GantryShape.OnBridge)
                 {
                     AddBrackets(back, g, along, width, dir, normal, midY);
+                }
+
+                if (g.SignLights)
+                {
+                    AddLamps(back, centre, dir, normal, width, placed.PanelMetres);
                 }
 
                 g.GuideDraws.Add(new GuideDraw { Mesh = face.ToMesh("GantryGuideFace"), Material = e.Material });
@@ -603,6 +680,21 @@ namespace GantryTool.Render
         /// A thin beam doesn't reach a sign's back as a truss does, so two brackets do: out from the beam, then up or down
         /// behind the sign.
         /// </summary>
+        /// <summary>Small lamps on arms along a sign's bottom edge, reaching out in front of it.</summary>
+        private static void AddLamps(MeshData back, Vector3 centre, Vector3 dir, Vector3 normal, float width, float panel)
+        {
+            int lamps = Mathf.Max(1, Mathf.RoundToInt(width / LampEvery));
+            for (int i = 0; i < lamps; i++)
+            {
+                Vector3 foot = centre + dir * (width * ((i + 0.5f) / lamps - 0.5f)) + Vector3.down * (panel * 0.5f + 0.03f);
+                Vector3 lamp = foot + normal * LampReach;
+                back.Bar(foot, lamp, BracketSize * 0.5f, dir);
+                back.Bar(lamp - dir * 0.14f, lamp + dir * 0.14f, BracketSize, normal);
+            }
+        }
+
+        private const float LampEvery = 2.2f, LampReach = 0.55f;
+
         private static void AddBrackets(MeshData back, Gantry g, float along, float width, Vector3 dir, Vector3 normal, float signY)
         {
             float beamY = g.BeamBottomY + g.BeamDepth * 0.5f;

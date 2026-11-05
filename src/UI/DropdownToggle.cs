@@ -6,15 +6,13 @@ namespace GantryTool.UI
     /// <summary>
     /// Makes clicking an open dropdown close it again. The game's UIDropDown closes its list on mouse-down outside
     /// the list (which includes the dropdown itself) and then reopens it on the click (UIDropDown.cs:623-656), so a
-    /// second click never closes it. This notices a reopen right after a close and closes it on the next frame
+    /// second click never closes it. This notices a reopen by the same click that closed it, with no new press of the mouse in between, and closes it on the next frame
     /// (closing inside the open event would run while the list is still being set up).
     /// </summary>
     public sealed class DropdownToggle : MonoBehaviour
     {
-        private const float SameClickSeconds = 0.35f;
-
         private UIDropDown _dropdown;
-        private float _closedAt = -10f;
+        private int _closedFrame = -1, _pressedFrame = -1;
         private bool _closeNextFrame;
 
         public static void Attach(UIDropDown dropdown)
@@ -32,12 +30,12 @@ namespace GantryTool.UI
 
         private void OnClose(UIDropDown dropdown, UIListBox popup, ref bool overridden)
         {
-            _closedAt = Time.realtimeSinceStartup;
+            _closedFrame = Time.frameCount;
         }
 
         private void OnOpen(UIDropDown dropdown, UIListBox popup, ref bool overridden)
         {
-            if (Time.realtimeSinceStartup - _closedAt < SameClickSeconds)
+            if (_closedFrame >= 0 && _pressedFrame <= _closedFrame)
             {
                 _closeNextFrame = true;
             }
@@ -45,13 +43,18 @@ namespace GantryTool.UI
 
         private void Update()
         {
+            if (Input.GetMouseButtonDown(0))
+            {
+                _pressedFrame = Time.frameCount;
+            }
+
             if (!_closeNextFrame)
             {
                 return;
             }
 
             _closeNextFrame = false;
-            _closedAt = -10f;
+            _closedFrame = -1;
             if (_dropdown != null)
             {
                 _dropdown.ClosePopup();

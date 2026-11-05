@@ -16,7 +16,7 @@ namespace GantryTool.Tool
     /// - Click empty ground twice to place a gantry (like the road tool).
     /// - Click a gantry's truss or posts to select it: handles appear (posts, middle, rotate) and the gantry
     ///   panel opens. Click a signal head to change its sign. Right-click a hovered gantry to delete it.
-    /// - Ctrl+Z undoes placing, deleting, moving, settings and sign changes.
+    /// - Ctrl+Z undoes placing, deleting, moving, settings and sign changes; Ctrl+Y or Ctrl+Shift+Z puts them back.
     /// - Right-click / Esc cancel the current step (drag, first post, selection), then leave the tool.
     ///
     /// Threading follows NetTool: the mouse ray is captured on the main thread (OnToolLateUpdate) and raycast
@@ -403,9 +403,17 @@ namespace GantryTool.Tool
             base.OnToolGUI(e);
             try
             {
-                if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Z && (e.control || e.command) && !UIView.HasInputFocus())
+                if (e.type == EventType.KeyDown && (e.keyCode == KeyCode.Z || e.keyCode == KeyCode.Y) && (e.control || e.command) && !UIView.HasInputFocus())
                 {
-                    UndoLast();
+                    if (e.keyCode == KeyCode.Y || e.shift)
+                    {
+                        RedoLast();
+                    }
+                    else
+                    {
+                        UndoLast();
+                    }
+
                     e.Use();
                     return;
                 }
@@ -532,6 +540,7 @@ namespace GantryTool.Tool
                 g.LaneHeads = start == Settings.StartLaneSignals;
                 g.Type = GantryShape.Valid(Settings.Current.NewGantryType);
                 g.Look = GantryShape.ValidLook(Settings.Current.NewGantryLook);
+                g.BlankBacks = Settings.Current.NewNoRedXs;
             }
 
             UndoStack.PushAdded(g);
@@ -752,14 +761,29 @@ namespace GantryTool.Tool
                 return;
             }
 
-            string what = UndoStack.Undo();
-            if (what == null)
+            AfterUndoOrRedo(UndoStack.Undo());
+        }
+
+        /// <summary>Ctrl+Y, Ctrl+Shift+Z or the panel's Redo button.</summary>
+        public void RedoLast()
+        {
+            if (_dragHandle != Handle.None)
             {
-                Log.Debug("Nothing to undo");
                 return;
             }
 
-            Log.Info("Undo: " + what);
+            AfterUndoOrRedo(UndoStack.Redo());
+        }
+
+        private void AfterUndoOrRedo(string what)
+        {
+            if (what == null)
+            {
+                Log.Debug("Nothing to undo or redo");
+                return;
+            }
+
+            Log.Info("Undo or redo: " + what);
             if (_selectedId != 0 && GantryManager.Find(_selectedId) == null)
             {
                 Deselect();

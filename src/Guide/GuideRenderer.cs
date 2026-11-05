@@ -112,6 +112,17 @@ namespace GantryTool.Guide
             }
         }
 
+        public const string LedKey = "led";              // on text: drawn in LEDs
+        public const string MessageSignKey = "messageSign"; // on a sign: new text on it is LEDs too
+
+        /// <summary>True for a colour a sign can use, like #ffb000.</summary>
+        public static bool IsColour(string s)
+        {
+            int v;
+            return !string.IsNullOrEmpty(s) && s[0] == '#' && (s.Length == 7 || s.Length == 4) &&
+                   int.TryParse(s.Substring(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v);
+        }
+
         private static Color32 ParseColour(string s, Color32 fallback)
         {
             if (string.IsNullOrEmpty(s) || s[0] != '#')
@@ -263,6 +274,39 @@ namespace GantryTool.Guide
                     if (i + 1 < Text.Length)
                     {
                         pen += Font.Kern(Text[i], Text[i + 1]) * s;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Words made of round LEDs, each letter 7 dots high, with the unlit dots just showing behind them.</summary>
+        private sealed class LedTextNode : Node
+        {
+            private readonly string _text;
+            private readonly int _cols;
+            private readonly float _pitch;
+            private readonly Color32 _lit, _unlit;
+
+            public LedTextNode(string text, float height, Color32 colour)
+            {
+                _text = (text ?? "").ToUpperInvariant();
+                _cols = GantryTool.Render.LedFont.Width(_text);
+                _pitch = height / GantryTool.Render.LedFont.Height;
+                _lit = colour;
+                _unlit = new Color32((byte)(colour.r / 7), (byte)(colour.g / 7), (byte)(colour.b / 7), 255);
+                W = _cols * _pitch;
+                H = height;
+            }
+
+            public override void Draw(SignCanvas c, float ppi)
+            {
+                float dot = _pitch * 0.82f * ppi, gap = (_pitch * ppi - dot) * 0.5f;
+                for (int row = 0; row < GantryTool.Render.LedFont.Height; row++)
+                {
+                    for (int col = 0; col < _cols; col++)
+                    {
+                        float x = (X + col * _pitch) * ppi + gap, y = (Y + row * _pitch) * ppi + gap;
+                        c.FillEllipse(x, y, x + dot, y + dot, GantryTool.Render.LedFont.Lit(_text, col, row, _cols / 2f, 0, 1) ? _lit : _unlit);
                     }
                 }
             }
@@ -724,6 +768,8 @@ namespace GantryTool.Guide
         {
             switch (Json.Str(item, "type"))
             {
+                case "text" when Json.Has(item, LedKey):
+                    return new LedTextNode(Json.Str(item, "text", ""), Json.Num(item, "height", t.TextHeight), ParseColour(Json.Str(item, "color"), ctx.Fg));
                 case "text": return BuildText(t, Json.Str(item, "text", ""), Json.Num(item, "height", t.TextHeight), Json.Str(item, "font") ?? ctx.Font,
                     ParseColour(Json.Str(item, "color"), ctx.Fg), Json.Num(item, "tracking", 0f));
                 case "shield": return BuildShield(t, item, ctx);

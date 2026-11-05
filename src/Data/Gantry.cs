@@ -29,6 +29,14 @@ namespace GantryTool.Data
         public float SignalSizeOverride = float.NaN;
         public byte Type;                        // GantryShape: where the posts stand
         public byte Look;                        // GantryShape: what the structure is built from
+        public byte Paint;                       // GantryShape: what colour the steel is
+        public bool Catwalk;                     // a walkway along the beam
+        public bool SignLights;                  // lamps on its guide signs, which show up better at night
+        public bool LiveSpeed;                   // speed limits on its signals drop in heavy traffic
+        public readonly List<FaceMessages> Messages = new List<FaceMessages>();
+        public readonly Dictionary<ushort, int> LiveSteps = new Dictionary<ushort, int>(); // not saved: how heavy traffic is, by road
+        public int LiveDensity;                  // not saved: the busiest road under it, 0-100
+        public int LiveStamp;                    // not saved: what its live signs last showed
         public float PostAlong = float.NaN;      // a median T's post, from the start; NaN = found from the lanes
         public byte Style;
 

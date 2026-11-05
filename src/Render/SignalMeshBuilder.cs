@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using GantryTool.Data;
 using GantryTool.Detect;
@@ -110,6 +111,8 @@ namespace GantryTool.Render
 
         public static float HeadDepth => GantryMeshBuilder.BeamWidth + 2f * Proud;
 
+        private static float _boxDepth = HeadDepth;
+
         /// <summary>
         /// Height of a head's centre. Boxes that fit are centred in the truss; taller ones stand on its bottom edge
         /// and rise above it, so they never reduce the road clearance.
@@ -147,8 +150,10 @@ namespace GantryTool.Render
         /// </summary>
         public static Mesh Build(Vector3 start, Vector3 end, Vector3 origin, float beamBottomY, float beamDepth,
             List<GantryLane> lanes, List<SignalOverride> overrides, List<ExtraHead> extras, float signalSize, Mesh mesh,
-            SignAtlas atlas, bool blinkLayer = false, bool laneHeads = true, bool blankBacks = false)
+            SignAtlas atlas, bool blinkLayer = false, bool laneHeads = true, bool blankBacks = false, byte look = GantryShape.BoxTruss, Func<int, bool, FaceSign, FaceSign> live = null)
         {
+            float headDepth = GantryShape.SignalDepth(look, HeadDepth);
+            _boxDepth = headDepth;
             Verts.Clear();
             Normals.Clear();
             Tangents.Clear();
@@ -192,13 +197,19 @@ namespace GantryTool.Render
                     continue; // head removed by the player
                 }
 
+                if (live != null)
+                {
+                    minus = live(head, true, minus);
+                    plus = live(head, false, plus);
+                }
+
                 float along, size;
                 HeadLayout(lanes, overrides, extras, head, signalSize, beamDepth, span, out along, out size);
                 float laneKmh = HeadLaneKmh(lanes, extras, head);
                 Vector3 c = HeadCentre(start, end, beamBottomY, beamDepth, along, size) - origin;
                 Vector3 r = dir * (size * 0.5f);
                 Vector3 u = Vector3.up * (size * 0.5f);
-                Vector3 s = side * (HeadDepth * 0.5f);
+                Vector3 s = side * (headDepth * 0.5f);
 
                 if (blinkLayer)
                 {
@@ -282,7 +293,7 @@ namespace GantryTool.Render
         {
             for (int i = 0; i < beacons.Count; i++)
             {
-                Object.Destroy(beacons[i].Mesh);
+                UnityEngine.Object.Destroy(beacons[i].Mesh);
             }
 
             beacons.Clear();
@@ -371,7 +382,7 @@ namespace GantryTool.Render
         private static void AddBeacon(Vector3 headCentre, Vector3 normal, Vector3 dir, float size, SignAtlas atlas, bool lit)
         {
             float edge = size * BeaconScale;
-            float depth = HeadDepth * 0.5f;
+            float depth = _boxDepth * 0.5f;
             Vector3 c = headCentre + Vector3.up * (size * 0.5f + edge * 0.5f) + normal * (depth * 0.5f);
             Vector3 r = dir * (edge * 0.5f);
             Vector3 u = Vector3.up * (edge * 0.5f);

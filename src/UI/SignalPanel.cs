@@ -370,6 +370,7 @@ namespace GantryTool.UI
                 }
 
                 UpdateDeleteButton(current);
+                UpdateMessageControls(current);
 
                 _customBox.relativePosition = new Vector3(Margin, _cells.Count == 0 ? _grid.relativePosition.y : y);
                 y = _customBox.relativePosition.y + _customBox.height + 10f;
@@ -705,6 +706,8 @@ namespace GantryTool.UI
 
         // ------------------------------------------------------------------------------ custom signs
 
+        private UIButton _addMessage, _clearMessages, _messageSpeed, _messageWhen;
+
         private void BuildCustomBox()
         {
             _customBox = AddUIComponent<UIPanel>();
@@ -757,15 +760,28 @@ namespace GantryTool.UI
             open.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 146f);
             open.tooltip = ImageImport.Folder;
 
+            _addMessage = CreateButton(_customBox, "Add to changing messages", ThirdWidth, AddMessage);
+            _addMessage.relativePosition = new Vector3(0f, 180f);
+            _addMessage.tooltip = "This face changes between the custom LED signs you add here. Show one on the face, then click this.";
+            _clearMessages = CreateButton(_customBox, "Stop changing", ThirdWidth, ClearMessages);
+            _clearMessages.relativePosition = new Vector3(ThirdWidth + ButtonGap, 180f);
+            _clearMessages.tooltip = "This face goes back to showing just its own sign";
+            _messageSpeed = CreateButton(_customBox, "Every 10 s", ThirdWidth, NextMessageSpeed);
+            _messageSpeed.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 180f);
+            _messageSpeed.tooltip = "How long each message shows; click to change";
+            _messageWhen = CreateButton(_customBox, "Showing: always", ContentWidth, ToggleMessageWhen);
+            _messageWhen.relativePosition = new Vector3(0f, 212f);
+            _messageWhen.tooltip = "Always, or only when the road below has heavy traffic";
+
             _customNote = UIUtils.CreateLabel(_customBox, "", 0.65f);
             _customNote.textColor = new Color32(170, 170, 170, 255);
             _customNote.autoSize = false;
             _customNote.wordWrap = true;
             _customNote.size = new Vector2(ContentWidth, 28f);
-            _customNote.relativePosition = new Vector3(0f, 180f);
+            _customNote.relativePosition = new Vector3(0f, 244f);
             SetCustomNote(null);
 
-            _customBox.height = 208f;
+            _customBox.height = 272f;
             RescanFiles();
         }
 
@@ -850,6 +866,105 @@ namespace GantryTool.UI
             {
                 Log.Error("Opening the Signs folder failed", e);
                 SetCustomNote("Couldn't open the folder: " + ImageImport.Folder);
+            }
+        }
+
+        private FaceMessages SelectedMessages(out Gantry g)
+        {
+            g = CurrentGantry();
+            return g != null ? LiveSigns.Find(g, CurrentLane(g), _minusSelected) : null;
+        }
+
+        private void UpdateMessageControls(FaceSign current)
+        {
+            Gantry g;
+            FaceMessages m = SelectedMessages(out g);
+            bool custom = current.Symbol == SignalSymbol.Custom && CustomSigns.Get(current.Value) != null;
+            _addMessage.isEnabled = custom && (m == null || m.Ids.Count < LiveSigns.MaxPerFace);
+            _addMessage.text = "Add to changing messages" + (m != null ? " (" + m.Ids.Count + ")" : "");
+            _clearMessages.isEnabled = m != null;
+            _messageSpeed.isEnabled = m != null;
+            _messageWhen.isEnabled = m != null;
+            _messageSpeed.text = "Every " + (m != null ? m.Seconds : (byte)10) + " s";
+            _messageWhen.text = "Showing: " + (m != null && m.OnlyHeavy ? "only in heavy traffic" : "always");
+        }
+
+        private void ChangeMessages(Gantry g, Action change)
+        {
+            UndoStack.PushModified(g, "changing messages", coalesce: false);
+            lock (GantryManager.Lock)
+            {
+                change();
+                g.SignalsDirty = true;
+            }
+
+            UndoStack.DiscardIfUnchanged(g);
+            Refresh(g);
+        }
+
+        private void AddMessage()
+        {
+            Gantry g = CurrentGantry();
+            if (g == null)
+            {
+                return;
+            }
+
+            int head = CurrentLane(g);
+            FaceSign minus, plus;
+            GantryManager.GetFaces(g, head, out minus, out plus);
+            FaceSign face = _minusSelected ? minus : plus;
+            if (face.Symbol != SignalSymbol.Custom)
+            {
+                return;
+            }
+
+            bool side = _minusSelected;
+            ChangeMessages(g, () =>
+            {
+                FaceMessages m = LiveSigns.Find(g, head, side);
+                if (m == null)
+                {
+                    m = new FaceMessages { Head = head, Minus = side };
+                    g.Messages.Add(m);
+                }
+
+                if (m.Ids.Count < LiveSigns.MaxPerFace && !m.Ids.Contains(face.Value))
+                {
+                    m.Ids.Add(face.Value);
+                }
+            });
+        }
+
+        private void ClearMessages()
+        {
+            Gantry g;
+            FaceMessages m = SelectedMessages(out g);
+            if (m != null)
+            {
+                ChangeMessages(g, () => g.Messages.Remove(m));
+            }
+        }
+
+        private void NextMessageSpeed()
+        {
+            Gantry g;
+            FaceMessages m = SelectedMessages(out g);
+            if (m != null)
+            {
+                int at = Array.IndexOf(LiveSigns.SecondsChoices, m.Seconds);
+                byte next = LiveSigns.SecondsChoices[(at + 1) % LiveSigns.SecondsChoices.Length];
+                ChangeMessages(g, () => m.Seconds = next);
+            }
+        }
+
+        private void ToggleMessageWhen()
+        {
+            Gantry g;
+            FaceMessages m = SelectedMessages(out g);
+            if (m != null)
+            {
+                ChangeMessages(g, () => m.OnlyHeavy = !m.OnlyHeavy);
             }
         }
 

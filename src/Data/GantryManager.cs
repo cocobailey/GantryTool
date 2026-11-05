@@ -516,7 +516,7 @@ namespace GantryTool.Data
 
                 // A gantry's first guide sign: its signals now face only their own traffic (a checkbox in the gantry panel).
                 g.BlankBacks |= g.GuideSigns.Count == 0;
-                g.GuideSigns.Add(new GuideHead { Id = id, Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)), Scale = 1f, Side = side, Design = design, FitFirst = fitFirst, FitLast = fitLast });
+                g.GuideSigns.Add(new GuideHead { Id = id, Along = Mathf.Clamp(along, 0f, Mathf.Max(0f, g.Span)), Scale = Mathf.Clamp(Settings.Current.NewSignSize, GuideData.MinScale, GuideData.MaxScale), Side = side, Design = design, FitFirst = fitFirst, FitLast = fitLast });
                 g.SignalsDirty = true;
                 head = HeadRef.OfGuide(id);
             }
@@ -806,6 +806,11 @@ namespace GantryTool.Data
             {
                 foreach (Gantry g in _gantries)
                 {
+                    foreach (FaceMessages m in g.Messages)
+                    {
+                        n += m.Ids.FindAll(i => i == id).Count;
+                    }
+
                     foreach (SignalOverride o in g.Overrides)
                     {
                         n += (o.Minus == SignalSymbol.Custom && o.MinusValue == id ? 1 : 0) +
@@ -832,6 +837,14 @@ namespace GantryTool.Data
                 foreach (Gantry g in _gantries)
                 {
                     bool touched = false;
+                    foreach (FaceMessages m in g.Messages)
+                    {
+                        int removed = m.Ids.RemoveAll(i => i == id);
+                        changed += removed;
+                        touched |= removed > 0;
+                    }
+
+                    g.Messages.RemoveAll(m => m.Ids.Count == 0);
                     for (int k = 0; k < g.Overrides.Count; k++)
                     {
                         SignalOverride o = g.Overrides[k];
@@ -951,7 +964,7 @@ namespace GantryTool.Data
                 return false;
             }
 
-            DestroyMesh(removed);
+            MeshCleaner(removed);
             return true;
         }
 
@@ -996,6 +1009,9 @@ namespace GantryTool.Data
                 _nextId = 1;
             }
         }
+
+        /// <summary>What removing a gantry does about its meshes; tests outside the game, with no meshes, replace it.</summary>
+        public static Action<Gantry> MeshCleaner = DestroyMesh;
 
         public static void DestroyMesh(Gantry gantry)
         {

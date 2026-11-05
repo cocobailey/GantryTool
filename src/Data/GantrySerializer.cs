@@ -28,6 +28,7 @@ namespace GantryTool.Data
                 SaveExtraHeads(gantries);
                 SaveGuideSigns(gantries);
                 SaveGuidePictures(gantries);
+                SaveLiveSigns(gantries);
                 SaveCustomSigns(gantries);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +
                          GantryData.LegacyVersion + " + ext v" + GantryData.ExtVersion + ")");
@@ -87,6 +88,36 @@ namespace GantryTool.Data
             catch (Exception e)
             {
                 Log.Error("Saving guide sign pictures failed", e);
+            }
+        }
+
+        /// <summary>Live signs under their own key too, so a problem there can never touch the gantries.</summary>
+        private void SaveLiveSigns(List<Gantry> gantries)
+        {
+            try
+            {
+                serializableDataManager.SaveData(LiveSigns.Key, LiveSigns.Write(gantries, GantryManager.Lock));
+            }
+            catch (Exception e)
+            {
+                Log.Error("Saving live signs failed", e);
+            }
+        }
+
+        private void LoadLiveSigns(List<Gantry> loaded)
+        {
+            try
+            {
+                string error;
+                LiveSigns.Apply(serializableDataManager.LoadData(LiveSigns.Key), loaded, out error);
+                if (error != null)
+                {
+                    Log.Warn("Live signs: " + error);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Loading live signs failed; those signals show their own signs", e);
             }
         }
 
@@ -247,6 +278,7 @@ namespace GantryTool.Data
 
                     LoadExtraHeads(loaded);
                     LoadGuideSigns(loaded);
+                    LoadLiveSigns(loaded);
                 }
             }
             catch (Exception e)
