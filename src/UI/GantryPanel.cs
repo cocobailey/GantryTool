@@ -310,6 +310,29 @@ namespace GantryTool.UI
             ChoiceButton(box, half + 6f, half, "Guide signs", "A big highway sign, which you design", () => AddGuideSign(g));
             UILabel hint = UIUtils.CreateLabel(box, "You can add the other later, or leave it empty for now.", 0.65f);
             hint.relativePosition = new Vector3(0f, 74f);
+            PasteRow(g, true);
+        }
+
+        /// <summary>Puts the sign that was copied on this gantry as a new one, if there is one and there's room.</summary>
+        private void PasteRow(Gantry g, bool canAdd)
+        {
+            if (!GantryTool.Guide.GuideClipboard.HasSign)
+            {
+                return;
+            }
+
+            var row = _content.AddUIComponent<UIPanel>();
+            row.size = new Vector2(_content.width, 34f);
+            RowButton(row, 0, _content.width, "Paste guide sign",
+                canAdd ? "Add the sign you copied to this gantry" : "This gantry has the most guide signs allowed", () =>
+                {
+                    Gantry cur = GantryManager.Find(_gantryId);
+                    if (cur != null)
+                    {
+                        AddGuideSign(cur, true);
+                    }
+                });
+            row.components[0].isEnabled = canAdd;
         }
 
         private static void ChoiceButton(UIPanel box, float x, float w, string text, string tooltip, Action onClick)
@@ -327,7 +350,7 @@ namespace GantryTool.UI
         }
 
         /// <summary>Puts a new guide sign on a gantry, over the lanes still free on the side the camera sees, and opens it.</summary>
-        public void AddGuideSign(Gantry g)
+        public void AddGuideSign(Gantry g, bool pasted = false)
         {
             if (Tool == null || !GantryManager.CanAddGuideSign(g))
             {
@@ -339,6 +362,20 @@ namespace GantryTool.UI
             lock (GantryManager.Lock)
             {
                 GantryTool.Guide.GuideFit.DefaultRange(g.Lanes, g.GuideSigns, facing, out first, out last);
+            }
+
+            if (pasted)
+            {
+                var copy = GantryTool.Guide.GuideClipboard.PasteOnto(new GuideHead());
+                int added = GantryManager.AddGuideSign(g, g.Span * 0.5f, facing, copy.Design, first, last);
+                if (added >= 0)
+                {
+                    GantryManager.UpdateGuideSign(g, added, null, GantryTool.Guide.GuideClipboard.PasteOnto);
+                    UIUtils.ClearTooltips(_content);
+                    Tool.EditHead(g, added);
+                }
+
+                return;
             }
 
             Dictionary<string, object> template = GantryTool.Guide.GuideAssets.Template(GantryTool.Guide.GuideThemes.Current, GantryTool.Guide.GuideThemes.DefaultTemplate(GantryTool.Guide.GuideThemes.Current));
@@ -426,6 +463,7 @@ namespace GantryTool.UI
                     }
                 });
             addRow.components[1].isEnabled = canGuide;
+            PasteRow(g, canGuide);
         }
 
         /// <summary>Re-reads the gantry (after undo or a move). Hides the panel if the gantry is gone.</summary>

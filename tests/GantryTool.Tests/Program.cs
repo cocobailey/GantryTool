@@ -20,6 +20,7 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("guide signs: copy and paste", GuideCopyPaste);
             Run("guide signs: other countries", GuideCountries);
             Run("guide signs: on the truss unless a signal is in the way", GuideClearOfSignals);
             Run("guide signs: filled in from the road", GuideAutoFillParts);
@@ -1316,6 +1317,20 @@ namespace GantryTool.Tests
             GantryTool.Guide.GuideThemes.Current = "atlantis";
             Check(GantryTool.Guide.GuideThemes.Current == before, "and a country the mod doesn't have");
             GantryTool.Guide.GuideThemes.Read(null);
+        }
+
+        private static void GuideCopyPaste()
+        {
+            GantryTool.Guide.GuideClipboard.Clear();
+            var there = new GuideHead { Id = 2, Along = 20f, Side = 1, Scale = 1f, Design = "{}", FitFirst = 2, FitLast = 3 };
+            GuideHead same = GantryTool.Guide.GuideClipboard.PasteOnto(there);
+            Check(!GantryTool.Guide.GuideClipboard.HasSign && same.Design == "{}", "nothing copied changes nothing");
+
+            GantryTool.Guide.GuideClipboard.Copy(new GuideHead { Id = 1, Along = 5f, Side = -1, Scale = 1.5f, Design = "{\"items\":[]}", FitFirst = 1, FitLast = 1, LaneArrows = true });
+            GuideHead pasted = GantryTool.Guide.GuideClipboard.PasteOnto(there);
+            Check(pasted.Design == "{\"items\":[]}" && pasted.Scale == 1.5f && pasted.LaneArrows, "what it says and its size come across");
+            Check(pasted.Id == 2 && pasted.Along == 20f && pasted.Side == 1 && pasted.FitFirst == 2 && pasted.FitLast == 3, "where it is stays");
+            GantryTool.Guide.GuideClipboard.Clear();
         }
 
         private static void GuideSimpleSigns()

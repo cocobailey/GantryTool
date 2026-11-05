@@ -27,6 +27,8 @@ namespace GantryTool.UI
         private const float MinPartSize = 10f;
         private const float DragStart = 6f;
         private const float RowHeight = 34f;
+        private const string CopyLabel = "Copy sign";
+        private const float CopiedShowsFor = 1f;
         private const float SliderSlack = 0.06f;   // a slider moves in steps of 0.1 m
         private const float MaxSignWidth = 12f, MaxSignHeight = 6f;
         private const float TextCommitDelay = 0.05f;   // just enough to take in keys pressed together
@@ -58,6 +60,8 @@ namespace GantryTool.UI
         private bool _building;
         private bool _rebuild;
         private float _commitAt = -1f;
+        private UIButton _copyButton, _pasteButton;
+        private float _copiedUntil = -1f;
         private GuideHead _shown;
         private UISlider _widthSlider, _heightSlider;
         private Dictionary<string, object> _doc;
@@ -164,9 +168,61 @@ namespace GantryTool.UI
                 Show(g);
             }
 
+            CopyPasteKeys(g);
+            if (_copiedUntil >= 0f && Time.realtimeSinceStartup >= _copiedUntil)
+            {
+                _copiedUntil = -1f;
+                _copyButton.text = CopyLabel;
+            }
+
             DragPart(g);
             UpdatePreview(g, now);
             FollowSize(g, now);
+        }
+
+        /// <summary>Ctrl+C and Ctrl+V, unless they're for the text being typed.</summary>
+        private void CopyPasteKeys(Gantry g)
+        {
+            if (!(Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) || UIView.HasInputFocus())
+            {
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.C))
+            {
+                CopySign(g);
+            }
+            else if (Input.GetKeyDown(KeyCode.V))
+            {
+                PasteSign(g);
+            }
+        }
+
+        private void CopySign(Gantry g)
+        {
+            CommitText();
+            GuideHead sign;
+            if (GantryManager.GetGuideSign(g, _head, out sign))
+            {
+                GuideClipboard.Copy(sign);
+                _pasteButton.isEnabled = true;
+                _copyButton.text = "Copied";
+                _copiedUntil = Time.realtimeSinceStartup + CopiedShowsFor;
+            }
+        }
+
+        private void PasteSign(Gantry g)
+        {
+            if (GuideClipboard.HasSign)
+            {
+                CommitText();
+                _selected = null;
+                _selectedPath = null;
+                _saving = false;
+                _picking = false;
+                Change(g, "paste sign", GuideClipboard.PasteOnto);
+                _rebuild = true;
+            }
         }
 
         /// <summary>Keeps the size sliders true when something else resizes the sign, like dragging it over more lanes.</summary>
@@ -547,15 +603,18 @@ namespace GantryTool.UI
 
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, 34f);
-            float half = (_content.width - 6f) / 2f;
-            RowButton(row, 0f, half, "Undo", "Undo the last change (Ctrl+Z)", () =>
+            float quarter = (_content.width - 18f) / 4f;
+            RowButton(row, 0f, quarter, "Undo", "Undo the last change (Ctrl+Z)", () =>
             {
                 if (Tool != null)
                 {
                     Tool.UndoLast();
                 }
             });
-            RowButton(row, half + 6f, half, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
+            _copyButton = RowButton(row, quarter + 6f, quarter, CopyLabel, "Copy this sign, to paste on any gantry (Ctrl+C)", () => CopySign(g));
+            _pasteButton = RowButton(row, 2f * (quarter + 6f), quarter, "Paste sign", "Replace this sign with the one you copied; it stays where it is (Ctrl+V, and Ctrl+Z brings this one back)", () => PasteSign(g));
+            _pasteButton.isEnabled = GuideClipboard.HasSign;
+            RowButton(row, 3f * (quarter + 6f), quarter, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
             {
                 Gantry cur = GantryManager.Find(_gantryId);
                 if (cur != null)
@@ -1898,7 +1957,7 @@ namespace GantryTool.UI
             DropdownToggle.Attach(drop);
         }
 
-        private static void RowButton(UIPanel row, float x, float w, string text, string tooltip, Action onClick)
+        private static UIButton RowButton(UIPanel row, float x, float w, string text, string tooltip, Action onClick)
         {
             var b = row.AddUIComponent<UIButton>();
             b.text = text;
@@ -1911,6 +1970,7 @@ namespace GantryTool.UI
             b.size = new Vector2(w, 28f);
             b.relativePosition = new Vector3(x, 4f);
             b.eventClick += (c, p) => onClick();
+            return b;
         }
     }
 }
