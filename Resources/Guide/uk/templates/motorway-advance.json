@@ -1,0 +1,53 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "motorway-advance",
+  "name": "Motorway advance",
+  "scheme": "blue",
+  "align": "center",
+  "autoRoad": "exit",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "J",
+          "number": "12",
+          "height": 15
+        }
+      ],
+      "align": "start"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "M",
+          "number": "1",
+          "height": 22,
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Leeds",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "text",
+      "text": "1 mile",
+      "height": 12
+    }
+  ],
+  "ownWidth": true
+}

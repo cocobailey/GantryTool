@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "theme": "nl",
+  "id": "city",
+  "name": "City route",
+  "scheme": "blue",
+  "align": "center",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "S",
+          "number": "100"
+        },
+        {
+          "type": "text",
+          "text": "Centrum"
+        },
+        {
+          "type": "arrow",
+          "direction": "right"
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

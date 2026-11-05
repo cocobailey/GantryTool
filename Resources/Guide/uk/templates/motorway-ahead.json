@@ -1,0 +1,68 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "motorway-ahead",
+  "name": "Motorway, straight on",
+  "scheme": "blue",
+  "align": "center",
+  "arrowDirection": "down",
+  "arrowStyle": "drop",
+  "autoRoad": "here",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "The NORTH",
+              "auto": "direction"
+            },
+            {
+              "type": "text",
+              "text": "Leeds",
+              "auto": "name"
+            }
+          ],
+          "align": "start",
+          "gap": 5.0
+        },
+        {
+          "type": "shield",
+          "network": "M",
+          "number": "1",
+          "height": 30,
+          "auto": "shield"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        }
+      ],
+      "justify": "between",
+      "bar": true
+    }
+  ]
+}

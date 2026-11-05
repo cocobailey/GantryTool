@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "umleitung",
+  "name": "Diversion",
+  "scheme": "orange",
+  "align": "center",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "U"
+        },
+        {
+          "type": "text",
+          "text": "12"
+        },
+        {
+          "type": "arrow",
+          "direction": "up-right"
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

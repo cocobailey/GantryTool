@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "tourist",
+  "name": "Tourist",
+  "scheme": "brown",
+  "align": "center",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "text",
+      "text": "Blue Mountains"
+    },
+    {
+      "type": "arrow",
+      "direction": "right",
+      "height": 18
+    }
+  ]
+}

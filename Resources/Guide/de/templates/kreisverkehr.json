@@ -1,0 +1,63 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "kreisverkehr",
+  "name": "Roundabout (map sign)",
+  "scheme": "yellow",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Erfurt",
+              "auto": "name"
+            },
+            {
+              "type": "shield",
+              "network": "B",
+              "number": "7",
+              "auto": "shield"
+            }
+          ],
+          "align": "center",
+          "gap": 3.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Gotha"
+            },
+            {
+              "type": "symbol",
+              "name": "roundabout",
+              "height": 60
+            }
+          ],
+          "align": "center",
+          "gap": 3.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Eisenach"
+            }
+          ],
+          "align": "center"
+        }
+      ],
+      "align": "end",
+      "justify": "even"
+    }
+  ]
+}

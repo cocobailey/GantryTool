@@ -238,5 +238,7 @@ if __name__ == "__main__":
         country = os.path.basename(os.path.dirname(folder))
         if country != "fonts":
             OUT = os.path.join("Resources", "Guide", country)
+            for ttf in sorted(glob.glob(os.path.join(folder, "fonts", "*.ttf"))):
+                bake_font(ttf)
             for svg in sorted(glob.glob(os.path.join(folder, "*.svg"))):
                 bake_shield(svg)

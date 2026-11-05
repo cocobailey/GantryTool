@@ -43,3 +43,14 @@ SOFTWARE.
 
 `tools/guide/interstate.svg` and `us_route.svg`, baked into `Resources/Guide/us/*.gim`. CC0 1.0.
 https://github.com/osm-americana/openstreetmap-americana
+
+## Transport and Motorway fonts
+
+The UK guide signs use Transport Medium, Transport Heavy and Motorway Permanent from https://www.roads.org.uk/fonts.
+Crown Copyright. These fonts contain public sector information licensed under the Open Government Licence v1.0
+(http://www.nationalarchives.gov.uk/doc/open-government-licence/).
+
+## Alte DIN 1451 Mittelschrift
+
+The Europe (German style) guide signs use "Alte DIN 1451 Mittelschrift" by Peter Wiegel, under the SIL Open Font License 1.1
+(`tools/guide/de/fonts/OFL-AlteDIN1451.txt`). DIN 1451 itself is in the public domain.

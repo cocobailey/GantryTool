@@ -1,0 +1,140 @@
+{
+  "formatVersion": 1,
+  "id": "nl",
+  "name": "Netherlands",
+  "description": "Blue signs with red A, yellow N and green E plates (Roadgeek fonts, close to the ANWB lettering)",
+  "units": "in",
+  "defaults": {
+    "textHeight": 15.5,
+    "shieldHeight": 17.0,
+    "arrowHeight": 23.5,
+    "border": 1.2,
+    "cornerRadius": 3.5,
+    "lineGap": 0.55,
+    "margin": 0.6,
+    "itemGap": 0.45,
+    "font": "RG2014D",
+    "scheme": "blue"
+  },
+  "fonts": [
+    {
+      "family": "RG2014D",
+      "file": "@us/fonts/RG2014D.ttf",
+      "label": "Series D",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014E",
+      "file": "@us/fonts/RG2014E.ttf",
+      "label": "Series E",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014C",
+      "file": "@us/fonts/RG2014C.ttf",
+      "label": "Series C",
+      "scale": 1.75,
+      "offset": 0.125
+    }
+  ],
+  "schemes": {
+    "blue": {
+      "bg": "#1b4f9c",
+      "fg": "#ffffff",
+      "label": "Wegwijzer"
+    },
+    "white": {
+      "bg": "#ffffff",
+      "fg": "#1b4f9c",
+      "label": "Lokaal"
+    },
+    "brown": {
+      "bg": "#6b3f1d",
+      "fg": "#ffffff",
+      "label": "Toeristisch"
+    },
+    "yellow": {
+      "bg": "#ffcc00",
+      "fg": "#000000",
+      "label": "Tijdelijk / omleiding"
+    },
+    "green": {
+      "bg": "#00704a",
+      "fg": "#ffffff",
+      "label": "Green"
+    }
+  },
+  "shields": {
+    "A": {
+      "label": "Autosnelweg",
+      "shape": "rect",
+      "bg": "#d52b1e",
+      "fg": "#ffffff",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "2",
+      "prefix": "A"
+    },
+    "N": {
+      "label": "Provinciale weg",
+      "shape": "rect",
+      "bg": "#ffcc00",
+      "fg": "#000000",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "201",
+      "prefix": "N"
+    },
+    "E": {
+      "label": "Europese weg",
+      "shape": "rect",
+      "bg": "#00704a",
+      "fg": "#ffffff",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "35",
+      "prefix": "E"
+    },
+    "S": {
+      "label": "Stadsroute",
+      "shape": "rect",
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "100",
+      "prefix": "S",
+      "border": "#000000"
+    },
+    "AFRIT": {
+      "label": "Exit number",
+      "shape": "rect",
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "num": 0.6,
+      "radius": 0.5,
+      "default": "12",
+      "padX": 0.3
+    }
+  },
+  "arrow": "M32 0 H68 V88 H100 L50 150 L0 88 H32 Z",
+  "laneWidth": 157.48031496062993,
+  "presets": [],
+  "defaultSign": "lanes",
+  "arrowStyles": {
+    "slim": {
+      "arrow": "M43 0 H57 V104 H76 L50 150 L24 104 H43 Z"
+    }
+  },
+  "exitOnlyFont": "RG2014D",
+  "words": {
+    "exitTab": "Afrit 1",
+    "exitOnly": "AFRIT"
+  },
+  "exitTab": {
+    "font": "RG2014E",
+    "height": 10
+  }
+}

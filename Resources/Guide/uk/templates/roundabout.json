@@ -1,0 +1,75 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "roundabout",
+  "name": "Roundabout (map sign)",
+  "scheme": "green",
+  "align": "center",
+  "autoRoad": "exit",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Leeds",
+              "auto": "name"
+            },
+            {
+              "type": "shield",
+              "network": "AP",
+              "number": "64",
+              "auto": "shield"
+            }
+          ],
+          "align": "center",
+          "gap": 5.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "York"
+            },
+            {
+              "type": "symbol",
+              "name": "roundabout",
+              "height": 60
+            }
+          ],
+          "align": "center",
+          "gap": 5.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Harrogate"
+            },
+            {
+              "type": "shield",
+              "network": "AP",
+              "number": "61"
+            }
+          ],
+          "align": "center",
+          "gap": 5.0
+        }
+      ],
+      "align": "end",
+      "justify": "even"
+    }
+  ],
+  "ownWidth": true
+}

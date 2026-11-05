@@ -10,11 +10,11 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev30";
+        public const string Version = "2.0.0-dev40";
 
         public string Name => "Gantry and Signs Tool";
 
-        public string Description => "Place overhead gantries with LED lane signals, speed limits, warnings and your own signs.";
+        public string Description => "Place overhead gantries with LED lane signals, speed limits and warnings, and printed highway signs you can design.";
 
         public void OnEnabled()
         {
@@ -101,7 +101,7 @@ namespace GantryTool
                     Log.Info("Applied defaults to " + n + " gantries");
                 });
 
-                UIHelperBase signGroup = helper.AddGroup("Signs");
+                UIHelperBase signGroup = helper.AddGroup("Signals");
                 SignStyle[] styles = SignStyles.Available;
                 var styleNames = new string[styles.Length];
                 int styleIndex = 0;
@@ -114,7 +114,7 @@ namespace GantryTool
                     }
                 }
 
-                var styleDrop = (UIDropDown)signGroup.AddDropdown("Default sign style", styleNames, styleIndex, index =>
+                var styleDrop = (UIDropDown)signGroup.AddDropdown("Default signal style", styleNames, styleIndex, index =>
                 {
                     if (index >= 0 && index < styles.Length)
                     {

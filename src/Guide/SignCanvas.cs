@@ -235,6 +235,57 @@ namespace GantryTool.Guide
         }
 
         /// <summary>Draws an RGBA image (top row first) scaled into the box.</summary>
+        /// <summary>A player's picture: drawn bigger than it is, it blends between its pixels rather than showing them as blocks.</summary>
+        public void DrawImageSmooth(Color32[] src, int sw, int sh, float x0, float y0, float x1, float y1)
+        {
+            float dw = x1 - x0, dh = y1 - y0;
+            if (dw <= sw && dh <= sh)
+            {
+                DrawImage(src, sw, sh, x0, y0, x1, y1);
+                return;
+            }
+
+            if (dw <= 0f || dh <= 0f)
+            {
+                return;
+            }
+
+            int bottom = Mathf.Min(Mathf.CeilToInt(y1), Height), right = Mathf.Min(Mathf.CeilToInt(x1), Width);
+            for (int y = Mathf.Max(0, Mathf.FloorToInt(y0)); y < bottom; y++)
+            {
+                float fy = Mathf.Clamp((y + 0.5f - y0) / dh * sh - 0.5f, 0f, sh - 1f);
+                int ya = (int)fy, yb = Mathf.Min(ya + 1, sh - 1);
+                float ty = fy - ya;
+                for (int x = Mathf.Max(0, Mathf.FloorToInt(x0)); x < right; x++)
+                {
+                    float fx = Mathf.Clamp((x + 0.5f - x0) / dw * sw - 0.5f, 0f, sw - 1f);
+                    int xa = (int)fx, xb = Mathf.Min(xa + 1, sw - 1);
+                    float tx = fx - xa;
+                    Color32 p00 = src[ya * sw + xa], p10 = src[ya * sw + xb], p01 = src[yb * sw + xa], p11 = src[yb * sw + xb];
+                    float w00 = (1f - tx) * (1f - ty) * p00.a, w10 = tx * (1f - ty) * p10.a, w01 = (1f - tx) * ty * p01.a, w11 = tx * ty * p11.a;
+                    float a = w00 + w10 + w01 + w11;
+                    if (a <= 0f)
+                    {
+                        continue;
+                    }
+
+                    var colour = new Color32(
+                        (byte)((p00.r * w00 + p10.r * w10 + p01.r * w01 + p11.r * w11) / a),
+                        (byte)((p00.g * w00 + p10.g * w10 + p01.g * w01 + p11.g * w11) / a),
+                        (byte)((p00.b * w00 + p10.b * w10 + p01.b * w01 + p11.b * w11) / a),
+                        255);
+                    if (a >= 254.5f)
+                    {
+                        Pixels[y * Width + x] = colour;
+                    }
+                    else
+                    {
+                        Blend(x, y, colour, a / 255f);
+                    }
+                }
+            }
+        }
+
         public void DrawImage(Color32[] src, int sw, int sh, float x0, float y0, float x1, float y1)
         {
             float dw = x1 - x0, dh = y1 - y0;
@@ -251,27 +302,37 @@ namespace GantryTool.Guide
                 {
                     int sx0 = Mathf.Clamp(Mathf.FloorToInt((x - x0) / dw * sw), 0, sw - 1);
                     int sx1 = Mathf.Clamp(Mathf.CeilToInt((x + 1 - x0) / dw * sw), sx0 + 1, sw);
-                    float r = 0f, g = 0f, b = 0f, a = 0f;
-                    int n = 0;
+                    int r = 0, g = 0, b = 0, a = 0, n = (sy1 - sy0) * (sx1 - sx0);
                     for (int sy = sy0; sy < sy1; sy++)
                     {
-                        for (int sx = sx0; sx < sx1; sx++)
+                        int at = sy * sw + sx0;
+                        for (int sx = sx0; sx < sx1; sx++, at++)
                         {
-                            Color32 p = src[sy * sw + sx];
-                            r += p.r * p.a;
-                            g += p.g * p.a;
-                            b += p.b * p.a;
-                            a += p.a;
-                            n++;
+                            int pa = src[at].a;
+                            if (pa != 0)
+                            {
+                                r += src[at].r * pa;
+                                g += src[at].g * pa;
+                                b += src[at].b * pa;
+                                a += pa;
+                            }
                         }
                     }
 
-                    if (a <= 0f)
+                    if (a == 0)
                     {
                         continue;
                     }
 
-                    Blend(x, y, new Color32((byte)(r / a), (byte)(g / a), (byte)(b / a), 255), a / n / 255f);
+                    var colour = new Color32((byte)(r / a), (byte)(g / a), (byte)(b / a), 255);
+                    if (a == n * 255 && x >= 0 && y >= 0 && x < Width && y < Height)
+                    {
+                        Pixels[y * Width + x] = colour;   // solid: most of a picture needs no blending
+                    }
+                    else
+                    {
+                        Blend(x, y, colour, (float)a / n / 255f);
+                    }
                 }
             }
         }

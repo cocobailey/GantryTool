@@ -155,7 +155,7 @@ namespace GantryTool.Data
                 case SignalSymbol.NoOvertakingTrucks: return "No overtaking (trucks)";
                 case SignalSymbol.EndRestrictions: return "End of restrictions";
                 case SignalSymbol.YellowCross: return "Yellow X";
-                case SignalSymbol.Custom: return "Custom sign";
+                case SignalSymbol.Custom: return "Custom LED sign";
                 case SignalSymbol.RampMetered: return "Ramp metered";
                 case SignalSymbol.ExitLeft: return "Exit left";
                 case SignalSymbol.ExitRight: return "Exit right";
@@ -451,7 +451,7 @@ namespace GantryTool.Data
             if (f.Symbol == SignalSymbol.Custom)
             {
                 CustomSign c = CustomSigns.Get(f.Value);
-                return c != null ? "Custom: " + c.Label : "Custom sign (missing)";
+                return c != null ? "Custom: " + c.Label : "Custom LED sign (missing)";
             }
 
             if (f.Symbol == SignalSymbol.RampMetered)

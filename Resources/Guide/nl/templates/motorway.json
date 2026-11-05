@@ -1,0 +1,52 @@
+{
+  "formatVersion": 1,
+  "theme": "nl",
+  "id": "motorway",
+  "name": "Motorway, straight on",
+  "scheme": "blue",
+  "align": "center",
+  "arrowDirection": "down",
+  "arrowStyle": "slim",
+  "autoRoad": "here",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "A",
+          "number": "2",
+          "auto": "shield"
+        },
+        {
+          "type": "shield",
+          "network": "E",
+          "number": "35"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Amsterdam",
+      "auto": "name"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

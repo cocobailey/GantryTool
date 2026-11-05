@@ -5,7 +5,7 @@ namespace GantryTool.Data
     /// <summary>Regional look of a gantry's signals. Values are saved — append only, never renumber.</summary>
     public enum SignStyle : byte
     {
-        Default = 0,        // per gantry: follow the "Default sign style" option
+        Default = 0,        // per gantry: follow the "Default signal style" option
         Europe = 1,         // the 1.0 look
         Netherlands = 2,
         UnitedKingdom = 3,

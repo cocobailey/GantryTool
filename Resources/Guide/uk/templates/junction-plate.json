@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "junction-plate",
+  "name": "Junction and distance",
+  "scheme": "blue",
+  "align": "center",
+  "items": [
+    {
+      "type": "row",
+      "align": "center",
+      "items": [
+        {
+          "type": "shield",
+          "network": "J",
+          "number": "12",
+          "height": 24
+        },
+        {
+          "type": "text",
+          "text": "1 mile",
+          "height": 16
+        }
+      ]
+    }
+  ],
+  "compact": true,
+  "ownWidth": true
+}

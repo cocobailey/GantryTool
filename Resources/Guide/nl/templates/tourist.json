@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "theme": "nl",
+  "id": "tourist",
+  "name": "Tourist",
+  "scheme": "brown",
+  "align": "center",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "text",
+      "text": "Keukenhof"
+    },
+    {
+      "type": "arrow",
+      "direction": "left",
+      "height": 18
+    }
+  ]
+}

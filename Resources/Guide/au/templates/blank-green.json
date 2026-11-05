@@ -1,0 +1,11 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "blank-green",
+  "name": "Blank green",
+  "scheme": "green",
+  "align": "center",
+  "height": 130,
+  "minWidth": 200,
+  "items": []
+}

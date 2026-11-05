@@ -1,0 +1,48 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "motorway",
+  "name": "Motorway, straight on",
+  "scheme": "green",
+  "align": "center",
+  "arrowDirection": "down",
+  "arrowStyle": "slim",
+  "autoRoad": "here",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "M",
+          "number": "1",
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Sydney",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

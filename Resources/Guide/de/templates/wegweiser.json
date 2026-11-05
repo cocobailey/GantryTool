@@ -1,0 +1,38 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "wegweiser",
+  "name": "Autobahn sign",
+  "scheme": "blue",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "here",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "A",
+          "number": "7",
+          "auto": "shield"
+        },
+        {
+          "type": "shield",
+          "network": "E",
+          "number": "45"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "Würzburg",
+      "auto": "name"
+    },
+    {
+      "type": "text",
+      "text": "Kassel",
+      "auto": "name2"
+    }
+  ]
+}

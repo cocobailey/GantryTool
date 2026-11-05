@@ -31,6 +31,11 @@ namespace GantryTool.Guide
         private const float MinWidth = 1.5f;
 
         /// <summary>Marks the row of arrows in a design that becomes one arrow per lane.</summary>
+        public const string BarKey = "bar";
+        public const string OwnWidthKey = "ownWidth";  // a sign that isn't made to stretch across the lanes it's over
+        public const string CompactKey = "compact";    // a small plate: keeps its own size, not the default or its neighbours'
+        public const string ExitOnlyWord = "exitOnly";
+        public const string ExitTabWord = "exitTab";
         public const string ArrowKey = "arrowDirection";
         public const string ArrowStyleKey = "arrowStyle";
         public const string WidthKey = "signWidth";    // the player's own size, metres; in the design, so it needs no save data
@@ -245,7 +250,7 @@ namespace GantryTool.Guide
                 doc["items"] = items;
             }
 
-            var text = new Dictionary<string, object> { { "type", "text" }, { "text", DefaultExitText }, { "height", 12.0 }, { "font", "RG2014D" } };
+            var text = new Dictionary<string, object> { { "type", "text" }, { "text", GuideThemes.Word(Json.Str(doc, "theme", GuideThemes.Fallback), ExitOnlyWord, DefaultExitText) }, { "height", 12.0 }, { "font", Json.Str(GuideAssets.Theme(Json.Str(doc, "theme", GuideThemes.Fallback)), "exitOnlyFont", "RG2014D") } };
             var chip = new Dictionary<string, object> { { "type", "chip" }, { "scheme", "yellow" }, { "radius", 2.0 }, { "items", new List<object> { text } } };
             for (int i = items.Count - 1; i >= 0; i--)
             {
@@ -379,6 +384,56 @@ namespace GantryTool.Guide
             return row;
         }
 
+        /// <summary>True if arrows are built into the sign's layout, each under what it points to, so lane arrows would repeat them.</summary>
+        public static bool HasBuiltInArrows(Dictionary<string, object> doc)
+        {
+            List<object> items = Json.Arr(doc, "items");
+            if (items == null)
+            {
+                return false;
+            }
+
+            foreach (object o in items)
+            {
+                var line = o as Dictionary<string, object>;
+                List<object> parts = line != null && !IsArrows(line) ? Json.Arr(line, "items") : null;
+                if (parts == null)
+                {
+                    continue;
+                }
+
+                foreach (object part in parts)
+                {
+                    if (HoldsArrow(part as Dictionary<string, object>))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HoldsArrow(Dictionary<string, object> item)
+        {
+            List<object> inner = item != null ? Json.Arr(item, "items") : null;
+            if (inner == null)
+            {
+                return false;
+            }
+
+            foreach (object o in inner)
+            {
+                var child = o as Dictionary<string, object>;
+                if (Json.Str(child, "type") == "arrow" || HoldsArrow(child))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public static bool IsArrows(Dictionary<string, object> item)
         {
             if (item == null)
@@ -434,6 +489,11 @@ namespace GantryTool.Guide
 
             float customWidth = Json.Num(doc, WidthKey, 0f), customHeight = Json.Num(doc, HeightKey, 0f);
             bool square = Json.Has(doc, SquareKey);
+            if (Json.Has(doc, CompactKey))
+            {
+                wantedHeight = 0f;
+            }
+
             if (!fit && wantedHeight <= 0f && customWidth <= 0f && customHeight <= 0f)
             {
                 return free;
@@ -464,12 +524,12 @@ namespace GantryTool.Guide
                 doc.Remove(SquareKey);
                 square = false;
             }
-            else if (square)
+            else if (square || Json.Has(doc, OwnWidthKey))
             {
                 limit = 0f;
             }
 
-            if (fit || square || customWidth > 0f)
+            if ((fit && !Json.Has(doc, OwnWidthKey)) || square || customWidth > 0f)
             {
                 doc.Remove("minLanes");
                 doc.Remove("minWidth");
@@ -515,7 +575,7 @@ namespace GantryTool.Guide
                 doc["align"] = "center";
             }
 
-            if (fit && h.LaneArrows)
+            if (fit && h.LaneArrows && !Json.Has(doc, OwnWidthKey))
             {
                 // Sign x runs left to right as the driver sees it, the same way round as the lanes.
                 float flip = h.Side < 0 ? 1f : -1f;
@@ -539,6 +599,11 @@ namespace GantryTool.Guide
                 if (exitText != null)
                 {
                     row[ExitTextKey] = exitText;
+                }
+
+                if (arrowsAt >= 0 && Json.Has((Dictionary<string, object>)Json.Arr(doc, "items")[arrowsAt], BarKey))
+                {
+                    row[BarKey] = true;
                 }
 
                 if (own != null && own.Count > 0)
@@ -607,7 +672,7 @@ namespace GantryTool.Guide
             try
             {
                 var doc = Json.Parse(h.Design) as Dictionary<string, object>;
-                if (doc == null || Json.Num(doc, HeightKey, 0f) > 0f)
+                if (doc == null || Json.Num(doc, HeightKey, 0f) > 0f || Json.Has(doc, CompactKey))
                 {
                     return 0f;
                 }

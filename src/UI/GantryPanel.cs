@@ -382,7 +382,8 @@ namespace GantryTool.UI
             if (Settings.Current.AutoFillSigns)
             {
                 var placing = new GuideHead { Along = g.Span * 0.5f, Side = facing, FitFirst = first, FitLast = last };
-                GantryTool.Guide.GuideAutoFill.Fill(template, GantryTool.Detect.RoadFinder.Find(g, placing, template));
+                bool partly;
+                GantryTool.Detect.RoadFinder.Fill(g, placing, template, out partly);
             }
 
             string design = GantryTool.Guide.Json.Write(template);
@@ -429,7 +430,7 @@ namespace GantryTool.UI
             bool canAdd = extras < HeadRef.MaxExtraHeads;
             float halfRow = (_content.width - 6f) / 2f;
             RowButton(addRow, 0, halfRow, "Add signal (" + extras + " of " + HeadRef.MaxExtraHeads + ")",
-                canAdd ? "Add a signal head to this gantry: drag it anywhere on the beam, or link it to a lane"
+                canAdd ? "Add a signal to this gantry: drag it anywhere on the beam, or link it to a lane"
                        : "This gantry has the most added signals allowed", () =>
                 {
                     Gantry cur = GantryManager.Find(_gantryId);
@@ -529,10 +530,10 @@ namespace GantryTool.UI
                 }
             }
 
-            var drop = (UIDropDown)helper.AddDropdown("Sign style", items, selected, index =>
+            var drop = (UIDropDown)helper.AddDropdown("Signal style", items, selected, index =>
             {
                 byte style = index <= 0 || index > styles.Length ? (byte)SignStyle.Default : (byte)styles[index - 1];
-                Change(g, "sign style", () =>
+                Change(g, "signal style", () =>
                 {
                     g.Style = style;
                     g.SignalsDirty = true;

@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "primary-route",
+  "name": "Primary route",
+  "scheme": "green",
+  "align": "center",
+  "autoRoad": "exit",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "AP",
+          "number": "580",
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Liverpool",
+          "auto": "name"
+        },
+        {
+          "type": "arrow",
+          "direction": "right"
+        }
+      ],
+      "align": "center"
+    }
+  ],
+  "ownWidth": true
+}

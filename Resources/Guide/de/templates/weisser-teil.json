@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "weisser-teil",
+  "name": "Autobahn with white panel",
+  "scheme": "blue",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "A",
+          "number": "3",
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Köln",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "chip",
+      "scheme": "white",
+      "vertical": true,
+      "align": "start",
+      "items": [
+        {
+          "type": "text",
+          "text": "Messe",
+          "height": 12
+        },
+        {
+          "type": "text",
+          "text": "Deutz",
+          "height": 12
+        }
+      ]
+    }
+  ]
+}

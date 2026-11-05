@@ -8,12 +8,14 @@ using UnityEngine;
 namespace GantryTool.Render
 {
     /// <summary>
-    /// Pictures for custom signs: listed from a folder in the game's local data, and shrunk until they fit the save
-    /// (<see cref="CustomSigns.MaxImageBytes"/>). Main thread only (uses Unity textures).
+    /// Pictures for custom LED signs and guide signs: listed from a folder in the game's local data, and shrunk until they
+    /// fit the save. Main thread only (uses Unity textures).
     /// </summary>
     public static class ImageImport
     {
         private static readonly int[] Sizes = { 256, 192, 128, 96, 64, 48 };
+        private static readonly int[] GuideSizes = { 1024, 768, 512, 384, 256, 192, 128, 96, 64 };
+        private static readonly Dictionary<string, Texture2D> Previews = new Dictionary<string, Texture2D>();
         private const int MaxFileBytes = 20 * 1024 * 1024;
         private const int MaxSide = 4096;
 
@@ -55,6 +57,92 @@ namespace GantryTool.Render
         /// </summary>
         public static byte[] Load(string fileName, out string error)
         {
+            return Load(fileName, CustomSigns.MaxImageBytes, Sizes, out error);
+        }
+
+        /// <summary>The same for a guide sign, which is much bigger than a signal and shows a picture in more detail.</summary>
+        public static byte[] LoadForGuideSign(string fileName, out string error)
+        {
+            return Load(fileName, GantryTool.Guide.GuidePictures.MaxBytes, GuideSizes, out error);
+        }
+
+        /// <summary>Stored bytes as pixels, top row first; null if they aren't a picture.</summary>
+        public static GantryTool.Guide.GuideImage Decode(byte[] bytes)
+        {
+            var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+            try
+            {
+                if (!tex.LoadImage(bytes) || tex.width < 1 || tex.height < 1)
+                {
+                    return null;
+                }
+
+                Color32[] rows = tex.GetPixels32();
+                var pixels = new Color32[rows.Length];
+                int w = tex.width, h = tex.height;
+                for (int y = 0; y < h; y++)
+                {
+                    Array.Copy(rows, (h - 1 - y) * w, pixels, y * w, w);
+                }
+
+                return new GantryTool.Guide.GuideImage { Width = w, Height = h, Pixels = pixels };
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(tex);
+            }
+        }
+
+        /// <summary>A file's picture to show in a list, kept until <see cref="ForgetPreviews"/>; null if it can't be read.</summary>
+        public static Texture2D Preview(string fileName)
+        {
+            Texture2D tex;
+            if (Previews.TryGetValue(fileName, out tex))
+            {
+                return tex;
+            }
+
+            tex = null;
+            try
+            {
+                string path = Path.Combine(Folder, fileName);
+                if (new FileInfo(path).Length <= MaxFileBytes)
+                {
+                    var read = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                    if (read.LoadImage(File.ReadAllBytes(path)))
+                    {
+                        tex = read;
+                    }
+                    else
+                    {
+                        UnityEngine.Object.Destroy(read);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn("Couldn't show " + fileName + ": " + e.Message);
+            }
+
+            Previews[fileName] = tex;
+            return tex;
+        }
+
+        public static void ForgetPreviews()
+        {
+            foreach (Texture2D tex in Previews.Values)
+            {
+                if (tex != null)
+                {
+                    UnityEngine.Object.Destroy(tex);
+                }
+            }
+
+            Previews.Clear();
+        }
+
+        private static byte[] Load(string fileName, int maxBytes, int[] sizes, out string error)
+        {
             error = null;
             byte[] raw;
             try
@@ -62,7 +150,7 @@ namespace GantryTool.Render
                 string path = Path.Combine(Folder, fileName);
                 if (new FileInfo(path).Length > MaxFileBytes)
                 {
-                    error = fileName + " is over 20 MB; save a smaller copy (signs only need about 256 px)";
+                    error = fileName + " is over 20 MB; save a smaller copy";
                     return null;
                 }
 
@@ -90,13 +178,13 @@ namespace GantryTool.Render
                     return null;
                 }
 
-                if (raw.Length <= CustomSigns.MaxImageBytes && longest <= Sizes[0])
+                if (raw.Length <= maxBytes && longest <= sizes[0])
                 {
                     return raw; // small enough as it is
                 }
 
                 Color32[] src = tex.GetPixels32(); // 4 bytes a pixel, so big pictures don't need gigabytes
-                foreach (int size in Sizes)
+                foreach (int size in sizes)
                 {
                     if (size > longest)
                     {
@@ -104,7 +192,7 @@ namespace GantryTool.Render
                     }
 
                     byte[] png = Shrunk(src, tex.width, tex.height, size);
-                    if (png != null && png.Length <= CustomSigns.MaxImageBytes)
+                    if (png != null && png.Length <= maxBytes)
                     {
                         Log.Info("Custom sign picture " + fileName + ": " + tex.width + "x" + tex.height + ", " + raw.Length +
                                  " bytes -> " + size + " px, " + png.Length + " bytes");

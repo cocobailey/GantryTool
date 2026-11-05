@@ -1,0 +1,178 @@
+{
+  "formatVersion": 1,
+  "id": "uk",
+  "name": "United Kingdom",
+  "description": "Direction signs after the Traffic Signs Manual, Chapter 7 (Transport and Motorway fonts, Crown Copyright)",
+  "arrow": "M42 0 H58 V100 H82 L50 150 L18 100 H42 Z",
+  "units": "in",
+  "defaults": {
+    "font": "TransportMedium",
+    "textHeight": 14.0,
+    "shieldHeight": 15.0,
+    "arrowHeight": 19.5,
+    "border": 1.6,
+    "cornerRadius": 3.1,
+    "lineGap": 0.6,
+    "margin": 0.6,
+    "itemGap": 0.45,
+    "scheme": "green"
+  },
+  "fonts": [
+    {
+      "family": "TransportMedium",
+      "file": "fonts/TransportMedium.ttf",
+      "label": "Transport Medium (light on dark)",
+      "scale": 1.3403,
+      "offset": 0.0622
+    },
+    {
+      "family": "TransportHeavy",
+      "file": "fonts/TransportHeavy.ttf",
+      "label": "Transport Heavy (dark on light)",
+      "scale": 1.3403,
+      "offset": 0.1751
+    },
+    {
+      "family": "Motorway",
+      "file": "fonts/MotorwayPermanent.ttf",
+      "label": "Motorway (route numbers)",
+      "scale": 0.9534,
+      "offset": 0.1732
+    }
+  ],
+  "schemes": {
+    "blue": {
+      "bg": "#0b5ca6",
+      "fg": "#ffffff",
+      "label": "Motorway"
+    },
+    "green": {
+      "bg": "#00703c",
+      "fg": "#ffffff",
+      "label": "Primary route"
+    },
+    "white": {
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "label": "Non-primary / local"
+    },
+    "brown": {
+      "bg": "#6b3a1e",
+      "fg": "#ffffff",
+      "label": "Tourist"
+    },
+    "yellow": {
+      "bg": "#ffd400",
+      "fg": "#000000",
+      "label": "Temporary / diversion"
+    },
+    "black": {
+      "bg": "#14161a",
+      "fg": "#ffb300",
+      "label": "Variable message sign"
+    }
+  },
+  "shields": {
+    "M": {
+      "label": "Motorway number",
+      "shape": "plain",
+      "fg": "#ffffff",
+      "prefix": "M",
+      "font": "Motorway",
+      "num": 0.75,
+      "default": "1"
+    },
+    "MP": {
+      "label": "Motorway patch (on other signs)",
+      "shape": "rect",
+      "bg": "#0b5ca6",
+      "fg": "#ffffff",
+      "prefix": "M",
+      "font": "TransportMedium",
+      "num": 0.7,
+      "radius": 0.08,
+      "default": "1",
+      "border": "#ffffff"
+    },
+    "AP": {
+      "label": "Primary route number",
+      "shape": "plain",
+      "fg": "#ffd400",
+      "prefix": "A",
+      "font": "TransportMedium",
+      "num": 0.7,
+      "default": "1"
+    },
+    "APP": {
+      "label": "Primary route patch",
+      "shape": "rect",
+      "bg": "#00703c",
+      "fg": "#ffd400",
+      "prefix": "A",
+      "font": "TransportMedium",
+      "num": 0.65,
+      "radius": 0.08,
+      "default": "1"
+    },
+    "A": {
+      "label": "Non-primary route patch",
+      "shape": "rect",
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "border": "#000000",
+      "prefix": "A",
+      "font": "TransportHeavy",
+      "num": 0.6,
+      "radius": 0.08,
+      "default": "123"
+    },
+    "J": {
+      "label": "Junction number",
+      "shape": "rect",
+      "bg": "#000000",
+      "fg": "#ffffff",
+      "font": "TransportMedium",
+      "num": 0.56,
+      "radius": 0.08,
+      "default": "12",
+      "border": "#ffffff"
+    },
+    "MT": {
+      "label": "Motorway number on a panel",
+      "shape": "plain",
+      "fg": "#ffffff",
+      "prefix": "M",
+      "font": "TransportMedium",
+      "num": 0.7,
+      "default": "1"
+    },
+    "SPEED": {
+      "label": "Speed limit ring",
+      "shape": "img",
+      "img": "shields/speed-ring.svg",
+      "aspect": 1.0,
+      "fg": "#ffffff",
+      "num": 0.42,
+      "top": 0.29,
+      "font": "TransportMedium",
+      "default": "60"
+    }
+  },
+  "laneWidth": 157.48031496062993,
+  "presets": [],
+  "defaultSign": "motorway-lanes",
+  "exitTab": {
+    "font": "TransportMedium",
+    "height": 10
+  },
+  "exitOnlyFont": "TransportHeavy",
+  "words": {
+    "exitTab": "Jct 1",
+    "exitOnly": "EXIT"
+  },
+  "arrowStyles": {
+    "drop": {
+      "arrow": "M0 21 L139 54 V0 H225 V54 L364 21 L182 150 Z"
+    }
+  }
+}

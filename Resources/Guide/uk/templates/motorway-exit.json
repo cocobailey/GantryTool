@@ -1,0 +1,62 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "motorway-exit",
+  "name": "Motorway, exit lane",
+  "scheme": "blue",
+  "align": "center",
+  "arrowDirection": "down",
+  "arrowStyle": "drop",
+  "autoRoad": "exit",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "M",
+          "number": "62",
+          "height": 30,
+          "auto": "shield"
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Manchester",
+              "auto": "name"
+            },
+            {
+              "type": "text",
+              "text": "Leeds",
+              "auto": "name2"
+            }
+          ],
+          "align": "start",
+          "gap": 5.0
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        }
+      ],
+      "justify": "even",
+      "bar": true
+    }
+  ]
+}

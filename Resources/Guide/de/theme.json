@@ -1,0 +1,118 @@
+{
+  "formatVersion": 1,
+  "id": "de",
+  "name": "Europe (German style)",
+  "description": "Blue Autobahn and yellow main road signs, DIN 1451 lettering",
+  "arrow": "M42 0 H58 V100 H82 L50 150 L18 100 H42 Z",
+  "units": "in",
+  "defaults": {
+    "font": "DIN1451",
+    "textHeight": 15.5,
+    "shieldHeight": 17.0,
+    "arrowHeight": 23.5,
+    "border": 1.2,
+    "cornerRadius": 3.5,
+    "lineGap": 0.55,
+    "margin": 0.6,
+    "itemGap": 0.45,
+    "scheme": "blue"
+  },
+  "fonts": [
+    {
+      "family": "DIN1451",
+      "file": "fonts/AlteDIN1451Mittelschrift.ttf",
+      "label": "DIN 1451 Mittelschrift",
+      "scale": 1.4066,
+      "offset": 0.0017
+    }
+  ],
+  "schemes": {
+    "blue": {
+      "bg": "#1b5ca8",
+      "fg": "#ffffff",
+      "label": "Autobahn"
+    },
+    "yellow": {
+      "bg": "#f7cd00",
+      "fg": "#000000",
+      "label": "Bundes- / Landstraße"
+    },
+    "white": {
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "label": "Innerorts / local"
+    },
+    "brown": {
+      "bg": "#6d3b1f",
+      "fg": "#ffffff",
+      "label": "Touristisch"
+    },
+    "orange": {
+      "bg": "#f29200",
+      "fg": "#000000",
+      "label": "Umleitung / detour"
+    }
+  },
+  "shields": {
+    "A": {
+      "label": "Autobahn",
+      "shape": "img",
+      "img": "shields/autobahn.svg",
+      "aspect": 1.5,
+      "fg": "#ffffff",
+      "num": 0.58,
+      "top": 0.2,
+      "font": "DIN1451",
+      "wide": 1.2,
+      "default": "7"
+    },
+    "B": {
+      "label": "Bundesstraße",
+      "shape": "rect",
+      "bg": "#f7cd00",
+      "fg": "#000000",
+      "border": "#000000",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "27"
+    },
+    "E": {
+      "label": "Europastraße",
+      "shape": "rect",
+      "bg": "#00843d",
+      "fg": "#ffffff",
+      "border": "#ffffff",
+      "prefix": "E ",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "45"
+    },
+    "AS": {
+      "label": "Exit number",
+      "shape": "rect",
+      "bg": "#1b5ca8",
+      "fg": "#ffffff",
+      "border": "#ffffff",
+      "num": 0.6,
+      "radius": 0.3,
+      "default": "12"
+    }
+  },
+  "laneWidth": 157.48031496062993,
+  "presets": [],
+  "defaultSign": "autobahn-overhead",
+  "arrowStyles": {
+    "slim": {
+      "arrow": "M43 0 H57 V104 H76 L50 150 L24 104 H43 Z"
+    }
+  },
+  "exitOnlyFont": "DIN1451",
+  "words": {
+    "exitTab": "Ausfahrt 1",
+    "exitOnly": "AUSFAHRT"
+  },
+  "exitTab": {
+    "font": "DIN1451",
+    "height": 10
+  }
+}

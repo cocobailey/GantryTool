@@ -1,0 +1,109 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "autobahn-lanes",
+  "name": "Autobahn, lanes split",
+  "scheme": "blue",
+  "align": "center",
+  "minWidth": 360,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "autoRoad": "both",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "row",
+              "items": [
+                {
+                  "type": "shield",
+                  "network": "A",
+                  "number": "7",
+                  "auto": "shield"
+                },
+                {
+                  "type": "text",
+                  "text": "Hamburg",
+                  "auto": "name"
+                }
+              ],
+              "align": "center"
+            },
+            {
+              "type": "text",
+              "text": "Hannover",
+              "auto": "name2"
+            }
+          ],
+          "align": "center",
+          "gap": 4.0,
+          "autoRoad": "here"
+        },
+        {
+          "type": "divider",
+          "full": true
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "row",
+              "items": [
+                {
+                  "type": "shield",
+                  "network": "A",
+                  "number": "2",
+                  "auto": "shield"
+                },
+                {
+                  "type": "text",
+                  "text": "Berlin",
+                  "auto": "name"
+                }
+              ],
+              "align": "center"
+            },
+            {
+              "type": "text",
+              "text": "Dortmund",
+              "auto": "name2"
+            }
+          ],
+          "align": "center",
+          "gap": 4.0,
+          "autoRoad": "exit"
+        }
+      ],
+      "align": "center",
+      "justify": "even"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "up",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "up",
+          "height": 30,
+          "style": "slim"
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

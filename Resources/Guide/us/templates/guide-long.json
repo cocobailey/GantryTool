@@ -18,23 +18,27 @@
           "type": "shield",
           "network": "I",
           "number": "495",
-          "height": 36
+          "height": 36,
+          "auto": "shield"
         },
         {
           "type": "shield",
           "network": "STATE",
           "number": "128",
-          "height": 36
+          "height": 36,
+          "auto": "sample"
         }
       ]
     },
     {
       "type": "text",
-      "text": "Downtown Springfield"
+      "text": "Downtown Springfield",
+      "auto": "name"
     },
     {
       "type": "text",
-      "text": "Convention Center"
+      "text": "Convention Center",
+      "auto": "name2"
     },
     {
       "type": "row",
@@ -53,5 +57,6 @@
       ],
       "align": "center"
     }
-  ]
+  ],
+  "autoRoad": "exit"
 }

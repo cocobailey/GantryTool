@@ -68,6 +68,14 @@
     <!-- Guide signs: theme, templates, baked fonts and shields (tools\guide\make_assets.py) -->
     <EmbeddedResource Include="Resources\Guide\us\*" LogicalName="GantryTool.Guide.us.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Resources\Guide\us\templates\*.json" LogicalName="GantryTool.Guide.us.templates.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\nl\*" LogicalName="GantryTool.Guide.nl.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\nl\templates\*.json" LogicalName="GantryTool.Guide.nl.templates.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\de\*" LogicalName="GantryTool.Guide.de.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\de\templates\*.json" LogicalName="GantryTool.Guide.de.templates.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\au\*" LogicalName="GantryTool.Guide.au.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\au\templates\*.json" LogicalName="GantryTool.Guide.au.templates.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\uk\*" LogicalName="GantryTool.Guide.uk.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\Guide\uk\templates\*.json" LogicalName="GantryTool.Guide.uk.templates.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Resources\Guide\ca\*" LogicalName="GantryTool.Guide.ca.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Resources\Guide\ca\templates\*.json" LogicalName="GantryTool.Guide.ca.templates.%(Filename)%(Extension)" />
   </ItemGroup>

@@ -33,60 +33,49 @@
               "items": [
                 {
                   "type": "text",
-                  "text": "Hope"
+                  "text": "Hope",
+                  "auto": "name"
                 },
                 {
                   "type": "shield",
                   "network": "TCH",
                   "number": "1",
-                  "height": 26
+                  "height": 26,
+                  "auto": "shield"
                 },
                 {
                   "type": "text",
                   "text": "EAST",
                   "height": 9,
-                  "font": "RG2014D"
+                  "font": "RG2014D",
+                  "auto": "direction"
                 }
               ],
               "align": "center"
-            },
-            {
-              "type": "row",
-              "items": [
-                {
-                  "type": "arrow",
-                  "direction": "up",
-                  "style": "slim",
-                  "height": 44
-                },
-                {
-                  "type": "arrow",
-                  "direction": "split-right",
-                  "style": "slim",
-                  "height": 44
-                }
-              ],
-              "justify": "between"
             }
           ],
-          "align": "center"
+          "align": "center",
+          "autoRoad": "here"
         },
         {
-          "type": "divider"
+          "type": "divider",
+          "full": true
         },
         {
           "type": "column",
           "items": [
             {
               "type": "text",
-              "text": "152 St"
+              "text": "152 St",
+              "auto": "name"
             },
             {
               "type": "row",
               "items": [
                 {
                   "type": "text",
-                  "text": "Surrey"
+                  "text": "Surrey",
+                  "auto": "name2"
                 },
                 {
                   "type": "column",
@@ -105,23 +94,50 @@
                     }
                   ],
                   "align": "start",
-                  "gap": 1.0
+                  "gap": 1.0,
+                  "auto": "sample"
                 }
               ],
               "align": "center"
-            },
-            {
-              "type": "arrow",
-              "direction": "turn-right",
-              "style": "slim",
-              "height": 38
             }
           ],
-          "align": "center"
+          "align": "center",
+          "autoRoad": "exit"
         }
       ],
       "align": "center",
-      "justify": "between"
+      "justify": "even"
+    },
+    {
+      "type": "row",
+      "justify": "between",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up",
+          "style": "slim",
+          "height": 40
+        },
+        {
+          "type": "arrow",
+          "direction": "split-right",
+          "style": "slim",
+          "height": 40
+        },
+        {
+          "type": "arrow",
+          "direction": "turn-right",
+          "style": "slim",
+          "height": 40
+        },
+        {
+          "type": "arrow",
+          "direction": "turn-right",
+          "style": "slim",
+          "height": 40
+        }
+      ]
     }
-  ]
+  ],
+  "autoRoad": "both"
 }

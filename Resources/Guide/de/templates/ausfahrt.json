@@ -1,0 +1,44 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "ausfahrt",
+  "name": "Exit",
+  "scheme": "blue",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "AS",
+          "number": "12"
+        },
+        {
+          "type": "text",
+          "text": "Kassel-Nord",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Ausfahrt",
+          "height": 12
+        },
+        {
+          "type": "arrow",
+          "direction": "up-right",
+          "height": 18
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

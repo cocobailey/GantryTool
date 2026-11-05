@@ -53,7 +53,8 @@
             }
           ],
           "align": "start",
-          "gap": 1.0
+          "gap": 1.0,
+          "auto": "sample"
         }
       ],
       "align": "center"

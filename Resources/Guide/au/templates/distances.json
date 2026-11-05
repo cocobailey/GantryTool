@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "distances",
+  "name": "Distances",
+  "scheme": "green",
+  "align": "center",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Goulburn"
+        },
+        {
+          "type": "text",
+          "text": "85",
+          "margin": {
+            "left": 14
+          }
+        }
+      ],
+      "justify": "between"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Canberra"
+        },
+        {
+          "type": "text",
+          "text": "280",
+          "margin": {
+            "left": 14
+          }
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

@@ -212,7 +212,7 @@ namespace GantryTool.Data
         /// </summary>
         public static int ApplyToAllLanes(Gantry g, bool minusFace, FaceSign sign, bool bothFaces, bool sameDirectionOnly = false)
         {
-            UndoStack.PushModified(g, "signs on all lanes", coalesce: false);
+            UndoStack.PushModified(g, "signals on all lanes", coalesce: false);
             int changed = 0;
             for (int i = 0; i < g.Lanes.Count; i++)
             {
@@ -613,7 +613,7 @@ namespace GantryTool.Data
         public static int AddExtraHead(Gantry g, float along)
         {
             int head;
-            UndoStack.PushModified(g, "add sign", coalesce: false);
+            UndoStack.PushModified(g, "add signal", coalesce: false);
             lock (Lock)
             {
                 if (g.ExtraHeads.Count >= HeadRef.MaxExtraHeads)
@@ -676,7 +676,7 @@ namespace GantryTool.Data
         /// <summary>Deletes an extra head (undoable).</summary>
         public static void RemoveExtraHead(Gantry g, int head)
         {
-            UndoStack.PushModified(g, "delete sign", coalesce: false);
+            UndoStack.PushModified(g, "delete signal", coalesce: false);
             lock (Lock)
             {
                 int e = HeadRef.IndexOf(g.ExtraHeads, HeadRef.ExtraId(head));
@@ -708,7 +708,7 @@ namespace GantryTool.Data
                 Render.SignalMeshBuilder.ExtraLayout(g.Lanes, g.ExtraHeads[e], g.SignalSize, g.BeamDepth, g.Span, out along, out size);
             }
 
-            UndoStack.PushModified(g, "link sign", coalesce: false);
+            UndoStack.PushModified(g, "link signal", coalesce: false);
             UpdateExtra(g, head, h =>
             {
                 if (laneIndex >= 0 && laneIndex < g.Lanes.Count)

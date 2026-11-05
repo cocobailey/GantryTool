@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "tourist",
+  "name": "Tourist",
+  "scheme": "brown",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "Castle Howard"
+    },
+    {
+      "type": "arrow",
+      "direction": "right",
+      "height": 16
+    }
+  ],
+  "ownWidth": true
+}

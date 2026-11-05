@@ -1,0 +1,87 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "lanes",
+  "name": "Motorway, lanes split",
+  "scheme": "green",
+  "align": "center",
+  "minWidth": 340,
+  "arrowDirection": "down",
+  "arrowStyle": "slim",
+  "autoRoad": "both",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "M",
+              "number": "4",
+              "auto": "shield"
+            },
+            {
+              "type": "text",
+              "text": "Parramatta",
+              "auto": "name"
+            }
+          ],
+          "align": "center",
+          "gap": 4.0,
+          "autoRoad": "exit"
+        },
+        {
+          "type": "divider",
+          "full": true
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "M",
+              "number": "7",
+              "auto": "shield"
+            },
+            {
+              "type": "text",
+              "text": "Newcastle",
+              "auto": "name"
+            }
+          ],
+          "align": "center",
+          "gap": 4.0,
+          "autoRoad": "here"
+        }
+      ],
+      "align": "center",
+      "justify": "even"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        }
+      ],
+      "justify": "between"
+    }
+  ]
+}

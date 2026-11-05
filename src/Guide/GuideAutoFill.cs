@@ -16,8 +16,8 @@ namespace GantryTool.Guide
         {
             get
             {
-                MatchCollection found = Regex.Matches(Name ?? "", @"(?<![\w-])\d{1,4}(?![\w-])");
-                return found.Count > 0 ? found[found.Count - 1].Value : null;
+                MatchCollection found = Regex.Matches(Name ?? "", @"(?<![\w-])[A-Za-z]{0,2}(\d{1,4})(?![\w-])");
+                return found.Count > 0 ? found[found.Count - 1].Groups[1].Value : null;
             }
         }
     }
@@ -31,12 +31,14 @@ namespace GantryTool.Guide
         public const string RoadKey = "autoRoad";   // on the sign: which road it's about
         public const string RoadHere = "here";      // the one under the gantry
         public const string RoadExit = "exit";      // the one the next exit leads to
+        public const string RoadBoth = "both";      // parts of the sign say which of those they're about
         public const string WordsKey = "directionWords";
         public const string PartKey = "auto";       // on a part: what it shows
         public const string PartShield = "shield";
         public const string PartDirection = "direction";
         public const string PartName = "name";
         public const string PartSecondName = "name2";
+        public const string PartSample = "sample";  // only there to show what the sign can look like; goes once it's filled in
 
         public static string Cardinal(Vector2 heading)
         {
@@ -52,7 +54,60 @@ namespace GantryTool.Guide
         /// </summary>
         public static bool Fill(Dictionary<string, object> doc, List<RoadFacts> roads)
         {
-            if (roads == null || roads.Count == 0 || string.IsNullOrEmpty(roads[0].Name) || !Json.Has(doc, RoadKey))
+            if (!Json.Has(doc, RoadKey) || Json.Str(doc, RoadKey) == RoadBoth)
+            {
+                return false;
+            }
+
+            return FillPart(doc, doc, roads);
+        }
+
+        /// <summary>
+        /// For a sign about two roads: each part of it marked with one gets that road. Sides with nothing to write stay as
+        /// they were, and are counted in <paramref name="missing"/>. False if nothing was written at all.
+        /// </summary>
+        public static bool FillSections(Dictionary<string, object> doc, List<RoadFacts> here, List<RoadFacts> exit, out int missing)
+        {
+            missing = 0;
+            int filled = 0;
+            FillSections(doc, doc, here, exit, ref filled, ref missing);
+            return filled > 0;
+        }
+
+        private static void FillSections(Dictionary<string, object> doc, Dictionary<string, object> parent, List<RoadFacts> here, List<RoadFacts> exit, ref int filled, ref int missing)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (object o in new List<object>(items))
+            {
+                var item = o as Dictionary<string, object>;
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (!Json.Has(item, RoadKey))
+                {
+                    FillSections(doc, item, here, exit, ref filled, ref missing);
+                }
+                else if (FillPart(doc, item, Json.Str(item, RoadKey) == RoadExit ? exit : here))
+                {
+                    filled++;
+                }
+                else
+                {
+                    missing++;
+                }
+            }
+        }
+
+        private static bool FillPart(Dictionary<string, object> doc, Dictionary<string, object> part, List<RoadFacts> roads)
+        {
+            if (roads == null || roads.Count == 0 || string.IsNullOrEmpty(roads[0].Name))
             {
                 return false;
             }
@@ -65,8 +120,8 @@ namespace GantryTool.Guide
 
             RoadFacts first = roads[0];
             string second = roads.Count > 1 && CanWrite(theme, roads[1].Name) ? roads[1].Name : null;
-            bool onShield = first.Number != null && HasPart(doc, PartShield);
-            Write(doc, doc, first, second, onShield);
+            bool onShield = first.Number != null && HasPart(part, PartShield);
+            Write(doc, part, first, second, onShield);
             return true;
         }
 
@@ -168,6 +223,9 @@ namespace GantryTool.Guide
                             item["text"] = second;
                         }
 
+                        break;
+                    case PartSample:
+                        keep = false;
                         break;
                 }
 

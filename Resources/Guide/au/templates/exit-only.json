@@ -1,0 +1,73 @@
+{
+  "formatVersion": 1,
+  "theme": "au",
+  "id": "exit-only",
+  "name": "Exit only",
+  "scheme": "green",
+  "align": "center",
+  "arrowDirection": "down",
+  "arrowStyle": "slim",
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "tab",
+      "align": "left",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT 21",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "A",
+          "number": "32",
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Penrith",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 30,
+          "style": "slim"
+        }
+      ],
+      "justify": "between"
+    },
+    {
+      "type": "panel",
+      "scheme": "yellow",
+      "align": "center",
+      "items": [
+        {
+          "type": "text",
+          "text": "EXIT ONLY",
+          "height": 12,
+          "font": "RG2014E"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "primary-lanes",
+  "name": "Primary route, lanes split",
+  "scheme": "green",
+  "align": "center",
+  "minWidth": 340,
+  "arrowDirection": "down",
+  "arrowStyle": "drop",
+  "autoRoad": "both",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "row",
+          "items": [
+            {
+              "type": "shield",
+              "network": "AP",
+              "number": "580",
+              "auto": "shield"
+            },
+            {
+              "type": "column",
+              "items": [
+                {
+                  "type": "text",
+                  "text": "Liverpool",
+                  "auto": "name"
+                },
+                {
+                  "type": "text",
+                  "text": "Widnes",
+                  "auto": "name2"
+                }
+              ],
+              "align": "start",
+              "gap": 5.0
+            }
+          ],
+          "align": "center",
+          "autoRoad": "exit"
+        },
+        {
+          "type": "divider",
+          "full": true
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "St Helens",
+              "auto": "name"
+            },
+            {
+              "type": "shield",
+              "network": "AP",
+              "number": "58",
+              "auto": "shield"
+            }
+          ],
+          "align": "center",
+          "gap": 5.0,
+          "autoRoad": "here"
+        }
+      ],
+      "align": "center",
+      "justify": "even"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        }
+      ],
+      "justify": "between",
+      "bar": true
+    }
+  ]
+}

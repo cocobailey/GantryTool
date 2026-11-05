@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "theme": "nl",
+  "id": "afrit",
+  "name": "Exit",
+  "scheme": "blue",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "AFRIT",
+          "number": "12"
+        },
+        {
+          "type": "text",
+          "text": "Hilversum",
+          "auto": "name"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "N",
+          "number": "201",
+          "auto": "shield"
+        },
+        {
+          "type": "arrow",
+          "direction": "up-right",
+          "height": 20
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

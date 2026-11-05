@@ -1,0 +1,81 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "autobahn-overhead",
+  "name": "Autobahn, overhead",
+  "scheme": "blue",
+  "align": "center",
+  "minWidth": 250,
+  "arrowDirection": "up",
+  "arrowStyle": "slim",
+  "autoRoad": "here",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "A",
+              "number": "42",
+              "height": 18,
+              "auto": "shield"
+            },
+            {
+              "type": "arrow",
+              "direction": "up",
+              "height": 46,
+              "style": "slim"
+            }
+          ],
+          "align": "center",
+          "gap": 3.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "text",
+              "text": "Dortmund",
+              "auto": "name"
+            },
+            {
+              "type": "text",
+              "text": "Gelsenkirchen"
+            },
+            {
+              "type": "text",
+              "text": "Essen"
+            }
+          ],
+          "align": "center",
+          "gap": 4.0
+        },
+        {
+          "type": "column",
+          "items": [
+            {
+              "type": "shield",
+              "network": "A",
+              "number": "42",
+              "height": 18,
+              "auto": "shield"
+            },
+            {
+              "type": "arrow",
+              "direction": "up",
+              "height": 46,
+              "style": "slim"
+            }
+          ],
+          "align": "center",
+          "gap": 3.0
+        }
+      ],
+      "align": "center",
+      "justify": "between"
+    }
+  ]
+}

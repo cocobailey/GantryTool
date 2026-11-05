@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "ortsziel",
+  "name": "Local",
+  "scheme": "white",
+  "align": "start",
+  "ownWidth": true,
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "left"
+        },
+        {
+          "type": "text",
+          "text": "Zentrum"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "right"
+        },
+        {
+          "type": "text",
+          "text": "Bahnhof"
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

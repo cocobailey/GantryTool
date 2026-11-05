@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "theme": "de",
+  "id": "bundesstrasse",
+  "name": "Main road",
+  "scheme": "yellow",
+  "align": "center",
+  "ownWidth": true,
+  "autoRoad": "exit",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "shield",
+          "network": "B",
+          "number": "27",
+          "auto": "shield"
+        },
+        {
+          "type": "text",
+          "text": "Göttingen",
+          "auto": "name"
+        },
+        {
+          "type": "arrow",
+          "direction": "right"
+        }
+      ],
+      "align": "center"
+    }
+  ]
+}

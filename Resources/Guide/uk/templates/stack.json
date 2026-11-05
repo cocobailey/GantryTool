@@ -1,0 +1,71 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "stack",
+  "name": "Stack",
+  "scheme": "green",
+  "align": "start",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "up"
+        },
+        {
+          "type": "shield",
+          "network": "AP",
+          "number": "1"
+        },
+        {
+          "type": "text",
+          "text": "Newcastle"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "left"
+        },
+        {
+          "type": "shield",
+          "network": "AP",
+          "number": "68"
+        },
+        {
+          "type": "text",
+          "text": "Darlington"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "right"
+        },
+        {
+          "type": "chip",
+          "scheme": "white",
+          "items": [
+            {
+              "type": "text",
+              "text": "Hexham",
+              "height": 12,
+              "font": "TransportHeavy"
+            }
+          ]
+        }
+      ],
+      "align": "center"
+    }
+  ],
+  "ownWidth": true
+}

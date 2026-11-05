@@ -184,7 +184,10 @@ namespace GantryTool.Guide
                 case "shield": return Json.Num(item, "height", t.ShieldHeight);
                 case "arrow":
                 case "laneArrows": return Json.Num(item, "height", t.ArrowHeight);
-                case "symbol": return Json.Num(item, "height", t.ShieldHeight);
+                case "symbol":
+                    // A big imported picture shouldn't push the sign's margins out with it.
+                    float symbol = Json.Num(item, "height", t.ShieldHeight);
+                    return Json.Has(item, GuidePictures.PartKey) ? Mathf.Min(symbol, t.ShieldHeight) : symbol;
                 case "spacer": return Json.Num(item, "height", 0f);
                 case "row":
                 case "column":
@@ -269,6 +272,7 @@ namespace GantryTool.Guide
         {
             public string Shape;
             public GuideImage Image;
+            public bool Smooth;
             public Color32 Bg, BorderColour;
             public bool HasBorder;
             public float Radius, BorderWidth;
@@ -289,7 +293,14 @@ namespace GantryTool.Guide
                 float x0 = X * ppi, y0 = Y * ppi, x1 = (X + W) * ppi, y1 = (Y + H) * ppi;
                 if (Shape == "img" && Image != null)
                 {
-                    c.DrawImage(Image.Pixels, Image.Width, Image.Height, x0, y0, x1, y1);
+                    if (Smooth)
+                    {
+                        c.DrawImageSmooth(Image.Pixels, Image.Width, Image.Height, x0, y0, x1, y1);
+                    }
+                    else
+                    {
+                        c.DrawImage(Image.Pixels, Image.Width, Image.Height, x0, y0, x1, y1);
+                    }
                 }
                 else if (Shape == "ellipse")
                 {
@@ -347,6 +358,8 @@ namespace GantryTool.Guide
             public readonly List<Node> Arrows = new List<Node>();
             public readonly List<float> At = new List<float>();
             public readonly List<ExitSection> Sections = new List<ExitSection>();
+            public float BarHeight;     // a bar across the sign, with the lanes' arrows hanging from it
+            public readonly List<float> LaneEdges = new List<float>();   // where lanes meet, from the sign's centre
 
             public override void Arrange(float x, float y, float w, float h)
             {
@@ -357,7 +370,7 @@ namespace GantryTool.Guide
                 {
                     Node a = Arrows[i];
                     float left = Mathf.Clamp(mid + At[i] - a.W * 0.5f, x, Mathf.Max(x, x + w - a.W));
-                    a.Arrange(left, y + (H - band - a.H) * 0.5f, a.W, a.H);
+                    a.Arrange(left, y + BarHeight + (H - BarHeight - band - a.H) * 0.5f, a.W, a.H);
                 }
 
                 foreach (ExitSection s in Sections)
@@ -380,6 +393,11 @@ namespace GantryTool.Guide
                 foreach (ExitSection s in Sections)
                 {
                     s.Draw(c, ppi);
+                }
+
+                if (BarHeight > 0f && Arrows.Count > 0)
+                {
+                    c.FillRect(X * ppi, Y * ppi, (X + AW) * ppi, (Y + BarHeight) * ppi, Arrows[0] is ArrowNode ? ((ArrowNode)Arrows[0]).Colour : new Color32(255, 255, 255, 255));
                 }
 
                 foreach (Node a in Arrows)
@@ -467,6 +485,7 @@ namespace GantryTool.Guide
         private sealed class BlockNode : Node
         {
             public bool Painted;
+            public bool FullHeight;     // a divider that runs from the sign's top edge to its bottom, between panels
             public Color32 Colour;
 
             public override void Draw(SignCanvas c, float ppi)
@@ -713,6 +732,13 @@ namespace GantryTool.Guide
                 case "symbol":
                 {
                     float size = Json.Num(item, "height", t.ShieldHeight);
+                    string picture = Json.Str(item, GuidePictures.PartKey);
+                    if (picture != null)
+                    {
+                        float wide = Mathf.Clamp(Json.Num(item, GuidePictures.AspectKey, 1f), 0.1f, 10f);
+                        return new ShieldNode { Shape = "img", Image = GuidePictures.Image(picture), Smooth = true, W = size * wide, H = size };
+                    }
+
                     return new ShieldNode { Shape = "img", Image = GuideAssets.Image(t.Id, Json.Str(item, "name", "")), W = size, H = size };
                 }
 
@@ -745,7 +771,8 @@ namespace GantryTool.Guide
                         W = inRow ? th : 0f,
                         H = inRow ? 0f : th,
                         Fill = !inRow,
-                        Divider = inRow
+                        Divider = inRow,
+                        FullHeight = inRow && Json.Has(item, "full")
                     };
                 }
 
@@ -832,13 +859,21 @@ namespace GantryTool.Guide
 
         private static Node BuildLaneArrows(Theme t, Dictionary<string, object> item, Ctx ctx)
         {
-            var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight) };
+            var node = new LaneArrowsNode { Fill = true, H = Json.Num(item, "height", t.ArrowHeight), BarHeight = Json.Has(item, GuideFit.BarKey) ? t.Border : 0f };
             List<object> at = Json.Arr(item, "at");
             List<object> edges = Json.Arr(item, "edges");
             List<Dictionary<string, object>> arrows = Children(item);
             Color32 exitBg, exitFg;
             t.Scheme("yellow", out exitBg, out exitFg);
             ExitSection section = null;
+            for (int i = 1; edges != null && i + 1 < edges.Count; i += 2)
+            {
+                if (edges[i] is double && edges[i + 1] is double)
+                {
+                    node.LaneEdges.Add((float)(((double)edges[i] + (double)edges[i + 1]) * 0.5));
+                }
+            }
+
             for (int i = 0; at != null && i < at.Count && i < arrows.Count && node.At.Count < 64; i++)
             {
                 bool exitOnly = arrows[i].ContainsKey(GuideFit.ExitOnlyKey) && edges != null && 2 * i + 1 < edges.Count &&
@@ -864,8 +899,8 @@ namespace GantryTool.Guide
                     section = new ExitSection
                     {
                         Theme = t,
-                        Wording = Json.Str(item, GuideFit.ExitTextKey, GuideFit.DefaultExitText),
-                        Font = "RG2014D",
+                        Wording = Json.Str(item, GuideFit.ExitTextKey, GuideThemes.Word(t.Id, GuideFit.ExitOnlyWord, GuideFit.DefaultExitText)),
+                        Font = Json.Str(t.Def, "exitOnlyFont", "RG2014D"),
                         Bg = exitBg,
                         Fg = exitFg,
                         Left = (float)(double)edges[2 * i]
@@ -876,6 +911,7 @@ namespace GantryTool.Guide
                 section.Right = (float)(double)edges[2 * i + 1];
             }
 
+            node.H += node.BarHeight;
             if (node.Sections.Count > 0)
             {
                 node.H += ExitSection.Height + ExitSection.Gap;
@@ -1334,6 +1370,16 @@ namespace GantryTool.Guide
             canvas.FillRoundRect(2f * border * ppu, (y0 + 2f * border) * ppu, (width - 2f * border) * ppu, (y1 - 2f * border) * ppu,
                 iir * rTL * ppu, iir * rTR * ppu, iir * ppu, iir * ppu, bg);
 
+            // A picture covering the whole sign, keeping its shape, over the background and under anything added on top.
+            GuideImage cover = GuidePictures.Image(Json.Str(doc, GuidePictures.PartKey));
+            if (cover != null)
+            {
+                float scale = Mathf.Min(width / cover.Width, (y1 - y0) / cover.Height);
+                float cw0 = cover.Width * scale, ch0 = cover.Height * scale;
+                float cx0 = (width - cw0) * 0.5f, cy0 = y0 + (y1 - y0 - ch0) * 0.5f;
+                canvas.DrawImageSmooth(cover.Pixels, cover.Width, cover.Height, cx0 * ppu, cy0 * ppu, (cx0 + cw0) * ppu, (cy0 + ch0) * ppu);
+            }
+
             float inner = width - 4f * border, pen = y0 + 2f * border;
 
             // Spare height goes around the first run of content, so it stays centred above any band.
@@ -1354,6 +1400,8 @@ namespace GantryTool.Guide
                 {
                     float extra = k == spareAt ? extraH : 0f;
                     parts[k].Arrange(2f * border + margin, pen + margin + extra * 0.5f, inner - 2f * margin, parts[k].H);
+                    ReachDividers(parts[k], pen, pen + parts[k].H + 2f * margin + extra);
+                    DividerOnLaneEdge(parts[k]);
                     var stack = parts[k] as StackNode;
                     var laneRow = stack != null && stack.Items.Count > 0 ? stack.Items[stack.Items.Count - 1] as LaneArrowsNode : null;
                     if (laneRow != null)
@@ -1412,6 +1460,113 @@ namespace GantryTool.Guide
                 Tabs = tabShapes,
                 Parts = CollectParts(doc)
             };
+        }
+
+        /// <summary>
+        /// A dividing line goes in the middle, or over lane arrows where two lanes meet nearest the middle, with what's
+        /// either side of it centred in its own share. If no place leaves enough room for the words, it stays where it was.
+        /// </summary>
+        private static void DividerOnLaneEdge(Node part)
+        {
+            var stack = part as StackNode;
+            if (stack == null || stack.Items.Count == 0)
+            {
+                return;
+            }
+
+            var lanes = stack.Items[stack.Items.Count - 1] as LaneArrowsNode;
+            bool overLanes = lanes != null && lanes.LaneEdges.Count > 0;
+            foreach (Node n in stack.Items)
+            {
+                var row = n as StackNode;
+                int line = row != null ? row.Items.FindIndex(i => i.Divider) : -1;
+                if (line <= 0 || line == row.Items.Count - 1 || row.Items.FindLastIndex(i => i.Divider) != line || (!overLanes && row.Justify == null))
+                {
+                    continue;
+                }
+
+                float from = overLanes ? lanes.X : row.X, to = from + (overLanes ? lanes.AW : row.AW);
+                float leftWide = SideWidth(row, 0, line), rightWide = SideWidth(row, line + 1, row.Items.Count);
+                float middle = (from + to) * 0.5f, at = middle;
+                bool fits = leftWide <= at - from && rightWide <= to - at;
+                if (overLanes)
+                {
+                    // Where two lanes meet, nearest the middle that leaves room for the words on both sides.
+                    fits = false;
+                    float nearest = float.MaxValue;
+                    foreach (float edge in lanes.LaneEdges)
+                    {
+                        float there = middle + edge;
+                        if (Mathf.Abs(edge) < nearest && leftWide <= there - from && rightWide <= to - there)
+                        {
+                            nearest = Mathf.Abs(edge);
+                            at = there;
+                            fits = true;
+                        }
+                    }
+                }
+
+                if (!fits)
+                {
+                    // Nowhere to put it: it stays between the words, and doesn't run down through a lane's arrow.
+                    if (overLanes)
+                    {
+                        Node between = row.Items[line];
+                        between.Arrange(between.X, row.Y, between.AW, row.AH);
+                    }
+
+                    continue;
+                }
+
+                Node divider = row.Items[line];
+                divider.Arrange(at - divider.AW * 0.5f, divider.Y, divider.AW, divider.AH);
+                PlaceSide(row, 0, line, (from + at - leftWide) * 0.5f);
+                PlaceSide(row, line + 1, row.Items.Count, (at + to - rightWide) * 0.5f);
+            }
+        }
+
+        private static float SideWidth(StackNode row, int first, int end)
+        {
+            float wide = 0f;
+            for (int i = first; i < end; i++)
+            {
+                Node n = row.Items[i];
+                wide += (i > first ? row.Gaps[i] : 0f) + n.MarginLeft + n.W + n.MarginRight;
+            }
+
+            return wide;
+        }
+
+        private static void PlaceSide(StackNode row, int first, int end, float pen)
+        {
+            for (int i = first; i < end; i++)
+            {
+                Node n = row.Items[i];
+                pen += (i > first ? row.Gaps[i] : 0f) + n.MarginLeft;
+                n.Arrange(pen, n.Y, n.W, n.AH);
+                pen += n.W + n.MarginRight;
+            }
+        }
+
+        /// <summary>Runs a part's full-height dividers from one edge of it to the other.</summary>
+        private static void ReachDividers(Node part, float top, float bottom)
+        {
+            var stack = part as StackNode;
+            if (stack == null)
+            {
+                return;
+            }
+
+            foreach (Node n in stack.Items)
+            {
+                var block = n as BlockNode;
+                if (block != null && block.FullHeight)
+                {
+                    block.Arrange(block.X, top, block.AW, bottom - top);
+                }
+
+                ReachDividers(n, top, bottom);
+            }
         }
 
         private static TabLayout BuildTab(Theme t, Dictionary<string, object> item, Ctx ctx, string font, Color32 bg, Color32 fg, float border)

@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "smart-motorway",
+  "name": "Smart motorway sign",
+  "scheme": "black",
+  "align": "center",
+  "minWidth": 170,
+  "cornerRadius": 0.0,
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "symbol",
+          "name": "warning",
+          "height": 44
+        },
+        {
+          "type": "shield",
+          "network": "SPEED",
+          "number": "60",
+          "height": 44
+        }
+      ],
+      "justify": "between",
+      "align": "center"
+    },
+    {
+      "type": "text",
+      "text": "QUEUE",
+      "height": 16,
+      "font": "TransportHeavy"
+    },
+    {
+      "type": "text",
+      "text": "AHEAD",
+      "height": 16,
+      "font": "TransportHeavy"
+    }
+  ],
+  "ownWidth": true
+}

@@ -16,13 +16,16 @@ namespace GantryTool.Guide
 
     /// <summary>
     /// The player's own saved signs: one design file each, so they work in every city and can be passed around. Placed
-    /// signs keep their own copy of the design, so nothing placed depends on these files. Testable outside the game.
+    /// signs keep their own copy of the design, so nothing placed depends on these files. A sign's imported pictures go
+    /// inside its file, so the one file is all there is to pass around. Testable outside the game.
     /// </summary>
     public static class MySigns
     {
         public const string IdPrefix = "my:";
         public const int MaxNameLength = 40;
         private const string FilePrefix = "sign-";
+        private const string PicturesKey = "pictures";
+        private const long MaxFileLength = 8L * 1024 * 1024;
 
         public static string CleanName(string name)
         {
@@ -80,13 +83,19 @@ namespace GantryTool.Guide
         {
             try
             {
-                if (new FileInfo(file).Length > GuideData.MaxDesignLength)
+                if (new FileInfo(file).Length > MaxFileLength)
                 {
                     return null;
                 }
 
                 var doc = Json.Parse(File.ReadAllText(file, Encoding.UTF8)) as Dictionary<string, object>;
                 if (doc == null)
+                {
+                    return null;
+                }
+
+                TakePictures(doc);
+                if (Json.Write(doc).Length > GuideData.MaxDesignLength)
                 {
                     return null;
                 }
@@ -123,6 +132,15 @@ namespace GantryTool.Guide
                     return false;
                 }
 
+                if (PutPictures(copy))
+                {
+                    text = Json.Write(copy);
+                    if (text.Length > MaxFileLength)
+                    {
+                        return false;
+                    }
+                }
+
                 Directory.CreateDirectory(folder);
                 File.WriteAllText(FilePath(folder, clean), text, Encoding.UTF8);
                 return true;
@@ -131,6 +149,51 @@ namespace GantryTool.Guide
             {
                 Log.Error("Could not save sign " + clean, e);
                 return false;
+            }
+        }
+
+        private static bool PutPictures(Dictionary<string, object> doc)
+        {
+            var ids = new HashSet<string>();
+            GuidePictures.IdsIn(doc, ids);
+            var pictures = new Dictionary<string, object>();
+            foreach (string id in ids)
+            {
+                byte[] bytes = GuidePictures.Bytes(id);
+                if (bytes != null)
+                {
+                    pictures[id] = Convert.ToBase64String(bytes);
+                }
+            }
+
+            if (pictures.Count > 0)
+            {
+                doc[PicturesKey] = pictures;
+            }
+
+            return pictures.Count > 0;
+        }
+
+        /// <summary>Moves the pictures in a sign's file out of its design and into the city's pictures.</summary>
+        private static void TakePictures(Dictionary<string, object> doc)
+        {
+            Dictionary<string, object> pictures = Json.Obj(doc, PicturesKey);
+            doc.Remove(PicturesKey);
+            if (pictures == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<string, object> picture in pictures)
+            {
+                try
+                {
+                    GuidePictures.Add(Convert.FromBase64String(picture.Value as string ?? ""));
+                }
+                catch (FormatException)
+                {
+                    Log.Warn("Skipped a damaged picture in a saved sign");
+                }
             }
         }
 

@@ -24,6 +24,7 @@ namespace GantryTool.Guide
     /// </summary>
     public static class GuideDrag
     {
+        private const float LevelFrom = 0.2f;   // how far into a part's height "beside it" starts
         private const float SideShare = 0.3f;   // how much of a part's width at each end means "beside it"
 
         private static bool Holds(string type)
@@ -156,7 +157,9 @@ namespace GantryTool.Guide
 
                 best = distance;
                 found = true;
-                bool level = p.Type != "panel" && p.Type != "laneArrows";
+                // Over or under a part means above or below it, wherever along it; beside it takes being level with it.
+                float down = (y - p.Y) / p.H;
+                bool level = p.Type != "panel" && p.Type != "laneArrows" && down >= LevelFrom && down <= 1f - LevelFrom;
                 DropSide side;
                 if (level && x < p.X + p.W * SideShare)
                 {
@@ -231,6 +234,7 @@ namespace GantryTool.Guide
             if (vertical || (parent != doc && Holds(Json.Str(parent, "type"))))
             {
                 list.Insert(after ? at + 1 : at, moving);
+                Tidy(doc);
                 return true;
             }
 
@@ -240,7 +244,34 @@ namespace GantryTool.Guide
                 { "type", "row" },
                 { "items", new List<object> { after ? target : moving, after ? moving : target } }
             };
+            Tidy(doc);
             return true;
+        }
+
+        /// <summary>A plain row left holding one thing, after that thing's neighbour was dragged away, is just that thing.</summary>
+        private static void Tidy(Dictionary<string, object> parent)
+        {
+            List<object> items = Json.Arr(parent, "items");
+            if (items == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i] as Dictionary<string, object>;
+                if (item == null)
+                {
+                    continue;
+                }
+
+                Tidy(item);
+                List<object> inner = Json.Arr(item, "items");
+                if (Json.Str(item, "type") == "row" && item.Count == 2 && inner != null && inner.Count == 1)
+                {
+                    items[i] = inner[0];
+                }
+            }
         }
     }
 }

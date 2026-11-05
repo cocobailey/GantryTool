@@ -1,0 +1,123 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "motorway-lanes",
+  "name": "Motorway, lanes split",
+  "scheme": "blue",
+  "align": "center",
+  "minWidth": 420,
+  "arrowDirection": "down",
+  "arrowStyle": "drop",
+  "autoRoad": "both",
+  "directionWords": [
+    "The EAST",
+    "The NORTH",
+    "The WEST",
+    "The SOUTH"
+  ],
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "row",
+          "items": [
+            {
+              "type": "shield",
+              "network": "M",
+              "number": "3",
+              "height": 30,
+              "auto": "shield"
+            },
+            {
+              "type": "column",
+              "items": [
+                {
+                  "type": "text",
+                  "text": "The SOUTH WEST",
+                  "auto": "direction"
+                },
+                {
+                  "type": "text",
+                  "text": "Southampton",
+                  "auto": "name"
+                },
+                {
+                  "type": "text",
+                  "text": "Basingstoke",
+                  "auto": "name2"
+                }
+              ],
+              "align": "start",
+              "gap": 5.0
+            }
+          ],
+          "align": "center",
+          "autoRoad": "exit"
+        },
+        {
+          "type": "divider",
+          "full": true
+        },
+        {
+          "type": "row",
+          "items": [
+            {
+              "type": "column",
+              "items": [
+                {
+                  "type": "text",
+                  "text": "Dartford",
+                  "auto": "name"
+                },
+                {
+                  "type": "text",
+                  "text": "Gatwick",
+                  "auto": "name2"
+                }
+              ],
+              "align": "start",
+              "gap": 5.0
+            },
+            {
+              "type": "shield",
+              "network": "M",
+              "number": "25",
+              "height": 30,
+              "auto": "shield"
+            }
+          ],
+          "align": "center",
+          "autoRoad": "here"
+        }
+      ],
+      "align": "center",
+      "justify": "even"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 15,
+          "style": "drop"
+        }
+      ],
+      "justify": "between",
+      "bar": true
+    }
+  ]
+}

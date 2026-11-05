@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "diversion",
+  "name": "Diversion",
+  "scheme": "yellow",
+  "align": "center",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "text",
+          "text": "Diversion",
+          "font": "TransportHeavy"
+        },
+        {
+          "type": "arrow",
+          "direction": "left"
+        }
+      ],
+      "align": "center"
+    }
+  ],
+  "ownWidth": true
+}

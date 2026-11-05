@@ -165,25 +165,25 @@ namespace GantryTool.UI
             _grid.width = PanelWidth - 2f * Margin;
             _grid.height = CellHeight;
 
-            _applyLabel = UIUtils.CreateLabel(this, "Apply this sign to:", 0.75f);
+            _applyLabel = UIUtils.CreateLabel(this, "Show this on:", 0.75f);
             _applyDirection = CreateButton("Same direction", ThirdWidth, () => Apply(false, true));
-            _applyDirection.tooltip = "Put this sign on every lane heading the same way as this one";
+            _applyDirection.tooltip = "Show this on every lane heading the same way as this one";
             _applySide = CreateButton("All lanes", ThirdWidth, () => Apply(false, false));
-            _applySide.tooltip = "Put this face's sign on the same side of every lane, whichever way it runs";
+            _applySide.tooltip = "Show this on the same side of every lane, whichever way it runs";
             _applyAll = CreateButton("Whole gantry", ThirdWidth, () => Apply(true, false));
-            _applyAll.tooltip = "Put this sign on both sides of every lane";
+            _applyAll.tooltip = "Show this on both sides of every lane";
             _layoutBox = AddUIComponent<UIPanel>();
             _layoutBox.width = PanelWidth - 2f * Margin;
 
             BuildCustomBox();
 
-            _reset = CreateButton("Reset signs", ThirdWidth, ResetToAuto);
+            _reset = CreateButton("Reset signal", ThirdWidth, ResetToAuto);
             _reset.tooltip = "Set both faces back to Auto";
             _resetLayout = CreateButton("Reset position", ThirdWidth, ResetHeadLayout);
-            _resetLayout.tooltip = "Centre this head over its lane at the gantry's box size";
-            _remove = CreateButton("Remove head", ThirdWidth, ToggleRemoved);
+            _resetLayout.tooltip = "Centre this signal over its lane at the gantry's box size";
+            _remove = CreateButton("Remove signal", ThirdWidth, ToggleRemoved);
 
-            _hint = UIUtils.CreateLabel(this, "Click another head to edit it. Removed heads still highlight on hover. Ctrl+Z undoes.", 0.7f);
+            _hint = UIUtils.CreateLabel(this, "Click another signal to edit it. Removed signals still highlight on hover. Ctrl+Z undoes.", 0.7f);
             _hint.textColor = new Color32(170, 170, 170, 255);
             _hint.autoSize = false;
             _hint.width = PanelWidth - 2f * Margin;
@@ -325,8 +325,8 @@ namespace GantryTool.UI
             string traffic = !hasLane ? ""
                 : info.TravelSign == 0 ? ", two-way" : ", traffic heading " + LaneScanner.Compass(side * info.TravelSign);
             _info.text = !extra ? "Gantry #" + g.Id + ", lane " + (lane + 1) + " of " + g.Lanes.Count + traffic
-                : hasLane ? "Gantry #" + g.Id + ", added sign on lane " + (infoLane + 1) + traffic
-                : "Gantry #" + g.Id + ", added sign (not linked to a lane)";
+                : hasLane ? "Gantry #" + g.Id + ", added signal on lane " + (infoLane + 1) + traffic
+                : "Gantry #" + g.Id + ", added signal (not linked to a lane)";
 
             FaceSign minus, plus, shownMinus, shownPlus;
             SignalSymbol autoMinus = SignalSymbol.Blank, autoPlus = SignalSymbol.Blank;
@@ -355,7 +355,7 @@ namespace GantryTool.UI
 
             FaceSign current = _minusSelected ? minus : plus;
             SignalSymbol auto = _minusSelected ? autoMinus : autoPlus;
-            _categoryLabel.text = hidden ? "Pick a sign to restore this head" : "";
+            _categoryLabel.text = hidden ? "Pick what to show to bring this signal back" : "";
             BuildGrid(style, Items(style, mph, auto, hasLane ? info.SpeedKmh : 0f, current.Symbol, hasLane), current, hidden, mph);
 
             // Lay out what follows the grid: custom sign maker, Apply row, position and size, then one row of actions.
@@ -390,9 +390,9 @@ namespace GantryTool.UI
             _reset.relativePosition = new Vector3(Margin, y);
             _resetLayout.relativePosition = new Vector3(Margin + ThirdWidth + ButtonGap, y);
             _remove.relativePosition = new Vector3(Margin + 2f * (ThirdWidth + ButtonGap), y);
-            _remove.text = extra ? "Delete sign" : hidden ? "Restore head" : "Remove head";
-            _remove.tooltip = extra ? "Delete this added sign (Ctrl+Z brings it back)"
-                : hidden ? "Bring this head back (signs on Auto)" : "Remove this head from the gantry";
+            _remove.text = extra ? "Delete signal" : hidden ? "Restore signal" : "Remove signal";
+            _remove.tooltip = extra ? "Delete this added signal (Ctrl+Z brings it back)"
+                : hidden ? "Bring this signal back (showing Auto)" : "Remove this signal from the gantry";
             _reset.tooltip = extra && !hasLane ? "Set both faces to blank" : "Set both faces back to Auto";
             _resetLayout.isEnabled = !hidden;
             y += 40f;
@@ -406,7 +406,7 @@ namespace GantryTool.UI
             FaceSign shown, SignalSymbol auto, bool hidden, string note, bool selected)
         {
             card.Preview.texture = GantryMaterials.Preview(style, hidden ? new FaceSign(SignalSymbol.Blank, 0) : shown);
-            string status = hidden ? "Head removed"
+            string status = hidden ? "Signal removed"
                 : sign.Symbol == SignalSymbol.Auto ? "Auto: " + SignalRules.PlainName(auto) + note
                 : sign.Symbol == SignalSymbol.SpeedAuto ? "Road speed: " + SignalRules.PlainName(shown, mph).Replace("Speed ", "")
                 : sign.Symbol == SignalSymbol.RampMetered ? RampStatus(sign.Value)
@@ -611,7 +611,7 @@ namespace GantryTool.UI
             }
 
             var header = _layoutBox.AddUIComponent<UILabel>();
-            header.text = "Position and size (or drag the selected head)";
+            header.text = "Position and size (or drag the selected signal)";
             header.textScale = 0.75f;
 
             bool free = extra && !linked; // an unlinked added sign: position along the whole beam
@@ -731,9 +731,9 @@ namespace GantryTool.UI
             _colourDrop.tooltip = "LED colour";
             DropdownToggle.Attach(_colourDrop);
 
-            UIButton addText = CreateButton(_customBox, "Add text sign", ThirdWidth, AddTextSign);
+            UIButton addText = CreateButton(_customBox, "Add LED text", ThirdWidth, AddTextSign);
             addText.relativePosition = new Vector3(ThirdWidth + ButtonGap, 54f);
-            addText.tooltip = "Make this text sign and put it on the selected face";
+            addText.tooltip = "Make this LED text and show it on the selected face";
             _deleteCustom = CreateButton(_customBox, "Delete this sign", ThirdWidth, DeleteCustomSign);
             _deleteCustom.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 54f);
 
@@ -752,7 +752,7 @@ namespace GantryTool.UI
             asPicture.tooltip = "Show the picture as it is";
             UIButton asLed = CreateButton(_customBox, "Add as LED dots", ThirdWidth, () => AddImageSign(true));
             asLed.relativePosition = new Vector3(ThirdWidth + ButtonGap, 146f);
-            asLed.tooltip = "Redraw the picture with the sign's LED dots";
+            asLed.tooltip = "Redraw the picture with the signal's LED dots";
             UIButton open = CreateButton(_customBox, "Open folder", ThirdWidth, OpenFolder);
             open.relativePosition = new Vector3(2f * (ThirdWidth + ButtonGap), 146f);
             open.tooltip = ImageImport.Folder;
@@ -803,7 +803,7 @@ namespace GantryTool.UI
             });
             if (drop != null)
             {
-                drop.tooltip = "Linked, this sign follows the lane and can show Auto and Road speed, like the lane's own head";
+                drop.tooltip = "Linked, this signal follows the lane and can show Auto and Road speed, like the lane's own signal";
                 DropdownToggle.Attach(drop);
                 var label = drop.parent.Find<UILabel>("Label");
                 if (label != null)
@@ -829,7 +829,7 @@ namespace GantryTool.UI
         private void SetCustomNote(string message)
         {
             _customNote.text = message ?? "Pictures are copied into the save (shrunk to fit 64 KB), so shared cities show them " +
-                               "too. Up to " + CustomSigns.MaxSigns + " custom signs per city.";
+                               "too. Up to " + CustomSigns.MaxSigns + " custom LED signs per city.";
         }
 
         private void RescanFiles()
@@ -866,8 +866,8 @@ namespace GantryTool.UI
 
             _deleteCustom.text = armed ? "Click to confirm" : "Delete this sign";
             _deleteCustom.tooltip = custom
-                ? "Remove the custom sign this face shows from the city; every face using it goes back to Auto"
-                : "Select a face showing a custom sign to delete it";
+                ? "Remove the custom LED sign this face shows from the city; every face using it goes back to Auto"
+                : "Select a face showing a custom LED sign to delete it";
         }
 
         private void DeleteCustomSign()
@@ -943,7 +943,7 @@ namespace GantryTool.UI
         {
             if (id == 0)
             {
-                SetCustomNote("This city already has " + CustomSigns.MaxSigns + " custom signs. Signs no head uses are " +
+                SetCustomNote("This city already has " + CustomSigns.MaxSigns + " custom LED signs. Ones no signal uses are " +
                               "dropped when you save and reload.");
                 return;
             }

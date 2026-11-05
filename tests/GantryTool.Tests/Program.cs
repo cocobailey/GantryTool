@@ -20,6 +20,12 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("guide signs: dropping a part above a picture", GuideDropAbovePicture);
+            Run("guide signs: imported pictures", GuideImportedPictures);
+            Run("guide signs: a picture covering the sign", GuideCoverPicture);
+            Run("guide signs: two roads on one sign", GuideTwoRoads);
+            Run("guide signs: the BC through-and-exit sign comes with lane arrows", GuideCombinedLaneArrows);
+            Run("guide signs: each side of a divider is centred", GuideDividerCentres);
             Run("guide signs: copy and paste", GuideCopyPaste);
             Run("guide signs: other countries", GuideCountries);
             Run("guide signs: on the truss unless a signal is in the way", GuideClearOfSignals);
@@ -1226,6 +1232,7 @@ namespace GantryTool.Tests
             Check(GantryTool.Guide.RoadWalk.NextExit(loop, 1, 2).Count == 0, "a loop with no exit ends");
 
             Check(new GantryTool.Guide.RoadFacts { Name = "12th Street" }.Number == null, "12th Street has no route number");
+            Check(new GantryTool.Guide.RoadFacts { Name = "M25" }.Number == "25" && new GantryTool.Guide.RoadFacts { Name = "A580 Road" }.Number == "580", "a UK road's letter stays off its number");
             Check(new GantryTool.Guide.RoadFacts { Name = "Highway 47" }.Number == "47", "Highway 47 has");
             Check(GantryTool.Guide.GuideAutoFill.Cardinal(new Vector2(0f, -1f)) == "SOUTH" && GantryTool.Guide.GuideAutoFill.Cardinal(new Vector2(1f, 0.1f)) == "EAST", "compass");
         }
@@ -1261,7 +1268,16 @@ namespace GantryTool.Tests
         private static void GuideCountries()
         {
             List<string> ids = GantryTool.Guide.GuideAssets.Ids();
-            Check(ids.Contains("us") && ids.Contains("ca"), "the US and Canada are there");
+            foreach (string country in new[] { "us", "ca", "uk", "nl", "de", "au" })
+            {
+                Check(ids.Contains(country), country + " is there");
+            }
+
+            Check(GantryTool.Guide.GuideAssets.Font("de", "DIN1451") != null && GantryTool.Guide.GuideAssets.Font("de", "DIN1451").Has('\u00fc'), "German signs have their font, with umlauts");
+            Check(GantryTool.Guide.GuideAssets.Image("de", "autobahn") != null && GantryTool.Guide.GuideAssets.Image("au", "nz-highway") != null, "and the shields are there");
+            Dictionary<string, object> autobahn = GantryTool.Guide.GuideAssets.Template("de", "wegweiser");
+            GantryTool.Guide.GuideAutoFill.Fill(autobahn, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "A3", Heading = new Vector2(1f, 0f) } });
+            Check(GantryTool.Guide.Json.Write(autobahn).Contains("\"3\""), "an Autobahn's number fills in");
             foreach (string id in ids)
             {
                 Check(GantryTool.Guide.GuideThemes.DefaultTemplate(id) != null, id + " has a sign to start from");
@@ -1302,6 +1318,35 @@ namespace GantryTool.Tests
             string drawn = GantryTool.Guide.GuideFit.Resolve(fitted, lanes).Design;
             Check(drawn.Contains("laneArrows") && !drawn.Contains("\"down\""), "spanning four lanes, every arrow still points up");
 
+            Dictionary<string, object> motorway = GantryTool.Guide.GuideAssets.Template("uk", "motorway-ahead");
+            GantryTool.Guide.GuideAutoFill.Fill(motorway, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "M25", Heading = new Vector2(0f, 1f) } });
+            string motorwayText = GantryTool.Guide.Json.Write(motorway);
+            Check(motorwayText.Contains("\"25\"") && motorwayText.Contains("The NORTH"), "a UK motorway fills in");
+            Check(GantryTool.Guide.GuideAssets.Font("uk", "Motorway") != null && GantryTool.Guide.GuideAssets.Font("uk", "TransportMedium").Has('a'), "the UK has its own fonts");
+            Check(GantryTool.Guide.GuideFit.AddExitPlate(GantryTool.Guide.GuideAssets.Template("uk", "motorway-ahead")) != null, "a UK sign's exit plate");
+            var plate = new GuideHead { Id = 1, Side = -1, Scale = 1f, Along = 5f, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("uk", "junction-plate")) };
+            var beside = new GuideHead { Id = 2, Side = -1, Scale = 1f, Along = 15f, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("uk", "motorway-exit")) };
+            var noLanes = new List<GantryTool.Detect.GantryLane>();
+            var wideLanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 4; i++)
+            {
+                wideLanes.Add(new GantryTool.Detect.GantryLane { Offset = 2f + i * 3.6f, Width = 3.6f, TravelSign = 1 });
+            }
+
+            var splitting = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 4, LaneArrows = true, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("uk", "motorway-lanes")) };
+            GantryTool.Guide.GuidePlacement split = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { splitting }, wideLanes)[1];
+            GantryTool.Guide.GuideSign splitSign = GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(split.Design), 2048, 3f);
+            Check(splitSign.Pixels.Length > 0, "a split sign over lanes draws");
+            var tourist = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 4, LaneArrows = true, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("uk", "tourist")) };
+            Check(!GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { tourist }, wideLanes)[1].Design.Contains("laneArrows"), "a sign that keeps its own width doesn't get lane arrows");
+            var map = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 4, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("uk", "roundabout")) };
+            var maps = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { map }, wideLanes);
+            Check(maps[1].WidthMetres < 7f && maps[1].Fitted && Mathf.Abs(maps[1].Along - (2f + 1.5f * 3.6f)) < 0.01f, "a map sign stays its own width, centred over its lanes: " + maps[1].WidthMetres);
+            Check(maps[1].Design.Contains("roundabout"), "and keeps its picture");
+            Dictionary<byte, GantryTool.Guide.GuidePlacement> mixed = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { plate, beside }, noLanes);
+            Check(mixed[1].PanelMetres < 1.5f && mixed[2].PanelMetres >= GantryTool.Guide.GuideFit.DefaultHeight, "a junction plate stays small, and its size doesn't affect the sign beside it");
+            Check(GantryTool.Guide.GuideThemes.Word("uk", GantryTool.Guide.GuideFit.ExitOnlyWord, "x") == "EXIT" && GantryTool.Guide.GuideThemes.Word("us", GantryTool.Guide.GuideFit.ExitOnlyWord, "x") == "x", "and its own words");
+
             GantryTool.Guide.GuideThemes.Read(null);
             string before = GantryTool.Guide.GuideThemes.Current;
             GantryTool.Guide.GuideThemes.Current = "ca";
@@ -1331,6 +1376,340 @@ namespace GantryTool.Tests
             Check(pasted.Design == "{\"items\":[]}" && pasted.Scale == 1.5f && pasted.LaneArrows, "what it says and its size come across");
             Check(pasted.Id == 2 && pasted.Along == 20f && pasted.Side == 1 && pasted.FitFirst == 2 && pasted.FitLast == 3, "where it is stays");
             GantryTool.Guide.GuideClipboard.Clear();
+        }
+
+        private static Dictionary<string, object> PartWithText(List<object> items, string text)
+        {
+            foreach (object o in items)
+            {
+                var item = (Dictionary<string, object>)o;
+                if (GantryTool.Guide.Json.Str(item, "text") == text)
+                {
+                    return item;
+                }
+
+                List<object> inner = GantryTool.Guide.Json.Arr(item, "items");
+                Dictionary<string, object> found = inner != null ? PartWithText(inner, text) : null;
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        private static void GuideDividerCentres()
+        {
+            var lanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 4; i++)
+            {
+                lanes.Add(new GantryTool.Detect.GantryLane { Offset = 2.5f + i * 3.75f, Width = 3.75f, TravelSign = 1 });
+            }
+
+            foreach (string[] sign in new[] { new[] { "ca", "combined-bc" }, new[] { "uk", "motorway-lanes" }, new[] { "de", "autobahn-lanes" } })
+            {
+                var head = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 4, LaneArrows = true, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template(sign[0], sign[1])) };
+                GantryTool.Guide.GuidePlacement placed = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { head }, lanes)[1];
+                GantryTool.Guide.GuideSign drawn = GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(placed.Design), 2048, 3f);
+                float half = drawn.Width * 0.5f;
+                float l0 = float.MaxValue, l1 = float.MinValue, r0 = float.MaxValue, r1 = float.MinValue;
+                foreach (GantryTool.Guide.GuidePart p in drawn.Parts)
+                {
+                    if ((p.Type != "text" && p.Type != "shield" && p.Type != "symbol") || p.Y < drawn.TabHeight)
+                    {
+                        continue;
+                    }
+
+                    if (p.X + p.W * 0.5f < half)
+                    {
+                        l0 = Math.Min(l0, p.X);
+                        l1 = Math.Max(l1, p.X + p.W);
+                    }
+                    else
+                    {
+                        r0 = Math.Min(r0, p.X);
+                        r1 = Math.Max(r1, p.X + p.W);
+                    }
+                }
+
+                Check(Math.Abs((l0 + l1) * 0.5f - drawn.Width * 0.25f) < drawn.Width * 0.03f, sign[1] + ": left side at " + ((l0 + l1) * 0.5f / drawn.Width));
+                Check(Math.Abs((r0 + r1) * 0.5f - drawn.Width * 0.75f) < drawn.Width * 0.03f, sign[1] + ": right side at " + ((r0 + r1) * 0.5f / drawn.Width));
+            }
+        }
+
+        private static void GuideCombinedLaneArrows()
+        {
+            Dictionary<string, object> template = GantryTool.Guide.GuideAssets.Template("ca", "combined-bc");
+            Check(GantryTool.Guide.GuideFit.HasArrowRow(template) && !GantryTool.Guide.GuideFit.HasBuiltInArrows(template), "its arrows are a row of their own");
+            Check(GantryTool.Guide.GuideFit.HasBuiltInArrows(GantryTool.Guide.GuideAssets.Template("de", "autobahn-overhead")), "the German overhead sign's are built in");
+
+            foreach (int count in new[] { 3, 4, 6 })
+            {
+                var lanes = new List<GantryTool.Detect.GantryLane>();
+                for (int i = 0; i < count; i++)
+                {
+                    lanes.Add(new GantryTool.Detect.GantryLane { Offset = 2.5f + i * 3.75f, Width = 3.75f, TravelSign = 1 });
+                }
+
+                var head = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = (byte)count, LaneArrows = true, Design = GantryTool.Guide.Json.Write(GantryTool.Guide.GuideAssets.Template("ca", "combined-bc")) };
+                string design = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { head }, lanes)[1].Design;
+                var doc = (Dictionary<string, object>)GantryTool.Guide.Json.Parse(design);
+                int rows = 0, arrows = 0;
+                foreach (object o in GantryTool.Guide.Json.Arr(doc, "items"))
+                {
+                    var item = (Dictionary<string, object>)o;
+                    if (GantryTool.Guide.Json.Str(item, "type") == "laneArrows")
+                    {
+                        rows++;
+                        arrows = GantryTool.Guide.Json.Arr(item, "items").Count;
+                        var last = (Dictionary<string, object>)GantryTool.Guide.Json.Arr(item, "items")[arrows - 1];
+                        Check(GantryTool.Guide.Json.Str(last, "direction") == "turn-right", count + " lanes: the last lane exits");
+                    }
+                }
+
+                Check(rows == 1 && arrows == count, count + " lanes: one arrow each, got " + arrows + " in " + rows + " rows");
+                Check(design.Split(new[] { "\"arrow\"" }, StringSplitOptions.None).Length - 1 == count, count + " lanes: no other arrows on the sign");
+            }
+        }
+
+        private static void GuideTwoRoads()
+        {
+            var here = new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Coco Highway", Heading = new Vector2(1f, 0f) } };
+            var exit = new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Oak Street" }, new GantryTool.Guide.RoadFacts { Name = "Elm Avenue" } };
+            int missing;
+
+            Dictionary<string, object> bc = GantryTool.Guide.GuideAssets.Template("ca", "combined-bc");
+            Check(GantryTool.Guide.GuideAutoFill.FillSections(bc, here, exit, out missing) && missing == 0, "both sides fill in");
+            string words = TemplateText(bc);
+            Check(words.Contains("Coco Highway") && words.Contains("Oak Street") && words.Contains("Elm Avenue"), "with both roads: " + words);
+            Check(!words.Contains("Hope") && !words.Contains("152 St") && !words.Contains("Surrey") && !words.Contains("CENTRE"), "and no sample words: " + words);
+            Check(GantryTool.Guide.GuideRenderer.Render(bc, 1024, 3f).Pixels.Length > 0, "and it draws");
+
+            // The mainline goes on its own side, the exit on the other.
+            List<object> sides = null;
+            foreach (object o in GantryTool.Guide.Json.Arr(bc, "items"))
+            {
+                var row = (Dictionary<string, object>)o;
+                List<object> inner = GantryTool.Guide.Json.Arr(row, "items");
+                if (inner != null && inner.Count == 3 && GantryTool.Guide.Json.Str((Dictionary<string, object>)inner[1], "type") == "divider")
+                {
+                    sides = inner;
+                }
+            }
+
+            Check(TemplateText((Dictionary<string, object>)sides[0]).Contains("Coco Highway") && TemplateText((Dictionary<string, object>)sides[2]).Contains("Oak Street"), "each on its own side");
+
+            // No exit ahead: that side stays as it was, and it's counted.
+            Dictionary<string, object> partly = GantryTool.Guide.GuideAssets.Template("ca", "combined-bc");
+            Check(GantryTool.Guide.GuideAutoFill.FillSections(partly, here, new List<GantryTool.Guide.RoadFacts>(), out missing) && missing == 1, "one side can fill in alone");
+            Check(TemplateText(partly).Contains("Coco Highway") && TemplateText(partly).Contains("152 St"), "leaving the other");
+
+            // Nothing at all changes nothing, and the one-road way doesn't touch a two-road sign.
+            Dictionary<string, object> none = GantryTool.Guide.GuideAssets.Template("ca", "combined-bc");
+            string before = GantryTool.Guide.Json.Write(none);
+            Check(!GantryTool.Guide.GuideAutoFill.FillSections(none, null, null, out missing) && missing == 2 && GantryTool.Guide.Json.Write(none) == before, "nothing found changes nothing");
+            Check(!GantryTool.Guide.GuideAutoFill.Fill(none, here) && GantryTool.Guide.Json.Write(none) == before, "one road doesn't fill a two-road sign");
+
+            // A numbered road goes on its side's shield only.
+            foreach (string[] sign in new[]
+            {
+                new[] { "ca", "combined-bc" }, new[] { "us", "split-lane-arrows" }, new[] { "uk", "motorway-lanes" }, new[] { "uk", "primary-lanes" },
+                new[] { "de", "autobahn-lanes" }, new[] { "nl", "lanes" }, new[] { "au", "lanes" }
+            })
+            {
+                Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template(sign[0], sign[1]);
+                Check(GantryTool.Guide.GuideAutoFill.FillSections(doc, new List<GantryTool.Guide.RoadFacts> { new GantryTool.Guide.RoadFacts { Name = "Highway 47", Heading = new Vector2(0f, 1f) } }, exit, out missing) && missing == 0, sign[1] + " fills both sides");
+                string json = GantryTool.Guide.Json.Write(doc);
+                Check(json.Contains("\"47\"") && json.Contains("Oak Street"), sign[1] + ": " + json);
+                Check(GantryTool.Guide.GuideRenderer.Render(doc, 1024, 3f).Pixels.Length > 0, sign[1] + " draws");
+            }
+        }
+
+        private static void GuideCoverPicture()
+        {
+            GantryTool.Guide.GuidePictures.Decoder = b => new GantryTool.Guide.GuideImage
+            {
+                Width = 2, Height = 1, Pixels = new[] { new Color32(255, 0, 0, 255), new Color32(0, 0, 255, 255) }
+            };
+            GantryTool.Guide.GuidePictures.Clear();
+            try
+            {
+                string id = GantryTool.Guide.GuidePictures.Add(new byte[] { 3, 1, 4 });
+                Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", "guide-exit-tab");
+                GantryTool.Guide.GuidePictures.Cover(doc, id);
+                Check(GantryTool.Guide.Json.Arr(doc, "items").Count == 0, "it replaces what's on the sign");
+
+                // Exactly the picture's shape: nothing of the sign shows around it.
+                doc["width"] = 400.0;
+                doc["height"] = 200.0;
+                GantryTool.Guide.GuideSign drawn = GantryTool.Guide.GuideRenderer.Render(doc, 1024, 2f);
+                Color32 topLeft = drawn.Pixels[drawn.PixelHeight / 2 * drawn.PixelWidth + 2];
+                Color32 topRight = drawn.Pixels[drawn.PixelHeight / 2 * drawn.PixelWidth + drawn.PixelWidth - 3];
+                Check(topLeft.r > 240 && topLeft.b < 15, "left is the picture's left: " + topLeft);
+                Check(topRight.b > 240 && topRight.r < 15, "right is the picture's right: " + topRight);
+                Color32 middle = drawn.Pixels[drawn.PixelHeight / 2 * drawn.PixelWidth + drawn.PixelWidth / 2];
+                Check(middle.r > 90 && middle.b > 90, "and it blends in between, not blocks: " + middle);
+
+                // Survives placing, and counts as in use.
+                var head = new GuideHead { Id = 1, Scale = 1f, Side = -1, Design = GantryTool.Guide.Json.Write(doc) };
+                GantryTool.Guide.GuidePlacement placed = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { head }, new List<GantryTool.Detect.GantryLane>())[1];
+                Check(placed.Design.Contains(id), "placing keeps it");
+                var ids = new HashSet<string>();
+                GantryTool.Guide.GuidePictures.IdsIn(head.Design, ids);
+                Check(ids.Contains(id), "and saving keeps it");
+
+                // Taller than the picture's shape: it stays in shape, centred, with the sign around it.
+                doc["width"] = 200.0;
+                doc["height"] = 200.0;
+                GantryTool.Guide.GuideSign tall = GantryTool.Guide.GuideRenderer.Render(doc, 1024, 2f);
+                Color32 above = tall.Pixels[tall.PixelHeight / 8 * tall.PixelWidth + tall.PixelWidth / 8];
+                Check(above.r < 200 || above.b > 15, "the sign shows around it: " + above);
+
+                // Gone: the sign still draws.
+                GantryTool.Guide.GuidePictures.Clear();
+                Check(GantryTool.Guide.GuideRenderer.Render(doc, 1024, 2f).Pixels.Length > 0, "a missing picture still draws");
+            }
+            finally
+            {
+                GantryTool.Guide.GuidePictures.Clear();
+                GantryTool.Guide.GuidePictures.Decoder = null;
+            }
+        }
+
+        private static void GuideImportedPictures()
+        {
+            // Stands in for the game's PNG reading: two wide, solid red pixels from any bytes.
+            GantryTool.Guide.GuidePictures.Decoder = b => new GantryTool.Guide.GuideImage
+            {
+                Width = 2, Height = 1, Pixels = new[] { new Color32(255, 0, 0, 255), new Color32(255, 0, 0, 255) }
+            };
+            GantryTool.Guide.GuidePictures.Clear();
+            byte[] png = { 1, 2, 3, 4, 5 };
+            string id = GantryTool.Guide.GuidePictures.Add(png);
+            Check(id != null && id == GantryTool.Guide.GuidePictures.Add((byte[])png.Clone()), "the same picture is kept once");
+            Check(GantryTool.Guide.GuidePictures.Add(new byte[GantryTool.Guide.GuidePictures.MaxBytes + 1]) == null, "too big is refused");
+
+            // On a sign: it keeps the picture's shape, and draws.
+            Func<Dictionary<string, object>> sign = () =>
+            {
+                Dictionary<string, object> part = GantryTool.Guide.GuidePictures.NewPart(id);
+                return new Dictionary<string, object>
+                {
+                    { "theme", "us" },
+                    { "items", new List<object> { part } }
+                };
+            };
+            GantryTool.Guide.GuideSign drawn = GantryTool.Guide.GuideRenderer.Render(sign(), 1024, 3f);
+            GantryTool.Guide.GuidePart shown = drawn.Parts.Find(p => p.Type == "symbol");
+            Check(Math.Abs(shown.W / shown.H - 2f) < 0.01f, "keeps its shape: " + shown.W + " x " + shown.H);
+            Check(Array.Exists(drawn.Pixels, p => p.r == 255 && p.g == 0 && p.b == 0), "the picture is drawn");
+
+            // A big one doesn't push the margins out with it.
+            Dictionary<string, object> small = sign(), big = sign();
+            ((Dictionary<string, object>)GantryTool.Guide.Json.Arr(big, "items")[0])["height"] = 300.0;
+            float smallGap = GantryTool.Guide.GuideRenderer.Render(small, 2048, 3f, true).Height - 48f;
+            float bigGap = GantryTool.Guide.GuideRenderer.Render(big, 2048, 3f, true).Height - 300f;
+            Check(Math.Abs(smallGap - bigGap) < 0.01f, "margins stay put: " + smallGap + " and " + bigGap);
+
+            // Only pictures in use are saved, and they come back under the same name.
+            string spare = GantryTool.Guide.GuidePictures.Add(new byte[] { 9, 9 });
+            var gantry = new Gantry();
+            gantry.GuideSigns.Add(new GuideHead { Id = 1, Scale = 1f, Design = GantryTool.Guide.Json.Write(sign()) });
+            HashSet<string> used = GantryTool.Guide.GuidePictures.UsedIds(new List<Gantry> { gantry }, new object());
+            Check(used.Count == 1 && used.Contains(id) && !used.Contains(spare), "only the picture in use counts");
+            byte[] saved = GantryTool.Guide.GuidePictures.Write(used);
+            GantryTool.Guide.GuidePictures.Clear();
+            string error;
+            Check(GantryTool.Guide.GuidePictures.Read(saved, out error) == 1 && error == null, "reads back: " + error);
+            Check(GantryTool.Guide.GuidePictures.Image(id) != null && GantryTool.Guide.GuidePictures.Bytes(spare) == null, "the same picture, and not the spare");
+
+            // A sign whose picture is gone still draws, leaving the space.
+            GantryTool.Guide.GuidePictures.Clear();
+            GantryTool.Guide.GuideSign without = GantryTool.Guide.GuideRenderer.Render(new Dictionary<string, object>
+            {
+                { "theme", "us" },
+                { "items", new List<object> { new Dictionary<string, object> { { "type", "symbol" }, { "height", 48.0 }, { "picture", "gone" }, { "aspect", 2.0 } } } }
+            }, 1024, 3f);
+            Check(without.Pixels.Length > 0 && without.Parts.Find(p => p.Type == "symbol").W > 90f, "no picture still draws, with its space");
+
+            // Damaged or missing data never throws, and keeps what it could read.
+            Check(GantryTool.Guide.GuidePictures.Read(null, out error) == 0 && error == null, "old saves have no pictures");
+            Check(GantryTool.Guide.GuidePictures.Read(new byte[] { 99, 1, 2 }, out error) == 0 && error != null, "unknown version");
+            var cut = new byte[saved.Length - 2];
+            Array.Copy(saved, cut, cut.Length);
+            Check(GantryTool.Guide.GuidePictures.Read(cut, out error) == 0 && error != null, "cut short");
+            var rnd = new System.Random(7);
+            for (int i = 0; i < 200; i++)
+            {
+                var junk = new byte[rnd.Next(64)];
+                rnd.NextBytes(junk);
+                if (junk.Length > 0)
+                {
+                    junk[0] = 1;
+                }
+
+                GantryTool.Guide.GuidePictures.Read(junk, out error);
+            }
+
+            // A saved sign carries its picture in its one file, and its design stays clean.
+            string folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "GantryToolPictures" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                GantryTool.Guide.GuidePictures.Clear();
+                GantryTool.Guide.GuidePictures.Add(png);
+                Check(GantryTool.Guide.MySigns.Save(folder, "With picture", sign()), "saves");
+                GantryTool.Guide.GuidePictures.Clear();
+                List<GantryTool.Guide.MySign> mine = GantryTool.Guide.MySigns.List(folder);
+                Check(mine.Count == 1 && GantryTool.Guide.GuidePictures.Image(id) != null, "the picture comes back with it");
+                Check(!GantryTool.Guide.Json.Has(mine[0].Design, "pictures"), "the design only names it");
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(folder))
+                {
+                    System.IO.Directory.Delete(folder, true);
+                }
+
+                GantryTool.Guide.GuidePictures.Clear();
+                GantryTool.Guide.GuidePictures.Decoder = null;
+            }
+        }
+
+        private static void GuideDropAbovePicture()
+        {
+            Func<Dictionary<string, object>> start = () =>
+            {
+                Dictionary<string, object> d = GantryTool.Guide.GuideAssets.Template("uk", "roundabout");
+                d["height"] = 135.0;
+                return d;
+            };
+            Dictionary<string, object> first = start();
+            GantryTool.Guide.GuideSign s = GantryTool.Guide.GuideRenderer.Render(first, 2048, 3f);
+            GantryTool.Guide.GuidePart picture = s.Parts.Find(p => p.Type == "symbol");
+
+            // Anywhere over the picture's width, above its top: straight back on top of it.
+            for (float x = picture.X; x <= picture.X + picture.W; x += picture.W / 8f)
+            {
+                Dictionary<string, object> doc = start();
+                Dictionary<string, object> york = PartWithText(GantryTool.Guide.Json.Arr(doc, "items"), "York");
+                GantryTool.Guide.GuideDrop drop;
+                Check(GantryTool.Guide.GuideDrag.Find(doc, s.Parts, york, x, picture.Y - 2f, out drop) && drop.Path == picture.Path && drop.Side == GantryTool.Guide.DropSide.Above, "above the picture at " + x + ": " + drop.Path + " " + drop.Side);
+            }
+
+            // Level with it, at its side: beside it, and it can come back from there.
+            Dictionary<string, object> moved = start();
+            Dictionary<string, object> text = PartWithText(GantryTool.Guide.Json.Arr(moved, "items"), "York");
+            GantryTool.Guide.GuideDrop side;
+            GantryTool.Guide.GuideDrag.Find(moved, s.Parts, text, picture.X + 2f, picture.Y + picture.H * 0.5f, out side);
+            Check(side.Side == GantryTool.Guide.DropSide.Left && GantryTool.Guide.GuideDrag.Apply(moved, text, side), "beside the picture");
+            GantryTool.Guide.GuideSign beside = GantryTool.Guide.GuideRenderer.Render(moved, 2048, 3f);
+            GantryTool.Guide.GuidePart again = beside.Parts.Find(p => p.Type == "symbol");
+            GantryTool.Guide.GuideDrop back;
+            Check(GantryTool.Guide.GuideDrag.Find(moved, beside.Parts, text, again.X + again.W * 0.1f, again.Y - 2f, out back) && back.Side == GantryTool.Guide.DropSide.Above && GantryTool.Guide.GuideDrag.Apply(moved, text, back), "and back on top");
+            string after = GantryTool.Guide.Json.Write(moved);
+            string original = GantryTool.Guide.Json.Write(start());
+            Check(after == original, "leaving the sign as it was: " + after);
         }
 
         private static void GuideSimpleSigns()

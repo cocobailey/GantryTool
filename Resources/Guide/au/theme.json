@@ -1,0 +1,139 @@
+{
+  "formatVersion": 1,
+  "id": "au",
+  "name": "Australia and New Zealand",
+  "description": "Green guide signs, alphanumeric route markers and NZ state highway shields (Roadgeek fonts)",
+  "arrow": "M32 0 H68 V88 H100 L50 150 L0 88 H32 Z",
+  "units": "in",
+  "defaults": {
+    "textHeight": 15.5,
+    "shieldHeight": 17.0,
+    "arrowHeight": 23.5,
+    "border": 1.2,
+    "cornerRadius": 4.5,
+    "lineGap": 0.55,
+    "margin": 0.6,
+    "itemGap": 0.45,
+    "font": "RG2014EM",
+    "scheme": "green"
+  },
+  "fonts": [
+    {
+      "family": "RG2014EM",
+      "file": "@us/fonts/RG2014EM.ttf",
+      "label": "Series E(M)",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014D",
+      "file": "@us/fonts/RG2014D.ttf",
+      "label": "Series D",
+      "scale": 1.75,
+      "offset": 0.125
+    },
+    {
+      "family": "RG2014E",
+      "file": "@us/fonts/RG2014E.ttf",
+      "label": "Series E",
+      "scale": 1.75,
+      "offset": 0.125
+    }
+  ],
+  "schemes": {
+    "green": {
+      "bg": "#00704a",
+      "fg": "#ffffff",
+      "label": "Guide"
+    },
+    "blue": {
+      "bg": "#1f4ea1",
+      "fg": "#ffffff",
+      "label": "Services"
+    },
+    "brown": {
+      "bg": "#6b3f1d",
+      "fg": "#ffffff",
+      "label": "Tourist"
+    },
+    "white": {
+      "bg": "#ffffff",
+      "fg": "#000000",
+      "label": "Local"
+    },
+    "yellow": {
+      "bg": "#ffcc00",
+      "fg": "#000000",
+      "label": "Warning"
+    }
+  },
+  "shields": {
+    "M": {
+      "label": "Motorway (M)",
+      "shape": "rect",
+      "bg": "#00704a",
+      "fg": "#ffcc00",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "1",
+      "prefix": "M",
+      "border": "#ffcc00"
+    },
+    "A": {
+      "label": "Highway (A)",
+      "shape": "rect",
+      "bg": "#00704a",
+      "fg": "#ffcc00",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "32",
+      "prefix": "A",
+      "border": "#ffcc00"
+    },
+    "B": {
+      "label": "Road (B)",
+      "shape": "rect",
+      "bg": "#00704a",
+      "fg": "#ffcc00",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "56",
+      "prefix": "B",
+      "border": "#ffcc00"
+    },
+    "EXIT": {
+      "label": "Exit number",
+      "shape": "rect",
+      "bg": "#ffcc00",
+      "fg": "#000000",
+      "num": 0.6,
+      "radius": 0.14,
+      "default": "12"
+    },
+    "NZ": {
+      "label": "New Zealand state highway",
+      "shape": "img",
+      "img": "shields/nz-highway.svg",
+      "aspect": 1.0,
+      "fg": "#ffffff",
+      "num": 0.42,
+      "top": 0.26,
+      "font": "RG2014D",
+      "wide": 1.15,
+      "wideFont": "RG2014C",
+      "default": "1"
+    }
+  },
+  "laneWidth": 157.48031496062993,
+  "presets": [],
+  "defaultSign": "exit",
+  "arrowStyles": {
+    "slim": {
+      "arrow": "M43 0 H57 V104 H76 L50 150 L24 104 H43 Z"
+    }
+  },
+  "exitTab": {
+    "font": "RG2014E",
+    "height": 10
+  }
+}

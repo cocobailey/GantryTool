@@ -27,6 +27,7 @@ namespace GantryTool.Data
                 serializableDataManager.SaveData(GantryData.ExtKey, ext);
                 SaveExtraHeads(gantries);
                 SaveGuideSigns(gantries);
+                SaveGuidePictures(gantries);
                 SaveCustomSigns(gantries);
                 Log.Info("Saved " + gantries.Count + " gantries (" + legacy.Length + " + " + ext.Length + " bytes, v" +
                          GantryData.LegacyVersion + " + ext v" + GantryData.ExtVersion + ")");
@@ -67,6 +68,48 @@ namespace GantryTool.Data
             catch (Exception e)
             {
                 Log.Error("Saving extra signal heads failed", e);
+            }
+        }
+
+        /// <summary>Guide sign pictures go under their own key too, so a problem there can never touch the gantries.</summary>
+        private void SaveGuidePictures(List<Gantry> gantries)
+        {
+            try
+            {
+                HashSet<string> used = GantryTool.Guide.GuidePictures.UsedIds(gantries, GantryManager.Lock);
+                byte[] pictures = GantryTool.Guide.GuidePictures.Write(used);
+                serializableDataManager.SaveData(GantryTool.Guide.GuidePictures.Key, pictures);
+                if (used.Count > 0)
+                {
+                    Log.Info("Saved " + used.Count + " guide sign pictures (" + pictures.Length + " bytes)");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Saving guide sign pictures failed", e);
+            }
+        }
+
+        private void LoadGuidePictures()
+        {
+            try
+            {
+                GantryTool.Guide.GuidePictures.Decoder = GantryTool.Render.ImageImport.Decode;
+                string error;
+                int added = GantryTool.Guide.GuidePictures.Read(serializableDataManager.LoadData(GantryTool.Guide.GuidePictures.Key), out error);
+                if (error != null)
+                {
+                    Log.Warn("Guide sign pictures: " + error);
+                }
+
+                if (added > 0)
+                {
+                    Log.Info("Loaded " + added + " guide sign pictures");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Loading guide sign pictures failed; those signs show without them", e);
             }
         }
 
@@ -155,6 +198,7 @@ namespace GantryTool.Data
         public override void OnLoadData()
         {
             LoadCustomSigns();
+            LoadGuidePictures();
 
             var loaded = new List<Gantry>();
             try

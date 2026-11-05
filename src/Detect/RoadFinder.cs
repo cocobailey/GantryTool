@@ -71,7 +71,27 @@ namespace GantryTool.Detect
         /// <summary>The roads a sign like this should name; null if it doesn't say, or none can be found.</summary>
         public static List<RoadFacts> Find(Gantry g, GuideHead sign, Dictionary<string, object> design)
         {
+            return Find(g, sign, Json.Str(design, GuideAutoFill.RoadKey));
+        }
+
+        /// <summary>Writes the roads a sign is about into its design. False if nothing changed; "partly" if one side stayed as it was.</summary>
+        public static bool Fill(Gantry g, GuideHead sign, Dictionary<string, object> design, out bool partly)
+        {
+            partly = false;
             string which = Json.Str(design, GuideAutoFill.RoadKey);
+            if (which != GuideAutoFill.RoadBoth)
+            {
+                return GuideAutoFill.Fill(design, Find(g, sign, which));
+            }
+
+            int missing;
+            bool filled = GuideAutoFill.FillSections(design, Find(g, sign, GuideAutoFill.RoadHere), Find(g, sign, GuideAutoFill.RoadExit), out missing);
+            partly = filled && missing > 0;
+            return filled;
+        }
+
+        private static List<RoadFacts> Find(Gantry g, GuideHead sign, string which)
+        {
             if (which == null)
             {
                 return null;

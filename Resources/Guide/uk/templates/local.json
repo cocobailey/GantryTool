@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "theme": "uk",
+  "id": "local",
+  "name": "Local",
+  "scheme": "white",
+  "align": "start",
+  "items": [
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "left"
+        },
+        {
+          "type": "text",
+          "text": "Town Centre",
+          "font": "TransportHeavy"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "type": "row",
+      "items": [
+        {
+          "type": "arrow",
+          "direction": "right"
+        },
+        {
+          "type": "text",
+          "text": "Station",
+          "font": "TransportHeavy"
+        }
+      ],
+      "align": "center"
+    }
+  ],
+  "ownWidth": true
+}

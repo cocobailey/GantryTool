@@ -51,6 +51,12 @@ namespace GantryTool.Guide
             return named != null && names.Contains(named) ? named : names.Count > 0 ? names[0] : null;
         }
 
+        /// <summary>A country's own word for something a sign's parts say, or the given one.</summary>
+        public static string Word(string id, string key, string otherwise)
+        {
+            return Json.Str(Json.Obj(GuideAssets.Theme(id), "words"), key, otherwise);
+        }
+
         public static byte[] Write()
         {
             byte[] id = Encoding.UTF8.GetBytes(_city ?? "");
