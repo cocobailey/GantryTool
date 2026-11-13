@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-tab-ahead",
+  "name": "B.C. tab: AHEAD",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.43,
+  "cornerRadius": 2.86,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 22.88,
+  "items": [
+    {
+      "type": "text",
+      "text": "AHEAD",
+      "height": 11.44,
+      "font": "RG2014E",
+      "tracking": 10
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-T"
+}

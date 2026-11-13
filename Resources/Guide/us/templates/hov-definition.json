@@ -1,0 +1,44 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-definition",
+  "name": "HOV 2+ only (R3-13a)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "HOV 2+ ONLY",
+      "height": 15
+    },
+    {
+      "type": "text",
+      "text": "2 OR MORE PERSONS",
+      "height": 10,
+      "font": "RG2014D"
+    },
+    {
+      "type": "text",
+      "text": "PER VEHICLE",
+      "height": 10,
+      "font": "RG2014D"
+    },
+    {
+      "type": "text",
+      "text": "6 AM - 9 AM  MON - FRI",
+      "height": 10,
+      "font": "RG2014D"
+    }
+  ],
+  "ownWidth": true,
+  "sideBand": {
+    "corner": true,
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 26
+      }
+    ]
+  }
+}

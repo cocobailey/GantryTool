@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "on-hov-lane",
+  "name": "Ontario HOV lane",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.97,
+  "cornerRadius": 5.62,
+  "margin": 4.22,
+  "width": 85.77,
+  "height": 102.92,
+  "items": [
+    {
+      "type": "symbol",
+      "name": "on-bus",
+      "height": 27.84
+    },
+    {
+      "type": "symbol",
+      "name": "on-car2",
+      "height": 22.78,
+      "gapBefore": 7.03
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 22.5,
+      "gapBefore": 9.56
+    }
+  ],
+  "sideBand": {
+    "corner": true,
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 23.9
+      }
+    ]
+  },
+  "keepShape": true,
+  "description": "Ontario, O. Reg. 620/05"
+}

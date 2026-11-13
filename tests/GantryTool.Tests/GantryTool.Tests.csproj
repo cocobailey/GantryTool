@@ -10,6 +10,11 @@
     <ManagedDLLPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed</ManagedDLLPath>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <!-- The Mac game's UnityEngine.dll won't load under plain Mono, so the tests use a copy of the Windows game's DLLs -->
+    <ManagedDLLPath>$(MSBuildThisFileDirectory)../../reference/windows-managed</ManagedDLLPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>

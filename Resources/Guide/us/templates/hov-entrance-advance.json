@@ -1,0 +1,48 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-entrance-advance",
+  "name": "HOV lane entrance ahead (E8-3)",
+  "scheme": "green",
+  "align": "center",
+  "items": [
+    {
+      "type": "tab",
+      "align": "left",
+      "scheme": "yellow",
+      "items": [
+        {
+          "type": "text",
+          "text": "LEFT",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "HOV LANE",
+      "height": 15
+    },
+    {
+      "type": "text",
+      "text": "ENTRANCE",
+      "height": 15
+    },
+    {
+      "type": "text",
+      "text": "1 MILE",
+      "height": 12,
+      "font": "RG2014D"
+    }
+  ],
+  "sideBand": {
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 40
+      }
+    ]
+  }
+}

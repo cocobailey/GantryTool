@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "bus-lane-ends",
+  "name": "Bus lane ends (R3-15e)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "BUS",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "LANE",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "ENDS",
+      "height": 16
+    }
+  ],
+  "ownWidth": true
+}

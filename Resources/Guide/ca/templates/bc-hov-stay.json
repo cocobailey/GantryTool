@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-hov-stay",
+  "name": "B.C. HOV stay in lane",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 114.4,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 3.43,
+      "split": {
+        "scheme": "black",
+        "share": 0.375,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 29.86
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "symbol",
+          "name": "hov-bus",
+          "height": 21.74
+        },
+        {
+          "type": "symbol",
+          "name": "hov-car",
+          "height": 14.87
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "STAY IN",
+      "height": 8.81,
+      "font": "RG2014E",
+      "gapBefore": 2.52
+    },
+    {
+      "type": "text",
+      "text": "LANE FOR",
+      "height": 8.81,
+      "font": "RG2014E",
+      "gapBefore": 4.46
+    },
+    {
+      "type": "text",
+      "text": "1.5 km",
+      "height": 9.38,
+      "font": "RG2014E",
+      "gapBefore": 4.46
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 38.67,
+      "style": "reserved",
+      "gapBefore": 4.58
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-8D"
+}

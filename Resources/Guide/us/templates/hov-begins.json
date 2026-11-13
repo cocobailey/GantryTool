@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-begins",
+  "name": "HOV begins (R3-15a)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "HOV 2+ ONLY",
+      "height": 14
+    },
+    {
+      "type": "text",
+      "text": "BEGINS",
+      "height": 14
+    },
+    {
+      "type": "text",
+      "text": "1 MILE",
+      "height": 12,
+      "font": "RG2014D"
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 18
+    }
+  ],
+  "ownWidth": true,
+  "sideBand": {
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 40
+      }
+    ]
+  }
+}

@@ -31,7 +31,7 @@ namespace GantryTool
         public bool AutoFillSigns = true;      // new guide signs start with the road's name and the next exit's
         public bool LiveRoadNames = true;      // and keep up when a road is renamed
         public string DefaultSignCountry = "";  // for cities that haven't chosen; empty = the country of the default signal style
-        public int HeavyTraffic = 50;          // the road density (0-100) speed signals start dropping at
+        public int SlowTraffic = 30;           // speed signals start dropping when traffic is this far (%) under the limit
         public bool GuideTipSeen;              // the sign editor's first-use tip has been dismissed
         public string LastSeenNotes = "";      // "what's new" release the player has closed
 

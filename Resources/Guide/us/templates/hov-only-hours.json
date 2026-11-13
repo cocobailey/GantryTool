@@ -1,0 +1,42 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-only-hours",
+  "name": "HOV 2+ only, over the lane (R3-14)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "HOV 2+",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "ONLY",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "6 AM - 9 AM  MON - FRI",
+      "height": 10,
+      "font": "RG2014D"
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 26
+    }
+  ],
+  "ownWidth": true,
+  "sideBand": {
+    "corner": true,
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 26
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "vancouver-bus-bike",
+  "name": "Vancouver bus & bike",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.2,
+  "cornerRadius": 3.8,
+  "margin": 2.0,
+  "width": 60.0,
+  "height": 91.0,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.6,
+      "gap": 4.0,
+      "split": {
+        "scheme": "black",
+        "share": 0.4,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 26.0
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "symbol",
+          "name": "hov-bus",
+          "height": 25.0
+        },
+        {
+          "type": "symbol",
+          "name": "hov-bike",
+          "height": 17.0
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "align": "start",
+      "gap": 0.6,
+      "items": [
+        {
+          "type": "text",
+          "text": "3",
+          "height": 9.6,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "PM",
+          "height": 6.6,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "-",
+          "height": 9.6,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "7",
+          "height": 9.6,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "PM",
+          "height": 6.6,
+          "font": "RG2014D"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "MON-FRI",
+      "height": 7.4,
+      "font": "RG2014D",
+      "gapBefore": 5.0
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 32.0,
+      "style": "reserved",
+      "gapBefore": 4.5
+    }
+  ],
+  "keepShape": true
+}

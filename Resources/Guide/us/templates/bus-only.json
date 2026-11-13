@@ -1,0 +1,32 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "bus-only",
+  "name": "Buses only, over the lane (R3-14c)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "BUSES",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "ONLY",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "7 AM - 9 AM  MON - FRI",
+      "height": 10,
+      "font": "RG2014D"
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 26
+    }
+  ],
+  "ownWidth": true
+}

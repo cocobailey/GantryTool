@@ -30,6 +30,9 @@ namespace GantryTool.Render
         private static readonly Color SelectedTint = new Color(0.45f, 0.8f, 1f, 1f);
         private static readonly Color TubeTint = new Color(0.6f, 0.62f, 0.64f, 1f); // round pipes catch more light than a truss
 
+        /// <summary>Until this time (realtime seconds) the selected gantry shows its own colours, so a new paint can be seen.</summary>
+        public static float PreviewUntil;
+
         /// <summary>Gantry selected in the tool (0 = none); drawn tinted blue.</summary>
         public static volatile int SelectedId;
 
@@ -104,7 +107,7 @@ namespace GantryTool.Render
                         continue;
                     }
 
-                    DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId ? SelectedTint : g.Id == HoveredId ? HoverTint : SteelTint(g));
+                    DrawStructure(g.Mesh, g.Origin, g.Id == SelectedId && Time.realtimeSinceStartup >= PreviewUntil ? SelectedTint : g.Id == HoveredId ? HoverTint : SteelTint(g));
                     SignStyle style = SignStyles.Resolve(g.Style);
                     DrawSignals(g.SignalMesh, g.Origin, style);
                     DrawGuideSteel(g.GuideBackMesh, g.Origin, ShadowCastingMode.Off, SteelTint(g));
@@ -282,6 +285,15 @@ namespace GantryTool.Render
                     }
 
                     g.BeamBottomY = GantryHeight.BeamBottom(groundMax, scan.RoadTopY, g.HeightAboveRoad);
+                    if (g.Type == GantryShape.OnBridge)
+                    {
+                        // Hung from a bridge: the bar goes just under the deck it runs along, when there is one.
+                        float deck = DeckFinder.DeckY(g.Start, g.End, Mathf.Min(g.Start.y, g.End.y));
+                        if (!float.IsNaN(deck))
+                        {
+                            g.BeamBottomY = deck - DeckFinder.BarBelowDeck - g.BeamDepth * 0.5f;
+                        }
+                    }
 
                     // Kept in step so the 1.0-format save block draws the same beam if opened in 1.0.
                     g.PostHeight = GantryHeight.EquivalentPostHeight(groundMax, g.BeamBottomY);

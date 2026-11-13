@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-only",
+  "name": "HOV 2+ only, all the time (R3-14b)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "HOV 2+",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "ONLY",
+      "height": 16
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 26
+    }
+  ],
+  "ownWidth": true,
+  "sideBand": {
+    "corner": true,
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 26
+      }
+    ]
+  }
+}

@@ -466,8 +466,11 @@ namespace GantryTool.Render
         /// </summary>
         private const float BannerGap = 0.08f;
 
-        private static bool Clashes(Gantry g, sbyte side)
+        /// <summary>Also gives the lowest a sign standing on top may come down to: the truss, or any beacon on a signal it's over.</summary>
+        private static bool Clashes(Gantry g, sbyte side, out float floor)
         {
+            floor = g.BeamBottomY + g.BeamDepth - OnTopOverlap;
+            bool clash = false;
             lock (GantryManager.Lock)
             {
                 SignStyle style = SignStyles.Resolve(g.Style);
@@ -494,22 +497,29 @@ namespace GantryTool.Render
                         if (h.Side == side && !GuideFit.IsBanner(h.Design) && Layout(g, h, out along, out width, out height) &&
                             Mathf.Abs(along - headAlong) < (width + size) * 0.5f + SignalClearance)
                         {
-                            return true;
+                            clash = true;
+                            float beacon = SignalMeshBuilder.BeaconAbove(minus, plus, style, size);
+                            if (beacon > 0f)
+                            {
+                                floor = Mathf.Max(floor, SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, size) + size * 0.5f + beacon + BeaconGap);
+                            }
                         }
                     }
                 }
 
-                return false;
+                return clash;
             }
         }
+
+        private const float BeaconGap = 0.06f;
 
         /// <summary>
         /// Height of a panel's centre: mounted on the truss, or standing on top of it to stay clear of a signal.
         /// </summary>
-        private static float CentreY(Gantry g, float height, bool clear)
+        private static float CentreY(Gantry g, float height, bool clear, float floor)
         {
             return clear
-                ? g.BeamBottomY + g.BeamDepth - OnTopOverlap + height * 0.5f
+                ? floor + height * 0.5f
                 : SignalMeshBuilder.HeadCentreY(g.BeamBottomY, g.BeamDepth, height);
         }
 
@@ -517,7 +527,8 @@ namespace GantryTool.Render
         public static float MidY(Gantry g, GuideHead h)
         {
             GuidePlacement p = Place(g, h);
-            bool clear = Clashes(g, h.Side);
+            float floor;
+            bool clear = Clashes(g, h.Side, out floor);
             if (GuideFit.IsBanner(h.Design))
             {
                 // A road's name across the signs stands above them, and their exit tabs.
@@ -533,7 +544,7 @@ namespace GantryTool.Render
                     if (s.Side == h.Side && !GuideFit.IsBanner(s.Design))
                     {
                         GuidePlacement q = Place(g, s);
-                        top = Mathf.Max(top, CentreY(g, q.PanelMetres, clear) + q.PanelMetres * 0.5f + (q.HeightMetres - q.PanelMetres));
+                        top = Mathf.Max(top, CentreY(g, q.PanelMetres, clear, floor) + q.PanelMetres * 0.5f + (q.HeightMetres - q.PanelMetres));
                     }
                 }
 
@@ -543,7 +554,7 @@ namespace GantryTool.Render
                 }
             }
 
-            return CentreY(g, p.PanelMetres, clear) + (p.HeightMetres - p.PanelMetres) * 0.5f;
+            return CentreY(g, p.PanelMetres, clear, floor) + (p.HeightMetres - p.PanelMetres) * 0.5f;
         }
 
         /// <summary>A sign's placement; all of a gantry's are remembered until a sign, or the lanes, change. Main thread.</summary>
@@ -582,7 +593,7 @@ namespace GantryTool.Render
         /// <summary>What a sign on a gantry shows right now: a message sign changes by itself.</summary>
         private static string Shown(Gantry g, GuideHead h, string design)
         {
-            return GuidePages.Shown(design, LiveSigns.PageClock, g.LiveDensity, LiveSigns.IsEditing(g.Id, h.Id));
+            return GuidePages.Shown(design, LiveSigns.PageClock, g.LiveSlow, LiveSigns.IsEditing(g.Id, h.Id));
         }
 
         public static bool Ready(Gantry g)
@@ -650,7 +661,11 @@ namespace GantryTool.Render
                 float midY = MidY(g, h);
                 Vector3 centre = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along);
                 centre.y = midY;
-                centre = centre - g.Origin + normal * (SignalMeshBuilder.HeadDepth * 0.5f + FacePlane);
+                bool railed = Railed(g);
+                float low = 0f, high = 0f, reach = railed ? GantryMeshBuilder.Reach(g.Look, g.Type, g.BeamDepth, out low, out high) : 0f;
+                // On a flat truss, double tube, tri-chord or bridge bar the sign stands just off the steel, on rails; elsewhere on the truss face.
+                float standoff = railed ? reach + RailGap + Depth : SignalMeshBuilder.HeadDepth * 0.5f + FacePlane;
+                centre = centre - g.Origin + normal * standoff;
 
                 float m = GuideFit.MetresPerUnit * placed.Scale;
                 var face = new MeshData();
@@ -659,7 +674,11 @@ namespace GantryTool.Render
                     AddSign(face, back, caster, outline, e, centre, right, normal, m);
                 }
 
-                if (g.Look != GantryShape.BoxTruss || g.Type == GantryShape.OnBridge)
+                if (railed)
+                {
+                    AddRails(back, g, along, width, height, dir, normal, midY, reach, low, high);
+                }
+                else if (g.Look != GantryShape.BoxTruss)
                 {
                     AddBrackets(back, g, along, width, dir, normal, midY);
                 }
@@ -694,6 +713,38 @@ namespace GantryTool.Render
         }
 
         private const float LampEvery = 2.2f, LampReach = 0.55f;
+        private const float RailGap = 0.14f;   // between the steel and a sign's back, where its rails run
+
+        private static bool Railed(Gantry g)
+        {
+            return g.Type == GantryShape.OnBridge || g.Look == GantryShape.FlatTruss || g.Look == GantryShape.TriChord
+                || g.Look == GantryShape.DoubleTube;
+        }
+
+        /// <summary>
+        /// Two upright rails behind the sign, over its height and the beam's, each tied back to the chords: how signs hang
+        /// on a flat truss or a bridge.
+        /// </summary>
+        private static void AddRails(MeshData back, Gantry g, float along, float width, float height, Vector3 dir, Vector3 normal, float signY,
+            float reach, float low, float high)
+        {
+            float bottom = g.BeamBottomY - g.Origin.y, signMid = signY - g.Origin.y;
+            float railLow = Mathf.Min(signMid - height * 0.5f + 0.12f, bottom + low), railHigh = Mathf.Max(signMid + height * 0.5f - 0.12f, bottom + high);
+            float rail = reach + RailGap * 0.5f;
+            for (int i = -1; i <= 1; i += 2)
+            {
+                Vector3 line = SignalMeshBuilder.HeadCentre(g.Start, g.End, g.BeamBottomY, g.BeamDepth, along + i * width * 0.3f) - g.Origin;
+                Vector3 foot = new Vector3(line.x, 0f, line.z) + normal * rail;
+                back.Bar(foot + Vector3.up * railLow, foot + Vector3.up * railHigh, BracketSize, dir);
+                foreach (float y in low == high ? new[] { low } : new[] { low, high })
+                {
+                    Vector3 chord = new Vector3(line.x, bottom + y, line.z);
+                    // A tri-chord's top chord runs down the middle; the others are at the steel's front.
+                    float from = g.Look == GantryShape.TriChord && g.Type != GantryShape.OnBridge && y == high ? 0f : reach - 0.05f;
+                    back.Bar(chord + normal * from, foot + Vector3.up * (bottom + y), BracketSize * 0.8f, dir);
+                }
+            }
+        }
 
         private static void AddBrackets(MeshData back, Gantry g, float along, float width, Vector3 dir, Vector3 normal, float signY)
         {

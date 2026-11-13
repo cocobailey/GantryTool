@@ -235,6 +235,24 @@ namespace GantryTool.Render
         }
 
         /// <summary>The structure in anything but the box truss.</summary>
+        /// <summary>
+        /// For a flat truss, a double tube, a tri-chord or a bridge bar: how far the steel reaches out from the beam's middle line, and the
+        /// heights of its chords (from the beam's bottom), where a sign's mounting rails are tied on.
+        /// </summary>
+        public static float Reach(byte look, byte type, float depth, out float low, out float high)
+        {
+            if (type == GantryShape.OnBridge)
+            {
+                low = high = depth * 0.5f;
+                return BridgeBarRadius;
+            }
+
+            float radius = look == GantryShape.DoubleTube ? DoubleTubeRadius : ChordSize * 0.6f;
+            low = radius;
+            high = depth - radius;
+            return (look == GantryShape.TriChord ? TriChordHalfWidth : 0f) + radius;
+        }
+
         private static void AddLook(byte look, byte type, Vector3 s, Vector3 e, Vector3 start, Vector3 dir, Vector3 side, float span,
             float bottom, float top, float postAlong, Vector3 origin)
         {

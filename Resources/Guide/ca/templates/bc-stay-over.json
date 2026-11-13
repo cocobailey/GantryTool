@@ -1,0 +1,59 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-stay-over",
+  "name": "B.C. stay in lane, over",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.28,
+  "cornerRadius": 4.07,
+  "margin": 2.14,
+  "width": 171.2,
+  "height": 85.6,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 4.49,
+      "split": {
+        "scheme": "black",
+        "share": 0.1,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 21.4
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "text",
+          "text": "STAY IN LANE",
+          "height": 13.38,
+          "font": "RG2014E"
+        },
+        {
+          "type": "text",
+          "text": "FOR 1.5 km",
+          "height": 13.38,
+          "font": "RG2014E",
+          "gapBefore": 6.42
+        },
+        {
+          "type": "arrow",
+          "direction": "down",
+          "height": 42.8,
+          "style": "reserved",
+          "gapBefore": 5.35
+        }
+      ]
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-201-3D"
+}

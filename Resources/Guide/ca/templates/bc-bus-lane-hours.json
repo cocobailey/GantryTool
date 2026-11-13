@@ -1,0 +1,65 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-bus-lane-hours",
+  "name": "B.C. bus lane, hours",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 114.4,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 4.8,
+      "split": {
+        "scheme": "black",
+        "share": 0.375,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 29.86
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "symbol",
+          "name": "hov-bus",
+          "height": 29.74
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "6 - 9 AM",
+      "height": 7.66,
+      "font": "RG2014D",
+      "gapBefore": 4.35
+    },
+    {
+      "type": "text",
+      "text": "MON - FRI",
+      "height": 7.66,
+      "font": "RG2014D",
+      "gapBefore": 3.78
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 39.24,
+      "style": "reserved",
+      "gapBefore": 2.75
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-2D"
+}

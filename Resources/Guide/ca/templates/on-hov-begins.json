@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "on-hov-begins",
+  "name": "Ontario HOV begins",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.97,
+  "cornerRadius": 5.62,
+  "margin": 4.22,
+  "width": 85.77,
+  "height": 102.92,
+  "items": [
+    {
+      "type": "symbol",
+      "name": "on-bus",
+      "height": 27.84
+    },
+    {
+      "type": "symbol",
+      "name": "on-car2",
+      "height": 22.78,
+      "gapBefore": 7.03
+    },
+    {
+      "type": "panel",
+      "scheme": "black",
+      "align": "center",
+      "padding": 4.5,
+      "items": [
+        {
+          "type": "text",
+          "text": "BEGINS",
+          "height": 14.76,
+          "font": "RG2014E",
+          "tracking": 4
+        }
+      ]
+    }
+  ],
+  "sideBand": {
+    "corner": true,
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 47.24
+      }
+    ]
+  },
+  "keepShape": true,
+  "description": "Ontario, O. Reg. 620/05"
+}

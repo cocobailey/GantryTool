@@ -126,7 +126,7 @@
   },
   "laneWidth": 157.48031496062993,
   "presets": [],
-  "defaultSign": "exit",
+  "defaultSign": "motorway",
   "arrowStyles": {
     "slim": {
       "arrow": "M43 0 H57 V104 H76 L50 150 L24 104 H43 Z"

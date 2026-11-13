@@ -20,6 +20,14 @@
     <ModDeployDir>$(LOCALAPPDATA)\Colossal Order\Cities_Skylines\Addons\Mods\GantryTool</ModDeployDir>
   </PropertyGroup>
 
+  <!-- On a Mac, the same files live inside the game's app bundle and Steam's Application Support folder -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <SteamDir>$(HOME)/Library/Application Support/Steam/steamapps</SteamDir>
+    <ManagedDLLPath>$(SteamDir)/common/Cities_Skylines/Cities.app/Contents/Resources/Data/Managed</ManagedDLLPath>
+    <TmpeDLLPath>$(SteamDir)/workshop/content/255710/1637663252</TmpeDLLPath>
+    <ModDeployDir>$(HOME)/Library/Application Support/Colossal Order/Cities_Skylines/Addons/Mods/GantryTool</ModDeployDir>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Provides .NET 3.5 reference assemblies so we don't need legacy targeting packs installed -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />

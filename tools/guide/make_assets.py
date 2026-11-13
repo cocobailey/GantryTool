@@ -173,7 +173,9 @@ def bake_shield(path, size=256, ss=4):
     vb = re.search(r'viewBox="([\d. -]+)"', text)
     box = [float(v) for v in vb.group(1).split()] if vb else [0, 0, 20, 20]
     scale = size * ss / box[3]
-    img = Image.new("RGBA", (size * ss, size * ss), (0, 0, 0, 0))
+    # A picture marked to keep its shape is baked as wide as its viewBox; everything else stays square.
+    wide = int(round(size * box[2] / box[3])) if 'data-aspect="keep"' in text else size
+    img = Image.new("RGBA", (wide * ss, size * ss), (0, 0, 0, 0))
     for m in re.finditer(r"<path\b([^>]*)>", text, re.S):
         attrs = m.group(1)
         props = dict(re.findall(r'(fill|stroke|stroke-width)="([^"]*)"', attrs))
@@ -207,21 +209,30 @@ def bake_shield(path, size=256, ss=4):
         font = ImageFont.truetype(os.path.join("tools", "guide", "fonts", props["font"] + ".ttf"), int(float(props["size"]) * scale))
         at = ((float(props["x"]) - box[0]) * scale, (float(props["y"]) - box[1]) * scale)
         ImageDraw.Draw(img).text(at, m.group(2), font=font, fill=colour(props["fill"]) + (255,), anchor="ms")
-    img = img.resize((size, size), Image.LANCZOS)
+    img = img.resize((wide, size), Image.LANCZOS)
+    write_gim(img, os.path.splitext(os.path.basename(path))[0], size)
+
+
+def bake_picture(path, size=256):
+    """A picture traced from an official drawing: kept at its own shape, 256 pixels tall."""
+    img = Image.open(path).convert("RGBA")
+    wide = max(1, int(round(size * img.width / img.height)))
+    img = img.resize((wide, size), Image.LANCZOS)
     write_gim(img, os.path.splitext(os.path.basename(path))[0], size)
 
 
 def write_gim(img, name, size):
     data = img.load()
     with open(os.path.join(OUT, name + ".gim"), "wb") as f:
-        f.write(b"GIM1" + struct.pack("<ii", size, size))
+        width, size = img.size
+        f.write(b"GIM1" + struct.pack("<ii", width, size))
         n = 0
         for y in range(size):
             x = 0
-            while x < size:
+            while x < width:
                 p = data[x, y]
                 run = 1
-                while x + run < size and run < 256 and data[x + run, y] == p:
+                while x + run < width and run < 256 and data[x + run, y] == p:
                     run += 1
                 f.write(struct.pack("<BBBBB", run - 1, *p))
                 n += 5
@@ -242,3 +253,5 @@ if __name__ == "__main__":
                 bake_font(ttf)
             for svg in sorted(glob.glob(os.path.join(folder, "*.svg"))):
                 bake_shield(svg)
+            for png in sorted(glob.glob(os.path.join(folder, "*.png"))):
+                bake_picture(png)

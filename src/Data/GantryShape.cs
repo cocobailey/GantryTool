@@ -26,9 +26,11 @@ namespace GantryTool.Data
         public const byte LookCount = 6;
 
         public static readonly string[] LookNames = { "Box truss", "Flat truss", "Double tube", "Single tube", "Curved tube", "Tri-chord" };
+        public static readonly string[] LookShort = { "Box", "Flat", "2 tubes", "1 tube", "Curved", "Tri-chord" };  // what fits on a button
 
         // What colour the steel is painted.
         public static readonly string[] PaintNames = { "Bare steel", "Dark", "Green", "Blue", "Brown", "Weathered" };
+        public static readonly string[] PaintShort = { "Steel", "Dark", "Green", "Blue", "Brown", "Rusty" };
         private static readonly Color[] PaintTints =
         {
             Color.white,

@@ -149,6 +149,9 @@ namespace GantryTool.UI
                 onChange(v);
             });
 
+            // The wheel scrolls the panel; it never changes a value the player didn't reach for.
+            slider.scrollWheelAmount = 0f;
+
             // UIHelper's slider template: a panel holding a UILabel "Label" and the slider (UIHelper.cs:49-51).
             UIComponent row = slider.parent;
             row.width = rowWidth;

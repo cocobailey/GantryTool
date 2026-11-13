@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-lane-ahead",
+  "name": "HOV lane ahead (R3-15)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "HOV 2+",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "LANE",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "1 MILE",
+      "height": 12,
+      "font": "RG2014D"
+    }
+  ],
+  "ownWidth": true,
+  "sideBand": {
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 40
+      }
+    ]
+  }
+}

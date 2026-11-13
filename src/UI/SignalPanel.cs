@@ -98,6 +98,7 @@ namespace GantryTool.UI
         public override void Awake()
         {
             base.Awake();
+            FrameTicker.Attach(this, Tick);
             name = "GantryToolSignalPanel";
             backgroundSprite = "MenuPanel2";
             width = PanelWidth;
@@ -183,7 +184,7 @@ namespace GantryTool.UI
             _resetLayout.tooltip = "Centre this signal over its lane at the gantry's box size";
             _remove = CreateButton("Remove signal", ThirdWidth, ToggleRemoved);
 
-            _hint = UIUtils.CreateLabel(this, "Click another signal to edit it. Removed signals still highlight on hover. Ctrl+Z undoes.", 0.7f);
+            _hint = UIUtils.CreateLabel(this, "Click another signal to edit it.", 0.7f);
             _hint.textColor = new Color32(170, 170, 170, 255);
             _hint.autoSize = false;
             _hint.width = PanelWidth - 2f * Margin;
@@ -191,9 +192,8 @@ namespace GantryTool.UI
             _hint.autoHeight = true;
         }
 
-        public override void Update()
+        private void Tick()
         {
-            base.Update();
 
             // Labels filled while the panel was hidden can show blank on its first open (their text is measured before
             // the font has those letters at that size). Redraw them once the panel has been on screen for a frame.
@@ -392,7 +392,7 @@ namespace GantryTool.UI
             _resetLayout.relativePosition = new Vector3(Margin + ThirdWidth + ButtonGap, y);
             _remove.relativePosition = new Vector3(Margin + 2f * (ThirdWidth + ButtonGap), y);
             _remove.text = extra ? "Delete signal" : hidden ? "Restore signal" : "Remove signal";
-            _remove.tooltip = extra ? "Delete this added signal (Ctrl+Z brings it back)"
+            _remove.tooltip = extra ? "Delete this signal"
                 : hidden ? "Bring this signal back (showing Auto)" : "Remove this signal from the gantry";
             _reset.tooltip = extra && !hasLane ? "Set both faces to blank" : "Set both faces back to Auto";
             _resetLayout.isEnabled = !hidden;
@@ -612,7 +612,7 @@ namespace GantryTool.UI
             }
 
             var header = _layoutBox.AddUIComponent<UILabel>();
-            header.text = "Position and size (or drag the selected signal)";
+            header.text = "Position and size";
             header.textScale = 0.75f;
 
             bool free = extra && !linked; // an unlinked added sign: position along the whole beam
@@ -660,7 +660,7 @@ namespace GantryTool.UI
             note.wordWrap = true;
             note.width = _layoutBox.width;
             note.autoHeight = true;
-            note.text = "Boxes taller than the truss stand on its bottom edge and rise above it, so road clearance doesn't change.";
+            note.text = "Boxes taller than the truss rise above it.";
             if (note.height < 20f)
             {
                 note.autoHeight = false;
@@ -762,7 +762,7 @@ namespace GantryTool.UI
 
             _addMessage = CreateButton(_customBox, "Add to changing messages", ThirdWidth, AddMessage);
             _addMessage.relativePosition = new Vector3(0f, 180f);
-            _addMessage.tooltip = "This face changes between the custom LED signs you add here. Show one on the face, then click this.";
+            _addMessage.tooltip = "Cycle this face through the custom LED signs added here";
             _clearMessages = CreateButton(_customBox, "Stop changing", ThirdWidth, ClearMessages);
             _clearMessages.relativePosition = new Vector3(ThirdWidth + ButtonGap, 180f);
             _clearMessages.tooltip = "This face goes back to showing just its own sign";
@@ -819,7 +819,7 @@ namespace GantryTool.UI
             });
             if (drop != null)
             {
-                drop.tooltip = "Linked, this signal follows the lane and can show Auto and Road speed, like the lane's own signal";
+                drop.tooltip = "Follow the lane, so it can show Auto and Road speed";
                 DropdownToggle.Attach(drop);
                 var label = drop.parent.Find<UILabel>("Label");
                 if (label != null)
@@ -981,7 +981,7 @@ namespace GantryTool.UI
 
             _deleteCustom.text = armed ? "Click to confirm" : "Delete this sign";
             _deleteCustom.tooltip = custom
-                ? "Remove the custom LED sign this face shows from the city; every face using it goes back to Auto"
+                ? "Remove this custom LED sign from the city"
                 : "Select a face showing a custom LED sign to delete it";
         }
 

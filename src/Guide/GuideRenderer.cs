@@ -112,6 +112,7 @@ namespace GantryTool.Guide
             }
         }
 
+        public const string SideBandKey = "sideBand";  // on a sign: a strip down its left side, or with "corner", a block in its top-left corner
         public const string LedKey = "led";              // on text: drawn in LEDs
         public const string MessageSignKey = "messageSign"; // on a sign: new text on it is LEDs too
 
@@ -243,7 +244,7 @@ namespace GantryTool.Guide
         {
             public string Text;
             public GlyphFont Font;
-            public float Em, Tracking;
+            public float Em, Tracking, Squeeze = 1f;
             public Color32 Colour;
 
             public override void Draw(SignCanvas c, float ppi)
@@ -253,7 +254,7 @@ namespace GantryTool.Guide
                     return;
                 }
 
-                float s = Em / Font.Em;
+                float s = Em / Font.Em, sx = s * Squeeze;
                 float pen = X;
                 float baseline = Y + H; // capitals fill the box: the baseline is its bottom edge
                 for (int i = 0; i < Text.Length; i++)
@@ -266,14 +267,14 @@ namespace GantryTool.Guide
 
                     if (g.Width > 0)
                     {
-                        float x0 = pen + g.Left * s, y0 = baseline - g.Top * s;
-                        c.DrawCoverage(g.Coverage, g.Width, g.Height, x0 * ppi, y0 * ppi, (x0 + g.Width * s) * ppi, (y0 + g.Height * s) * ppi, Colour);
+                        float x0 = pen + g.Left * sx, y0 = baseline - g.Top * s;
+                        c.DrawCoverage(g.Coverage, g.Width, g.Height, x0 * ppi, y0 * ppi, (x0 + g.Width * sx) * ppi, (y0 + g.Height * s) * ppi, Colour);
                     }
 
-                    pen += g.Advance * s + Tracking;
+                    pen += g.Advance * sx + Tracking;
                     if (i + 1 < Text.Length)
                     {
-                        pen += Font.Kern(Text[i], Text[i + 1]) * s;
+                        pen += Font.Kern(Text[i], Text[i + 1]) * sx;
                     }
                 }
             }
@@ -675,16 +676,34 @@ namespace GantryTool.Guide
             public Color32 BorderColour;
             public float BorderWidth;
 
+            public StackNode Split;      // what's on the left share of a split band, on its own colour
+            public float SplitShare;
+            public Color32 SplitBg;
+
             public void Finish()
             {
                 W = Inner.W + 2f * (PadX + BorderWidth);
                 H = Inner.H + 2f * (PadY + BorderWidth);
+                if (Split != null)
+                {
+                    // Wide enough that each side fits its share, and tall enough for both.
+                    W = Mathf.Max((Split.W + 2f * PadX) / SplitShare, (Inner.W + 2f * PadX) / (1f - SplitShare));
+                    H = Mathf.Max(Split.H, Inner.H) + 2f * PadY;
+                }
             }
 
             public override void Arrange(float x, float y, float w, float h)
             {
                 base.Arrange(x, y, w, H);
                 float b = BorderWidth;
+                if (Split != null)
+                {
+                    float at = x + w * SplitShare;
+                    Split.Arrange(x + (at - x - Split.W) * 0.5f, y + (H - Split.H) * 0.5f, Split.W, Split.H);
+                    Inner.Arrange(at + PadX, y + (H - Inner.H) * 0.5f, x + w - at - 2f * PadX, Inner.H);
+                    return;
+                }
+
                 Inner.Arrange(x + PadX + b, y + PadY + b, w - 2f * (PadX + b), Inner.H);
             }
 
@@ -700,6 +719,13 @@ namespace GantryTool.Guide
                 else
                 {
                     c.FillRoundRect(x0, y0, x1, y1, RadiusTL * ppi, RadiusTR * ppi, RadiusBR * ppi, RadiusBL * ppi, Bg);
+                }
+
+                if (Split != null)
+                {
+                    float at = (X + AW * SplitShare) * ppi;
+                    c.FillRoundRect(x0, y0, at, y1, RadiusTL * ppi, 0f, 0f, RadiusBL * ppi, SplitBg);
+                    Split.Draw(c, ppi);
                 }
 
                 Inner.Draw(c, ppi);
@@ -771,7 +797,7 @@ namespace GantryTool.Guide
                 case "text" when Json.Has(item, LedKey):
                     return new LedTextNode(Json.Str(item, "text", ""), Json.Num(item, "height", t.TextHeight), ParseColour(Json.Str(item, "color"), ctx.Fg));
                 case "text": return BuildText(t, Json.Str(item, "text", ""), Json.Num(item, "height", t.TextHeight), Json.Str(item, "font") ?? ctx.Font,
-                    ParseColour(Json.Str(item, "color"), ctx.Fg), Json.Num(item, "tracking", 0f));
+                    ParseColour(Json.Str(item, "color"), ctx.Fg), Json.Num(item, "tracking", 0f), Json.Num(item, "squeeze", 100f));
                 case "shield": return BuildShield(t, item, ctx);
                 case "arrow": return BuildArrow(t, item, ctx);
                 case "laneArrows": return BuildLaneArrows(t, item, ctx);
@@ -785,7 +811,10 @@ namespace GantryTool.Guide
                         return new ShieldNode { Shape = "img", Image = GuidePictures.Image(picture), Smooth = true, W = size * wide, H = size };
                     }
 
-                    return new ShieldNode { Shape = "img", Image = GuideAssets.Image(t.Id, Json.Str(item, "name", "")), W = size, H = size };
+                    // A picture keeps its own shape: most are square, the HOV diamond is tall and narrow.
+                    GuideImage named = GuideAssets.Image(t.Id, Json.Str(item, "name", ""));
+                    float across = named != null && named.Height > 0 ? size * named.Width / named.Height : size;
+                    return new ShieldNode { Shape = "img", Image = named, W = across, H = size };
                 }
 
                 case "row":
@@ -826,14 +855,15 @@ namespace GantryTool.Guide
             }
         }
 
-        private static TextNode BuildText(Theme t, string text, float h, string family, Color32 colour, float tracking)
+        private static TextNode BuildText(Theme t, string text, float h, string family, Color32 colour, float tracking, float squeeze = 100f)
         {
             GlyphFont font = t.Font(family);
             float em = h * t.FontScale(family);
             float track = h * tracking / 100f;
-            float w = font != null ? font.Measure(text) * em / font.Em : 0f;
+            float narrow = Mathf.Clamp(squeeze, 50f, 100f) / 100f; // letters drawn narrower than the font, never wider
+            float w = font != null ? font.Measure(text) * em / font.Em * narrow : 0f;
             w += track * Mathf.Max(0, text.Length - 1);
-            return new TextNode { Text = text, Font = font, Em = em, Tracking = track, Colour = colour, W = w, H = h };
+            return new TextNode { Text = text, Font = font, Em = em, Tracking = track, Squeeze = narrow, Colour = colour, W = w, H = h };
         }
 
         private static Node BuildShield(Theme t, Dictionary<string, object> item, Ctx ctx)
@@ -1135,11 +1165,23 @@ namespace GantryTool.Guide
             float pad = Json.Num(item, "padding", h * 0.35f);
             float spacing = SpacingHeight(t, item);
             float gap = Json.Num(item, "gap", (spacing > 0f ? spacing : h) * 0.75f);
-            var inner = new Dictionary<string, object> { { "type", "row" }, { "gap", (double)gap } };
-            StackNode stack = BuildStack(t, inner, Children(item), new Ctx { Font = ctx.Font, Fg = fg, Bg = bg }, true);
+            // A split band stacks what's on its right; any other band lines it up in a row.
+            var inner = new Dictionary<string, object> { { "type", Json.Has(item, "split") ? "column" : "row" }, { "gap", (double)gap }, { "align", "center" } };
+            StackNode stack = BuildStack(t, inner, Children(item), new Ctx { Font = ctx.Font, Fg = fg, Bg = bg }, !Json.Has(item, "split"));
             string align = Json.Str(item, "align");
             stack.Main = align == "start" || align == "left" ? "start" : align == "end" || align == "right" ? "end" : "center";
             var box = new BoxNode { Inner = stack, Bg = bg, PadX = pad * 2f, PadY = pad };
+            Dictionary<string, object> split = Json.Obj(item, "split");
+            if (split != null)
+            {
+                Color32 sbg, sfg;
+                t.Scheme(Json.Str(split, "scheme", "black"), out sbg, out sfg);
+                box.SplitBg = ParseColour(Json.Str(split, "color"), sbg);
+                box.SplitShare = Mathf.Clamp(Json.Num(split, "share", 0.45f), 0.1f, 0.9f);
+                var column = new Dictionary<string, object> { { "type", "column" }, { "align", "center" } };
+                box.Split = BuildStack(t, column, Children(split), new Ctx { Font = ctx.Font, Fg = sfg, Bg = box.SplitBg }, false);
+            }
+
             box.Finish();
             if (stack.Items.Count == 0)
             {
@@ -1365,12 +1407,32 @@ namespace GantryTool.Guide
 
             flush();
 
+            // A strip down the left, as on HOV signs: black, with a white diamond. Or just a block in the top-left corner.
+            Dictionary<string, object> sideItem = Json.Obj(doc, SideBandKey);
+            StackNode sideStack = null;
+            float sideW = 0f;
+            bool sideCorner = sideItem != null && Json.Has(sideItem, "corner");
+            bool sideOver = sideCorner && Json.Has(sideItem, "over");  // the rest of the sign uses its whole width, the block sitting in its corner
+            Color32 sideBg = new Color32(0, 0, 0, 255);
+            if (sideItem != null)
+            {
+                Color32 sbg, sfg;
+                t.Scheme(Json.Str(sideItem, "scheme", "black"), out sbg, out sfg);
+                sideBg = ParseColour(Json.Str(sideItem, "color"), Json.Has(sideItem, "scheme") ? sbg : sideBg);
+                var sideColumn = new Dictionary<string, object> { { "type", "column" }, { "align", "center" } };
+                sideStack = BuildStack(t, sideColumn, Children(sideItem), new Ctx { Font = ctx.Font, Fg = new Color32(255, 255, 255, 255), Bg = sideBg }, false);
+                sideW = sideStack.W + 2f * margin;
+            }
+
+            float sideRoom = sideOver ? 0f : sideW;
+
             // Sizes.
-            float content = 0f, bodyH = 0f;
+            float content = 0f, bodyH = 0f, bands = 0f;
             foreach (Node p in parts)
             {
                 bool band = p is BoxNode;
                 content = Mathf.Max(content, p.W + (band ? 0f : 2f * margin));
+                bands = Mathf.Max(bands, band ? p.W : 0f);
                 bodyH += p.H + (band ? 0f : 2f * margin);
             }
 
@@ -1382,6 +1444,24 @@ namespace GantryTool.Guide
                     tabsW += tab.W;
                     tabsH = Mathf.Max(tabsH, tab.H);
                 }
+            }
+
+            if (sideStack != null && sideCorner)
+            {
+                // Beside a corner block only the content shifts over; a band runs under the block, the full width.
+                float beside = 0f;
+                foreach (Node p in parts)
+                {
+                    beside = Mathf.Max(beside, p is BoxNode ? 0f : p.W + 2f * margin);
+                }
+
+                content = Mathf.Max(beside + sideRoom, bands);
+                bodyH = Mathf.Max(bodyH, sideStack.H + 2f * margin);
+            }
+            else if (sideStack != null)
+            {
+                content += sideRoom;
+                bodyH = Mathf.Max(bodyH, sideStack.H + 2f * margin);
             }
 
             float width = Mathf.Max(content + 4f * border, Mathf.Max(tabsW, Mathf.Max(minWidth, Json.Num(doc, "width", 0f))));
@@ -1426,10 +1506,24 @@ namespace GantryTool.Guide
                 canvas.DrawImageSmooth(cover.Pixels, cover.Width, cover.Height, cx0 * ppu, cy0 * ppu, (cx0 + cw0) * ppu, (cy0 + ch0) * ppu);
             }
 
-            float inner = width - 4f * border, pen = y0 + 2f * border;
+            float inner = width - 4f * border - sideRoom, pen = y0 + 2f * border, leftX = 2f * border + sideRoom;
+            if (sideStack != null)
+            {
+                float top = y0 + 2f * border, bottom = sideCorner ? top + sideStack.H + 2f * margin : y1 - 2f * border;
+                canvas.FillRoundRect(2f * border * ppu, top * ppu, (2f * border + sideW) * ppu, bottom * ppu, iir * rTL * ppu, 0f, 0f, sideCorner ? 0f : iir * ppu, sideBg);
+                sideStack.Arrange(2f * border + (sideW - sideStack.W) * 0.5f, top + (bottom - top - sideStack.H) * 0.5f, sideStack.W, sideStack.H);
+                sideStack.Draw(canvas, ppu);
+            }
 
             // Spare height goes around the first run of content, so it stays centred above any band.
             int spareAt = parts.FindIndex(n => !(n is BoxNode));
+            var grow = parts.Find(n => n is BoxNode && ((BoxNode)n).Split != null) as BoxNode;
+            if (grow != null)
+            {
+                // A split band takes the spare height, as on B.C. reserved lane signs, where the black side is most of the sign.
+                grow.H += extraH;
+                spareAt = -1;
+            }
             for (int k = 0; k < parts.Count; k++)
             {
                 var band = parts[k] as BoxNode;
@@ -1438,21 +1532,27 @@ namespace GantryTool.Guide
                     band.RadiusTL = k == 0 ? iir * rTL : 0f;
                     band.RadiusTR = k == 0 ? iir * rTR : 0f;
                     band.RadiusBR = band.RadiusBL = k == parts.Count - 1 ? iir : 0f;
-                    band.Arrange(2f * border, pen, inner, band.H);
+                    // A block only in the corner leaves bands their full width, as on Ontario's signs.
+                    if (sideStack != null && !sideCorner)
+                    {
+                        band.RadiusBL = 0f;   // the strip takes the corner
+                    }
+
+                    band.Arrange(sideCorner ? 2f * border : leftX, pen, sideCorner ? inner + sideRoom : inner, band.H);
                     band.Draw(canvas, ppu);
                     pen += band.H;
                 }
                 else
                 {
                     float extra = k == spareAt ? extraH : 0f;
-                    parts[k].Arrange(2f * border + margin, pen + margin + extra * 0.5f, inner - 2f * margin, parts[k].H);
+                    parts[k].Arrange(leftX + margin, pen + margin + extra * 0.5f, inner - 2f * margin, parts[k].H);
                     ReachDividers(parts[k], pen, pen + parts[k].H + 2f * margin + extra);
                     DividerOnLaneEdge(parts[k]);
                     var stack = parts[k] as StackNode;
                     var laneRow = stack != null && stack.Items.Count > 0 ? stack.Items[stack.Items.Count - 1] as LaneArrowsNode : null;
                     if (laneRow != null)
                     {
-                        laneRow.ReachEdges(pen + parts[k].H + 2f * margin + extra, 2f * border, width - 2f * border, k == parts.Count - 1 ? iir : 0f);
+                        laneRow.ReachEdges(pen + parts[k].H + 2f * margin + extra, leftX, width - 2f * border, k == parts.Count - 1 ? iir : 0f);
                     }
 
                     parts[k].Draw(canvas, ppu);

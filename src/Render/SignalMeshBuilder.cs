@@ -122,6 +122,14 @@ namespace GantryTool.Render
             return Mathf.Max(beamBottomY + beamDepth * 0.5f, beamBottomY + 0.05f + size * 0.5f);
         }
 
+        /// <summary>How far a head's beacons reach above its top: Canadian speed faces and ramp metering faces have them.</summary>
+        public static float BeaconAbove(FaceSign minus, FaceSign plus, SignStyle style, float size)
+        {
+            bool speed = SignStyles.HasBeacon(style) && (minus.Symbol == SignalSymbol.SpeedLimit || plus.Symbol == SignalSymbol.SpeedLimit);
+            bool ramp = minus.Symbol == SignalSymbol.RampMetered || plus.Symbol == SignalSymbol.RampMetered;
+            return speed || ramp ? size * BeaconScale : 0f;
+        }
+
         /// <summary>World-space centre of a head of <paramref name="size"/> at <paramref name="offset"/> along the beam.</summary>
         public static Vector3 HeadCentre(Vector3 start, Vector3 end, float beamBottomY, float beamDepth, float offset, float size)
         {

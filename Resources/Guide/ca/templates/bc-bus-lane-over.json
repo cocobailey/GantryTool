@@ -1,0 +1,78 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-bus-lane-over",
+  "name": "B.C. bus lane, over",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.28,
+  "cornerRadius": 4.07,
+  "margin": 2.14,
+  "width": 171.2,
+  "height": 85.6,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 4.49,
+      "split": {
+        "scheme": "black",
+        "share": 0.13513513513513514,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 27.61
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "row",
+          "align": "center",
+          "gap": 15.41,
+          "items": [
+            {
+              "type": "symbol",
+              "name": "hov-bus",
+              "height": 28.14
+            },
+            {
+              "type": "column",
+              "align": "center",
+              "gap": 6.53,
+              "items": [
+                {
+                  "type": "text",
+                  "text": "6 - 9 AM",
+                  "height": 14.98,
+                  "font": "RG2014E"
+                },
+                {
+                  "type": "text",
+                  "text": "MON - FRI",
+                  "height": 14.66,
+                  "font": "RG2014E",
+                  "tracking": -7
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 49.76,
+      "style": "reserved",
+      "gapBefore": 0.21
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-201-1D"
+}

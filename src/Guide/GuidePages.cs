@@ -14,7 +14,7 @@ namespace GantryTool.Guide
         public const int MaxPages = 5;
         public const float MinSeconds = 2f, MaxSeconds = 60f, DefaultSeconds = 8f;
         public const string PagesKey = "pages", PageKey = "page", SecondsKey = "pageSeconds", WhenKey = "pageWhen", WhenBusy = "busy", BusyAtKey = "pageBusyAt";
-        public const float DefaultBusyAt = 50f;
+        public const float DefaultBusyAt = 30f;  // % under the speed limit
 
         /// <summary>True if a design might change by itself; quick, for looking through many.</summary>
         public static bool Changes(string design)
@@ -149,10 +149,10 @@ namespace GantryTool.Guide
             }
         }
 
-        /// <summary>Which message shows at a time and the road's traffic density; -1 for none, a sign that only shows in heavy traffic when there isn't any.</summary>
-        public static int PageAt(Dictionary<string, object> doc, float now, int density)
+        /// <summary>Which message shows at a time and the traffic slowdown (% under the limit); -1 for none, a sign that only shows in heavy traffic when there isn't any.</summary>
+        public static int PageAt(Dictionary<string, object> doc, float now, int slow)
         {
-            if (Json.Str(doc, WhenKey) == WhenBusy && density < Json.Num(doc, BusyAtKey, DefaultBusyAt))
+            if (Json.Str(doc, WhenKey) == WhenBusy && slow < Json.Num(doc, BusyAtKey, DefaultBusyAt))
             {
                 return -1;
             }
@@ -186,7 +186,7 @@ namespace GantryTool.Guide
         }
 
         /// <summary>What a design shows now; the message being edited while it's being edited. Designs that don't change come back as they are.</summary>
-        public static string Shown(string design, float now, int density, bool editing)
+        public static string Shown(string design, float now, int slow, bool editing)
         {
             if (!Changes(design))
             {
@@ -194,7 +194,7 @@ namespace GantryTool.Guide
             }
 
             Dictionary<string, object> doc = Read(design);
-            return doc == null ? design : DesignOf(doc, editing ? Current(doc) : PageAt(doc, now, density));
+            return doc == null ? design : DesignOf(doc, editing ? Current(doc) : PageAt(doc, now, slow));
         }
 
         /// <summary>Every way a design can look, so none of them is thrown away and redrawn on each turn.</summary>

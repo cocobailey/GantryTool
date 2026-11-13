@@ -1,0 +1,65 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-hov-2",
+  "name": "B.C. HOV 2+",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 91.52,
+  "items": [
+    {
+      "type": "symbol",
+      "name": "hov-car",
+      "height": 20.59
+    },
+    {
+      "type": "text",
+      "text": "HOV",
+      "height": 11.67,
+      "font": "RG2014E",
+      "gapBefore": 4.46
+    },
+    {
+      "type": "row",
+      "align": "start",
+      "gap": 6.52,
+      "items": [
+        {
+          "type": "text",
+          "text": "2",
+          "height": 12.3,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "OR MORE",
+          "height": 6.18,
+          "font": "RG2014D"
+        }
+      ],
+      "gapBefore": 4.46
+    },
+    {
+      "type": "text",
+      "text": "PERSONS",
+      "height": 8.12,
+      "font": "RG2014D",
+      "gapBefore": 4.69
+    },
+    {
+      "type": "text",
+      "text": "PER VEHICLE",
+      "height": 8.12,
+      "font": "RG2014D",
+      "gapBefore": 3.66
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-6"
+}

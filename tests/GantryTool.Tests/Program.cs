@@ -24,6 +24,7 @@ namespace GantryTool.Tests
             Run("guide signs: imported pictures", GuideImportedPictures);
             Run("undo and redo", UndoAndRedo);
             Run("undo and redo: changes made together", UndoGroups);
+            Run("guide signs: HOV signs for the US and Canada", GuideHov);
             Run("gantries: a curved tube on one post makes a Y", CurvedY);
             Run("guide signs: colours on a real sign, and gaps between lines", GuideRealColoursAndGaps);
             Run("live signs: what counts as heavy traffic can be set", HeavyTrafficSetting);
@@ -1719,7 +1720,7 @@ namespace GantryTool.Tests
 
         private static void LiveSignsWork()
         {
-            Check(LiveSigns.StepFor(0) == 0 && LiveSigns.StepFor(49) == 0 && LiveSigns.StepFor(50) == 1 && LiveSigns.StepFor(70) == 2 && LiveSigns.StepFor(85) == 3 && LiveSigns.StepFor(100) == 3, "traffic steps");
+            Check(LiveSigns.StepFor(0) == 0 && LiveSigns.StepFor(29) == 0 && LiveSigns.StepFor(30) == 1 && LiveSigns.StepFor(50) == 2 && LiveSigns.StepFor(65) == 3 && LiveSigns.StepFor(100) == 3, "traffic steps");
             Check(LiveSigns.Lowered(100, 0) == 100 && LiveSigns.Lowered(100, 1) == 80 && LiveSigns.Lowered(100, 3) == 40, "lowered");
             Check(LiveSigns.Lowered(50, 3) == 30 && LiveSigns.Lowered(30, 3) == 30 && LiveSigns.Lowered(20, 1) == 20, "never below the lowest sign, or raised");
 
@@ -2143,11 +2144,119 @@ namespace GantryTool.Tests
             Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template("us", "message");
             doc[GantryTool.Guide.GuidePages.WhenKey] = GantryTool.Guide.GuidePages.WhenBusy;
             string normal = GantryTool.Guide.Json.Write(doc);
-            Check(Lines(GantryTool.Guide.GuidePages.Shown(normal, 0f, 49, false)).Count == 0 && Lines(GantryTool.Guide.GuidePages.Shown(normal, 0f, 50, false)).Count > 0, "half full by default");
+            Check(Lines(GantryTool.Guide.GuidePages.Shown(normal, 0f, 29, false)).Count == 0 && Lines(GantryTool.Guide.GuidePages.Shown(normal, 0f, 30, false)).Count > 0, "30% under the limit by default");
             doc[GantryTool.Guide.GuidePages.BusyAtKey] = 20.0;
             string early = GantryTool.Guide.Json.Write(doc);
             Check(Lines(GantryTool.Guide.GuidePages.Shown(early, 0f, 19, false)).Count == 0 && Lines(GantryTool.Guide.GuidePages.Shown(early, 0f, 20, false)).Count > 0, "or the sign's own setting");
             Check(GantryTool.Guide.GuidePages.Changes(early) && !GantryTool.Guide.GuidePages.Changes(GantryTool.Guide.GuidePages.Shown(early, 0f, 50, false)), "and what's shown holds none of it");
+        }
+
+        private static void GuideHov()
+        {
+            string[][] signs =
+            {
+                new[] { "us", "hov-definition" }, new[] { "us", "hov-only-hours" }, new[] { "us", "hov-only" }, new[] { "us", "hov-lane-ahead" },
+                new[] { "us", "hov-begins" }, new[] { "us", "hov-lane-ends" }, new[] { "us", "hov-restriction-ends" }, new[] { "us", "hov-entrance-advance" },
+                new[] { "us", "hov-entrance" }, new[] { "us", "bus-only" }, new[] { "us", "bus-lane-ahead" }, new[] { "us", "bus-lane-ends" },
+                new[] { "ca", "bc-bus-lane" }, new[] { "ca", "bc-bus-lane-hours" }, new[] { "ca", "bc-hov-lane" }, new[] { "ca", "bc-hov-lane-hours" },
+                new[] { "ca", "bc-vanpool" }, new[] { "ca", "bc-hov-2" }, new[] { "ca", "bc-bus-stay" }, new[] { "ca", "bc-hov-stay" },
+                new[] { "ca", "bc-bus-lane-over" }, new[] { "ca", "bc-hov-lane-over" }, new[] { "ca", "bc-stay-over" }, new[] { "ca", "bc-vanpool-permitted" },
+                new[] { "ca", "bc-hov-exit" }, new[] { "ca", "bc-tab-ahead" }, new[] { "ca", "bc-tab-begins" }, new[] { "ca", "bc-tab-ends" },
+                new[] { "ca", "bc-tab-left-lane" }, new[] { "ca", "bc-tab-right-lane" }, new[] { "ca", "bc-tab-bus-lane" }, new[] { "ca", "bc-tab-bus-hov" },
+                new[] { "ca", "vancouver-bus-bike" }, new[] { "ca", "on-hov-lane" }, new[] { "ca", "on-hov-ahead" }, new[] { "ca", "on-hov-begins" },
+                new[] { "ca", "on-hov-ends" }
+            };
+            foreach (string[] s in signs)
+            {
+                Dictionary<string, object> doc = GantryTool.Guide.GuideAssets.Template(s[0], s[1]);
+                Check(doc != null, s[1] + " is there");
+                GantryTool.Guide.GuideSign sign = GantryTool.Guide.GuideRenderer.Render(doc, 2048, 3f);
+                Check(sign.Pixels.Length > 0 && sign.Width > 0f, s[1] + " draws");
+                CheckLetters(s[0], GantryTool.Guide.Json.Arr(doc, "items"), s[1]);
+                // A corner block (Ontario) only fills the top corner; a strip runs down the whole left edge.
+                if (GantryTool.Guide.Json.Has(doc, "sideBand") && !GantryTool.Guide.Json.Has(GantryTool.Guide.Json.Obj(doc, "sideBand"), "corner"))
+                {
+                    // Black down the left edge, white diamond in it, and the words clear of the strip.
+                    int y = sign.PixelHeight / 2, black = 0;
+                    for (int x = sign.PixelWidth / 40; x < sign.PixelWidth / 8; x++)
+                    {
+                        Color32 p = sign.Pixels[y * sign.PixelWidth + x];
+                        black += p.r < 40 && p.g < 40 && p.b < 40 ? 1 : 0;
+                    }
+
+                    Check(black > 0, s[1] + ": a black strip");
+                    float strip = 0f;
+                    foreach (GantryTool.Guide.GuidePart part in sign.Parts)
+                    {
+                        if (part.Type == "text" && part.Y >= sign.TabHeight)   // a tab above the sign can sit anywhere
+                        {
+                            strip = strip == 0f ? part.X : Math.Min(strip, part.X);
+                        }
+                    }
+
+                    Check(strip > sign.Width * 0.18f, s[1] + ": words clear of the strip: " + strip / sign.Width);
+                }
+            }
+
+            foreach (string pic in new[] { "hov-diamond", "hov-car", "hov-bus", "hov-van", "hov-bike" })
+            {
+                Check(GantryTool.Guide.GuideAssets.Image("us", pic) != null && GantryTool.Guide.GuideAssets.Image("ca", pic) != null, pic + " in both");
+            }
+
+            // A sign drawn to its standard keeps its shape: a height the player gives scales the whole sign.
+            Dictionary<string, object> plate = GantryTool.Guide.GuideAssets.Template("ca", "bc-bus-lane");
+            var plateLanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 3; i++)
+            {
+                plateLanes.Add(new GantryTool.Detect.GantryLane { Offset = 2.5f + i * 3.75f, Width = 3.75f, TravelSign = 1 });
+            }
+
+            var natural = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 2, FitLast = 2, Design = GantryTool.Guide.Json.Write(plate) };
+            GantryTool.Guide.GuidePlacement before = GantryTool.Guide.GuideFit.Resolve(natural, plateLanes, 2.4f);
+            plate[GantryTool.Guide.GuideFit.HeightKey] = 3.0;
+            var tall = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 2, FitLast = 2, Design = GantryTool.Guide.Json.Write(plate) };
+            GantryTool.Guide.GuidePlacement after = GantryTool.Guide.GuideFit.Resolve(tall, plateLanes, 2.4f);
+            Check(before.Design.Contains("\"height\"") && after.Scale > before.Scale * 1.2f && Math.Abs(after.Along - 6.25f) < 0.01f,
+                "a B.C. sign keeps its shape when made taller: " + before.Scale + " -> " + after.Scale + ", along " + after.Along);
+
+            // A strip on a sign over lanes, with arrows: the arrows stay over their lanes.
+            Dictionary<string, object> laned = GantryTool.Guide.GuideAssets.Template("us", "pull-through");
+            laned["sideBand"] = new Dictionary<string, object> { { "items", new List<object> { new Dictionary<string, object> { { "type", "symbol" }, { "name", "hov-diamond" }, { "height", 40.0 } } } } };
+            var lanes = new List<GantryTool.Detect.GantryLane>();
+            for (int i = 0; i < 3; i++)
+            {
+                lanes.Add(new GantryTool.Detect.GantryLane { Offset = 2.5f + i * 3.75f, Width = 3.75f, TravelSign = 1 });
+            }
+
+            var head = new GuideHead { Id = 1, Side = -1, Scale = 1f, FitFirst = 1, FitLast = 3, LaneArrows = true, Design = GantryTool.Guide.Json.Write(laned) };
+            string placed = GantryTool.Guide.GuideFit.Arrange(new List<GuideHead> { head }, lanes)[1].Design;
+            Check(GantryTool.Guide.GuideRenderer.Render((Dictionary<string, object>)GantryTool.Guide.Json.Parse(placed), 2048, 3f).Pixels.Length > 0, "with lane arrows too");
+        }
+
+        private static void CheckLetters(string theme, List<object> items, string sign)
+        {
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (object o in items)
+            {
+                var item = (Dictionary<string, object>)o;
+                string words = GantryTool.Guide.Json.Str(item, "text");
+                if (words != null)
+                {
+                    Dictionary<string, object> def = GantryTool.Guide.GuideAssets.Theme(theme);
+                    string family = GantryTool.Guide.Json.Str(item, "font") ?? GantryTool.Guide.Json.Str(GantryTool.Guide.Json.Obj(def, "defaults"), "font", "RG2014EM");
+                    GantryTool.Guide.GlyphFont font = GantryTool.Guide.GuideAssets.Font(theme, family);
+                    foreach (char c in words)
+                    {
+                        Check(font != null && font.Has(c), sign + ": the letter '" + c + "' in " + family);
+                    }
+                }
+
+                CheckLetters(theme, GantryTool.Guide.Json.Arr(item, "items"), sign);
+            }
         }
 
         private static void UndoGroups()

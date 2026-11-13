@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-vanpool",
+  "name": "B.C. vanpool 6+",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 91.52,
+  "items": [
+    {
+      "type": "symbol",
+      "name": "hov-van",
+      "height": 18.65
+    },
+    {
+      "type": "text",
+      "text": "Vanpool",
+      "height": 15.67,
+      "font": "RG2014C",
+      "squeeze": 80,
+      "gapBefore": 2.17
+    },
+    {
+      "type": "row",
+      "align": "center",
+      "gap": 4.58,
+      "items": [
+        {
+          "type": "text",
+          "text": "6",
+          "height": 12.01,
+          "font": "RG2014D"
+        },
+        {
+          "type": "text",
+          "text": "OR MORE",
+          "height": 5.83,
+          "font": "RG2014D"
+        }
+      ],
+      "gapBefore": 7.55
+    },
+    {
+      "type": "text",
+      "text": "PERSONS",
+      "height": 7.44,
+      "font": "RG2014D",
+      "gapBefore": 3.89
+    },
+    {
+      "type": "text",
+      "text": "PER VEHICLE",
+      "height": 7.44,
+      "font": "RG2014D",
+      "gapBefore": 4.0
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-5"
+}

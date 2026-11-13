@@ -61,6 +61,7 @@ namespace GantryTool.Data
         public static readonly byte[] SecondsChoices = { 5, 10, 20, 60 };
 
         private static float _next, _nextTraffic;
+        private static readonly Dictionary<ushort, int> Measured = new Dictionary<ushort, int>();
         private static int _editGantry, _editSign;
         private static float _editUntil;
 
@@ -98,9 +99,9 @@ namespace GantryTool.Data
         /// How far to lower the limit at a road's traffic density, the game's own 0-100 measure of how full a road is, not how
         /// fast it's moving: none to three steps, starting from the density that counts as heavy.
         /// </summary>
-        public static int StepFor(int density, int heavy = 50)
+        public static int StepFor(int slow, int heavy = 30)
         {
-            return density < heavy ? 0 : density < heavy + 20 ? 1 : density < heavy + 35 ? 2 : 3;
+            return slow < heavy ? 0 : slow < heavy + 20 ? 1 : slow < heavy + 35 ? 2 : 3;
         }
 
         public static int Lowered(int kmh, int step)
@@ -232,14 +233,18 @@ namespace GantryTool.Data
         private static void ReadTraffic(Gantry g)
         {
             g.LiveSteps.Clear();
-            g.LiveDensity = 0;
-            NetManager net = Singleton<NetManager>.instance;
-            int heavy = Mathf.Clamp(Settings.Current.HeavyTraffic, 5, 100);
-            foreach (GantryLane lane in g.Lanes)
+            g.LiveSlow = 0;
+            int heavy = Mathf.Clamp(Settings.Current.SlowTraffic, 5, 95);
+            TrafficMeter.Measure(g.Lanes, Measured);
+            foreach (KeyValuePair<ushort, int> kv in Measured)
             {
-                int density = net.m_segments.m_buffer[lane.Segment].m_trafficDensity;
-                g.LiveSteps[lane.Segment] = StepFor(density, heavy);
-                g.LiveDensity = Mathf.Max(g.LiveDensity, density);
+                // Smoothed, so a car or two braking doesn't flick the signs: drops come in faster than recoveries, as on real roads.
+                float was;
+                float avg = g.LiveSlowAvg.TryGetValue(kv.Key, out was) ? Mathf.Lerp(was, kv.Value, kv.Value > was ? 0.5f : 0.25f) : kv.Value;
+                g.LiveSlowAvg[kv.Key] = avg;
+                int slow = Mathf.RoundToInt(avg);
+                g.LiveSteps[kv.Key] = StepFor(slow, heavy);
+                g.LiveSlow = Mathf.Max(g.LiveSlow, slow);
             }
         }
 
@@ -260,7 +265,7 @@ namespace GantryTool.Data
             {
                 if (GantryTool.Guide.GuidePages.Changes(h.Design))
                 {
-                    stamp = stamp * 31 + GantryTool.Guide.GuidePages.Shown(h.Design, now, g.LiveDensity, IsEditing(g.Id, h.Id)).GetHashCode();
+                    stamp = stamp * 31 + GantryTool.Guide.GuidePages.Shown(h.Design, now, g.LiveSlow, IsEditing(g.Id, h.Id)).GetHashCode();
                 }
             }
 

@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-bus-lane",
+  "name": "B.C. bus lane",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 91.52,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 4.8,
+      "split": {
+        "scheme": "black",
+        "share": 0.375,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 29.86
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "symbol",
+          "name": "hov-bus",
+          "height": 29.63
+        }
+      ]
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 39.24,
+      "style": "reserved",
+      "gapBefore": 2.86
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-200-1D"
+}

@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "hov-entrance",
+  "name": "HOV lane entrance (E8-2)",
+  "scheme": "green",
+  "align": "center",
+  "items": [
+    {
+      "type": "tab",
+      "align": "left",
+      "scheme": "yellow",
+      "items": [
+        {
+          "type": "text",
+          "text": "LEFT",
+          "height": 10,
+          "font": "RG2014E"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "HOV LANE",
+      "height": 15
+    },
+    {
+      "type": "text",
+      "text": "ENTRANCE",
+      "height": 15
+    },
+    {
+      "type": "arrow",
+      "direction": "up-left",
+      "height": 16
+    }
+  ],
+  "sideBand": {
+    "items": [
+      {
+        "type": "symbol",
+        "name": "hov-diamond",
+        "height": 40
+      }
+    ]
+  }
+}

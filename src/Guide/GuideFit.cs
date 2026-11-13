@@ -35,6 +35,7 @@ namespace GantryTool.Guide
         public const string OwnWidthKey = "ownWidth";  // a sign that isn't made to stretch across the lanes it's over
         public const string BannerKey = "banner";
         public const string CompactKey = "compact";    // a small plate: keeps its own size, not the default or its neighbours'
+        public const string ShapeKey = "keepShape";    // a regulatory sign drawn to its standard: any size the player gives scales it whole
         public const string ExitOnlyWord = "exitOnly";
         public const string ExitTabWord = "exitTab";
         public const string ArrowKey = "arrowDirection";
@@ -675,6 +676,11 @@ namespace GantryTool.Guide
                 return free;
             }
 
+            if (Json.Has(doc, ShapeKey))
+            {
+                return KeepShape(h, doc, lanes, customWidth, customHeight);
+            }
+
             int first = 0, last = 0;
             float along = h.Along, limit = 0f;
             if (fit)
@@ -809,6 +815,35 @@ namespace GantryTool.Guide
             }
 
             return new GuidePlacement { Design = Json.Write(doc), Along = along, Scale = scale, Fitted = fit, Source = h };
+        }
+
+        /// <summary>
+        /// A sign drawn to its standard keeps its shape: its own width and height, over the middle of its lanes, and a size the
+        /// player gives scales the whole sign (a strip or band stretched on its own would no longer be the sign).
+        /// </summary>
+        private static GuidePlacement KeepShape(GuideHead h, Dictionary<string, object> doc, List<GantryLane> lanes, float customWidth, float customHeight)
+        {
+            GuideSign own = GuideRenderer.Render(doc, 1024, 1f, true);
+            float scale = h.Scale;
+            if (customHeight > 0f && own.Height - own.TabHeight > 0f)
+            {
+                scale = customHeight / ((own.Height - own.TabHeight) * MetresPerUnit);
+            }
+            else if (customWidth > 0f && own.Width > 0f)
+            {
+                scale = customWidth / (own.Width * MetresPerUnit);
+            }
+
+            float along = h.Along;
+            if (lanes.Count > 0)
+            {
+                int first = Mathf.Clamp(h.FitFirst - 1, 0, lanes.Count - 1), last = Mathf.Clamp(h.FitLast - 1, first, lanes.Count - 1);
+                float lo = lanes[first].Offset - lanes[first].Width * 0.5f, hi = lanes[last].Offset + lanes[last].Width * 0.5f;
+                along = (lo + hi) * 0.5f;
+            }
+
+            scale = Mathf.Clamp(scale, GuideData.MinScale, GuideData.MaxScale);
+            return new GuidePlacement { Design = Json.Write(doc), Along = along, Scale = scale, Fitted = lanes.Count > 0, Source = h };
         }
 
         /// <summary>

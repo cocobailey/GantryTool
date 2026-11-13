@@ -1,0 +1,60 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-vanpool-permitted",
+  "name": "B.C. vanpool permitted",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.37,
+  "cornerRadius": 4.35,
+  "margin": 2.29,
+  "width": 68.64,
+  "height": 68.64,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 2.29,
+      "split": {
+        "scheme": "black",
+        "share": 0.27,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 27.46
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "symbol",
+          "name": "hov-van",
+          "height": 16.59
+        },
+        {
+          "type": "text",
+          "text": "Vanpool",
+          "height": 17.73,
+          "font": "RG2014C",
+          "squeeze": 72,
+          "gapBefore": 2.29
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "PERMITTED",
+      "height": 12.58,
+      "font": "RG2014C",
+      "squeeze": 88,
+      "gapBefore": 1.72
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-237"
+}

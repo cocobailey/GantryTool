@@ -1,0 +1,95 @@
+{
+  "formatVersion": 1,
+  "theme": "ca",
+  "id": "bc-hov-lane-over",
+  "name": "B.C. HOV lane, over",
+  "scheme": "white",
+  "align": "center",
+  "ownWidth": true,
+  "compact": true,
+  "border": 1.28,
+  "cornerRadius": 4.07,
+  "margin": 2.14,
+  "width": 171.2,
+  "height": 85.6,
+  "items": [
+    {
+      "type": "panel",
+      "scheme": "white",
+      "align": "center",
+      "padding": 0.0,
+      "gap": 4.49,
+      "split": {
+        "scheme": "black",
+        "share": 0.13513513513513514,
+        "items": [
+          {
+            "type": "symbol",
+            "name": "hov-diamond",
+            "height": 27.61
+          }
+        ]
+      },
+      "items": [
+        {
+          "type": "row",
+          "align": "center",
+          "gap": 6.42,
+          "items": [
+            {
+              "type": "column",
+              "align": "center",
+              "gap": 5.35,
+              "items": [
+                {
+                  "type": "spacer",
+                  "height": 1.07
+                },
+                {
+                  "type": "symbol",
+                  "name": "hov-bus",
+                  "height": 26.64
+                },
+                {
+                  "type": "symbol",
+                  "name": "hov-car",
+                  "height": 18.62
+                }
+              ]
+            },
+            {
+              "type": "column",
+              "align": "center",
+              "gap": 6.53,
+              "items": [
+                {
+                  "type": "text",
+                  "text": "3:30 - 6 PM",
+                  "height": 14.87,
+                  "font": "RG2014D",
+                  "tracking": -4
+                },
+                {
+                  "type": "text",
+                  "text": "MON - FRI",
+                  "height": 14.45,
+                  "font": "RG2014E",
+                  "tracking": -2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "arrow",
+      "direction": "down",
+      "height": 49.76,
+      "style": "reserved",
+      "gapBefore": 0.21
+    }
+  ],
+  "keepShape": true,
+  "description": "B.C. R-201-2D"
+}

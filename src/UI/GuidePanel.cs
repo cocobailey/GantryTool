@@ -100,6 +100,7 @@ namespace GantryTool.UI
         public override void Awake()
         {
             base.Awake();
+            FrameTicker.Attach(this, Tick);
             name = "GantryToolGuidePanel";
             backgroundSprite = "MenuPanel2";
             width = PanelWidth;
@@ -141,9 +142,8 @@ namespace GantryTool.UI
             relativePosition = new Vector3(120f, 90f);
         }
 
-        public override void Update()
+        private void Tick()
         {
-            base.Update();
             UIUtils.KeepTooltipHidden(this);
             if (!isVisible)
             {
@@ -633,14 +633,14 @@ namespace GantryTool.UI
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, 34f);
             float fifth = (_content.width - 24f) / 5f;
-            RowButton(row, 0f, fifth, "Undo", "Undo the last change (Ctrl+Z)", () =>
+            RowButton(row, 0f, fifth, "Undo", "Undo (Ctrl+Z)", () =>
             {
                 if (Tool != null)
                 {
                     Tool.UndoLast();
                 }
             });
-            _redoButton = RowButton(row, fifth + 6f, fifth, "Redo", "Put back what you just undid (Ctrl+Y)", () =>
+            _redoButton = RowButton(row, fifth + 6f, fifth, "Redo", "Redo (Ctrl+Y)", () =>
             {
                 if (Tool != null)
                 {
@@ -648,10 +648,10 @@ namespace GantryTool.UI
                 }
             });
             _redoButton.isEnabled = UndoStack.RedoCount > 0;
-            _copyButton = RowButton(row, 2f * (fifth + 6f), fifth, CopyLabel, "Copy this sign, to paste on any gantry (Ctrl+C)", () => CopySign(g));
-            _pasteButton = RowButton(row, 3f * (fifth + 6f), fifth, "Paste sign", "Replace this sign with the one you copied; it stays where it is (Ctrl+V, and Ctrl+Z brings this one back)", () => PasteSign(g));
+            _copyButton = RowButton(row, 2f * (fifth + 6f), fifth, CopyLabel, "Copy this sign (Ctrl+C)", () => CopySign(g));
+            _pasteButton = RowButton(row, 3f * (fifth + 6f), fifth, "Paste sign", "Replace this sign with the copied one (Ctrl+V)", () => PasteSign(g));
             _pasteButton.isEnabled = GuideClipboard.HasSign;
-            RowButton(row, 4f * (fifth + 6f), fifth, "Delete sign", "Delete this guide sign (Ctrl+Z brings it back)", () =>
+            RowButton(row, 4f * (fifth + 6f), fifth, "Delete sign", "Delete this sign", () =>
             {
                 Gantry cur = GantryManager.Find(_gantryId);
                 if (cur != null)
@@ -772,7 +772,7 @@ namespace GantryTool.UI
             var tip = _content.AddUIComponent<UIPanel>();
             tip.size = new Vector2(_content.width, 48f);
             const float Button = 70f;
-            UILabel text = UIUtils.CreateLabel(tip, "Click any part of the sign to change it, or drag it to move it. Add parts with the buttons below. Placement sets its size and lanes.", 0.8f);
+            UILabel text = UIUtils.CreateLabel(tip, "Click a part to change it, or drag it to move it.", 0.8f);
             text.autoSize = false;
             text.wordWrap = true;
             text.size = new Vector2(_content.width - Button - 8f, 44f);
@@ -828,7 +828,7 @@ namespace GantryTool.UI
             });
             add.isEnabled = count < GuidePages.MaxPages;
             x += 52f + Gap;
-            UIButton remove = RowButton(row, x, 60f, "Remove", "Take this message off the sign (Ctrl+Z brings it back)", () =>
+            UIButton remove = RowButton(row, x, 60f, "Remove", "Remove this message", () =>
             {
                 CommitText();
                 GuidePages.RemoveCurrent(_doc);
@@ -862,12 +862,12 @@ namespace GantryTool.UI
             {
                 var heavy = _content.AddUIComponent<UIPanel>();
                 heavy.size = new Vector2(_content.width, 40f);
-                MiniSlider(heavy, 0f, 0f, _content.width * 0.6f, "Shows when the road is this full (%)", 5f, 100f, 5f, Json.Num(_doc, GuidePages.BusyAtKey, GuidePages.DefaultBusyAt), v =>
+                MiniSlider(heavy, 0f, 0f, _content.width * 0.6f, "Shows when traffic is this far under the limit (%)", 5f, 95f, 5f, Json.Num(_doc, GuidePages.BusyAtKey, GuidePages.DefaultBusyAt), v =>
                 {
                     _doc[GuidePages.BusyAtKey] = (double)v;
                     Commit(g, "message traffic");
                 });
-                UIUtils.CreateLabel(heavy, "Road below right now: " + g.LiveDensity + "%", 0.75f).relativePosition = new Vector3(_content.width * 0.6f + 12f, 14f);
+                UIUtils.CreateLabel(heavy, "Right now: " + g.LiveSlow + "% under", 0.75f).relativePosition = new Vector3(_content.width * 0.6f + 12f, 14f);
             }
         }
 
@@ -916,7 +916,7 @@ namespace GantryTool.UI
             var top = _content.AddUIComponent<UIPanel>();
             top.size = new Vector2(_content.width, RowHeight);
             float third = (_content.width - 12f) / 3f;
-            RowButton(top, 0f, third, "Choose a different sign...", "Pick a sign to start from; it replaces this one (Ctrl+Z brings it back)", () =>
+            RowButton(top, 0f, third, "Choose a different sign...", "Start from another sign; it replaces this one", () =>
             {
                 CommitText();
                 _picking = true;
@@ -941,7 +941,7 @@ namespace GantryTool.UI
             {
                 var fill = _content.AddUIComponent<UIPanel>();
                 fill.size = new Vector2(_content.width, RowHeight);
-                RowButton(fill, 0f, _content.width, "Fill in from the road", "Write in the road this sign is about, from the map; useful after turning the sign round or renaming a road (Ctrl+Z undoes it)", () => FillFromRoad(g));
+                RowButton(fill, 0f, _content.width, "Fill in from the road", "Fill in the road name from the map", () => FillFromRoad(g));
             }
 
             if (_saving)
@@ -983,7 +983,7 @@ namespace GantryTool.UI
         {
             var box = _content.AddUIComponent<UIPanel>();
             box.size = new Vector2(_content.width, InspectorHeight);
-            UIUtils.CreateLabel(box, "Name for this sign (saving under a name you already used replaces that sign)", 0.8f).relativePosition = Vector3.zero;
+            UIUtils.CreateLabel(box, "Name for this sign", 0.8f).relativePosition = Vector3.zero;
             UITextField name = UIUtils.CreateTextField(box, _content.width, MySigns.MaxNameLength);
             name.relativePosition = new Vector3(0f, 18f);
             string id = Json.Str(_doc, "id", "");
@@ -1095,7 +1095,7 @@ namespace GantryTool.UI
                 wanted += PickerSection(scroll, "My signs", cells, width);
             }
 
-            var builtIn = new List<PickerCell>();
+            var groups = new Dictionary<string, List<PickerCell>>();
             string country = GuideThemes.Current;
             foreach (string name in GuideAssets.TemplateNames(country))
             {
@@ -1106,18 +1106,29 @@ namespace GantryTool.UI
                     continue;
                 }
 
-                builtIn.Add(new PickerCell
+                string group = Category(file, template);
+                if (!groups.ContainsKey(group))
+                {
+                    groups[group] = new List<PickerCell>();
+                }
+
+                groups[group].Add(new PickerCell
                 {
                     Label = Json.Str(template, "name", file),
                     Id = Json.Str(template, "id"),
                     Picture = GuideCache.Thumbnail(country, file),
+                    Tip = Json.Str(template, "description") != null ? Json.Str(template, "name", file) + " (" + Json.Str(template, "description") + ")" : null,
                     Use = () => UseTemplate(g, file)
                 });
             }
 
-            if (builtIn.Count > 0)
+            foreach (string group in Categories)
             {
-                wanted += PickerSection(scroll, "Ready-made signs", builtIn, width);
+                List<PickerCell> cells;
+                if (groups.TryGetValue(group, out cells))
+                {
+                    wanted += PickerSection(scroll, group, cells, width);
+                }
             }
 
             if (wanted <= 0f)
@@ -1129,6 +1140,36 @@ namespace GantryTool.UI
             }
 
             return wanted;
+        }
+
+        private static readonly string[] Categories = { "Direction signs", "Exits", "HOV and bus lanes", "Other signs" };
+
+        /// <summary>Which picker section a ready-made sign goes in: its own "category", or one told from its id.</summary>
+        private static string Category(string file, Dictionary<string, object> template)
+        {
+            string own = Json.Str(template, "category");
+            if (own != null && Array.IndexOf(Categories, own) >= 0)
+            {
+                return own;
+            }
+
+            Func<string[], bool> any = words => Array.Exists(words, w => file.IndexOf(w, StringComparison.Ordinal) >= 0);
+            if (any(new[] { "hov", "bus", "vanpool", "bc-tab", "vancouver" }))
+            {
+                return "HOV and bus lanes";
+            }
+
+            if (any(new[] { "exit", "gore", "ausfahrt", "afrit", "advance-guide", "junction-plate" }))
+            {
+                return "Exits";
+            }
+
+            if (any(new[] { "message", "services", "tourist", "attraction", "lane-closed", "lane-ending", "blank", "diversion", "umleitung", "smart-motorway", "toll" }))
+            {
+                return "Other signs";
+            }
+
+            return "Direction signs";
         }
 
         private bool MatchesSearch(string name)
@@ -1183,7 +1224,7 @@ namespace GantryTool.UI
             var top = _content.AddUIComponent<UIPanel>();
             top.size = new Vector2(_content.width, 40f);
             UILabel note = UIUtils.CreateLabel(top, _pictureNote ?? (files.Count > 0
-                ? "Click a picture to use it. Transparent PNGs work best. It's saved with your city."
+                ? "Click a picture to use it. Transparent PNGs work best."
                 : "No pictures yet. Put PNG or JPG files in the folder, then click Look again."), 0.8f);
             note.relativePosition = new Vector3(0f, 8f);
             note.width = _content.width;
@@ -1198,7 +1239,7 @@ namespace GantryTool.UI
                     _coverMode = false;
                     _rebuild = true;
                 });
-                UIButton cover = RowButton(how, half + 6f, half, "Cover the whole sign", "The picture becomes the whole sign, in place of what's on it, and the sign takes its shape (Ctrl+Z brings it back)", () =>
+                UIButton cover = RowButton(how, half + 6f, half, "Cover the whole sign", "The picture becomes the whole sign", () =>
                 {
                     _coverMode = true;
                     _rebuild = true;
@@ -1297,7 +1338,7 @@ namespace GantryTool.UI
                 ChoosePicture(false);
                 _coverMode = true;
             });
-            RowButton(row, half + 6f, half, "Remove whole-sign picture", "Take the picture off; anything added on top stays (Ctrl+Z brings it back)", () =>
+            RowButton(row, half + 6f, half, "Remove whole-sign picture", "Remove the picture", () =>
             {
                 _doc.Remove(GuidePictures.PartKey);
                 Commit(g, "sign content");
@@ -1445,7 +1486,7 @@ namespace GantryTool.UI
                 b.normalBgSprite = c.Id == current ? "ButtonMenuPressed" : "ButtonMenu";
                 b.hoveredBgSprite = "ButtonMenuHovered";
                 b.pressedBgSprite = "ButtonMenuPressed";
-                b.tooltip = c.Tip ?? c.Label + ": use this sign (replaces what's on it now)";
+                b.tooltip = c.Tip ?? c.Label;
                 b.eventClick += (x, p) => c.Use();
 
                 if (c.Picture != null)
@@ -1565,11 +1606,11 @@ namespace GantryTool.UI
             row.size = new Vector2(_content.width, RowHeight);
             float third = (_content.width - 12f) / 3f;
             bool room = GantryManager.CanAddGuideSign(g);
-            UIButton opposite = RowButton(row, 0f, third, "Copy to the other side", "A copy facing the other way, with road names for that side (Ctrl+Z takes it back)", () => CopyOpposite(g));
+            UIButton opposite = RowButton(row, 0f, third, "Copy to the other side", "A copy facing the other way", () => CopyOpposite(g));
             opposite.isEnabled = room && !GuideFit.IsBanner(sign.Design);
             bool banner = GuideFit.IsBanner(sign.Design);
             List<RoadFinder.RoadGantry> road = RoadFinder.SameRoad(g, sign);
-            UIButton along = RowButton(row, third + 6f, third, "Copy along this road" + (road.Count > 0 ? " (" + road.Count + ")" : ""), "A copy on every other gantry over this road, the same way (Ctrl+Z takes them all back)", () => AskCopyAlongRoad(g));
+            UIButton along = RowButton(row, third + 6f, third, "Copy along this road" + (road.Count > 0 ? " (" + road.Count + ")" : ""), "A copy on every gantry along this road", () => AskCopyAlongRoad(g));
             along.isEnabled = road.Count > 0;
             bool before = false;
             foreach (RoadFinder.RoadGantry r in road)
@@ -1577,7 +1618,7 @@ namespace GantryTool.UI
                 before |= r.Ahead < 0f;
             }
 
-            UIButton advance = RowButton(row, 2f * (third + 6f), third, "Add advance sign", "A copy on the gantry before this one, saying how far ahead this is (Ctrl+Z takes it back)", () => AddAdvance(g));
+            UIButton advance = RowButton(row, 2f * (third + 6f), third, "Add advance sign", "A copy on the gantry before this one, with the distance", () => AddAdvance(g));
             advance.isEnabled = before && !banner;
             if (_copyNote != null)
             {
@@ -1704,7 +1745,7 @@ namespace GantryTool.UI
             _heightSlider = UIUtils.StyledSlider(helper, _content.width, "Height", 1f, MaxSignHeight, 0.1f, placed.PanelMetres, " m", "0.0", true, v => SetSize(g, GuideFit.HeightKey, v));
             var row = _content.AddUIComponent<UIPanel>();
             row.size = new Vector2(_content.width, RowHeight);
-            RowButton(row, 0f, _content.width, "Reset to default size", "Go back to the default size, matching the signs beside it (Ctrl+Z brings yours back)", () =>
+            RowButton(row, 0f, _content.width, "Reset to default size", "Back to the default size", () =>
             {
                 _doc.Remove(GuideFit.WidthKey);
                 _doc.Remove(GuideFit.HeightKey);
@@ -1758,7 +1799,7 @@ namespace GantryTool.UI
                 lanes = GuideFit.FaceLanes(g.Lanes, sign.Side);
             }
 
-            var span = (UIComponent)helper.AddCheckbox("Span whole lanes (off: place it by hand)", sign.FitFirst > 0 && lanes.Count > 0, on =>
+            var span = (UIComponent)helper.AddCheckbox("Span whole lanes", sign.FitFirst > 0 && lanes.Count > 0, on =>
             {
                 float along = GuideMeshBuilder.Place(g, _shown).Along;
                 byte first = 0, last = 0;
@@ -1787,10 +1828,10 @@ namespace GantryTool.UI
 
             bool fitted = lanes.Count > 0 && sign.FitFirst > 0;
             string help = lanes.Count == 0
-                ? "No traffic comes this way, so this side has no lanes to span. Drag the sign along the beam."
+                ? "No traffic comes this way. Drag the sign along the beam."
                 : fitted
-                    ? "As drivers see it. Drag the sign along the lanes, or by its yellow edges to cover more or fewer."
-                    : "As drivers see it. Drag the sign along the beam. Click another sign to edit it.";
+                    ? "Drag the sign, or its yellow edges, to change lanes."
+                    : "Drag the sign along the beam.";
             UILabel caption = UIUtils.CreateLabel(_content, help, 0.7f);
             caption.autoHeight = false;
             caption.height = 14f;
@@ -1873,7 +1914,7 @@ namespace GantryTool.UI
                     }
 
                     SignColours(box, g);
-                    UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click any part of the sign above to change it, or drag it somewhere else:\nit snaps above, below or beside the other parts. Add something new below.", 0.85f);
+                    UILabel hint = UIUtils.CreateLabel(box, _notice ?? "Click a part to change it, or drag it to move it.", 0.85f);
                     hint.relativePosition = new Vector3(0f, 72f);
                     return;
             }
@@ -2400,7 +2441,7 @@ namespace GantryTool.UI
             bool builtIn = GuideFit.HasBuiltInArrows(_doc);
             RowButton(row, 3f * (w + 6f), w, "+ Lane arrows",
                 builtIn ? "This sign's arrows are already part of its design"
-                    : hasLanes ? "One arrow over the middle of each lane. Click one to change it, or to make that lane exit only."
+                    : hasLanes ? "An arrow over each lane. Click one to change it."
                     : "No lanes pass under this side of the sign", () => AddLaneArrows(g, items));
             bool laneArrows = _shown.LaneArrows && _shown.FitFirst > 0 && GuideFit.LaneRowIndex(_doc) >= 0;
             row.components[3].isEnabled = hasLanes && !laneArrows && !builtIn;
@@ -2418,7 +2459,7 @@ namespace GantryTool.UI
                 }, text);
             });
             row2.components[0].isEnabled = !Contains(items, "tab");
-            RowButton(row2, w + 6f, w, "+ Exit only band", "A yellow EXIT ONLY band across the whole sign. For just some lanes, use + Lane arrows and click a lane's arrow.", () =>
+            RowButton(row2, w + 6f, w, "+ Exit only band", "A yellow EXIT ONLY band across the sign", () =>
             {
                 Dictionary<string, object> text = Text(GuideThemes.Word(Theme, GuideFit.ExitOnlyWord, GuideFit.DefaultExitText), 12f, Json.Str(GuideAssets.Theme(Theme), "exitOnlyFont", "RG2014E"));
                 Insert(g, items.Count, new Dictionary<string, object>

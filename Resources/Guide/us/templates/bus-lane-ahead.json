@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "theme": "us",
+  "id": "bus-lane-ahead",
+  "name": "Bus lane ahead (R3-15d)",
+  "scheme": "white",
+  "align": "center",
+  "items": [
+    {
+      "type": "text",
+      "text": "BUS",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "LANE",
+      "height": 16
+    },
+    {
+      "type": "text",
+      "text": "1/2 MILE",
+      "height": 12,
+      "font": "RG2014D"
+    }
+  ],
+  "ownWidth": true
+}

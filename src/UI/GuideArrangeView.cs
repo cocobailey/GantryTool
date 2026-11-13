@@ -60,6 +60,7 @@ namespace GantryTool.UI
             Action<string, Func<GuideHead, GuideHead>> change, Action<int> open)
         {
             var view = parent.AddUIComponent<GuideArrangeView>();
+            FrameTicker.Attach(view, view.Tick);
             view.Setup(width, g, head, side, change, open);
             return view;
         }
@@ -143,9 +144,8 @@ namespace GantryTool.UI
             return s;
         }
 
-        public override void Update()
+        private void Tick()
         {
-            base.Update();
             if (_gantry == null)
             {
                 return;

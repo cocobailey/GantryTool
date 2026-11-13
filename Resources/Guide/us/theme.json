@@ -99,6 +99,11 @@
       "bg": "#5c2d91",
       "fg": "#ffffff",
       "label": "E-ZPass / toll"
+    },
+    "black": {
+      "bg": "#000000",
+      "fg": "#ffffff",
+      "label": "HOV"
     }
   },
   "shields": {
@@ -278,5 +283,6 @@
         "height": 11
       }
     }
-  ]
+  ],
+  "defaultSign": "pull-through"
 }

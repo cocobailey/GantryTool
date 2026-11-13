@@ -10,7 +10,7 @@ namespace GantryTool
 {
     public sealed class Mod : IUserMod
     {
-        public const string Version = "2.0.0-dev50";
+        public const string Version = "2.0.0-dev57";
 
         public string Name => "Gantry and Signs Tool";
 
@@ -43,7 +43,7 @@ namespace GantryTool
 
                 UIHelperBase newGroup = helper.AddGroup("New gantries");
                 AddSlider(newGroup, "Height above road", 2f, 15f, 0.1f, s.HeightAboveRoad, " m",
-                    "Beam underside above the highest road it crosses (above the ground if there's no road), for gantries placed from now on.",
+                    "Beam underside above the road, for new gantries.",
                     v => s.HeightAboveRoad = v, false);
                 AddSlider(newGroup, "Truss depth", 1f, 2.5f, 0.1f, s.BeamDepth, " m",
                     "Height of the truss beam, for gantries placed from now on.",
@@ -59,23 +59,23 @@ namespace GantryTool
                 });
                 GantryTool.UI.DropdownToggle.Attach(startDrop);
                 AddCheckbox(newGroup, "New gantries have no red Xs on the back of signals", s.NewNoRedXs,
-                    "The back of a signal shows nothing instead of a red X, on new gantries. You can change it per gantry.",
+                    "Signal backs show nothing instead of a red X, on new gantries.",
                     v => s.NewNoRedXs = v);
                 newGroup.AddSlider("New guide signs' text and symbol size (%)", GuideData.MinScale * 100f, GuideData.MaxScale * 100f, 5f, UnityEngine.Mathf.Clamp(s.NewSignSize, GuideData.MinScale, GuideData.MaxScale) * 100f, v =>
                 {
                     s.NewSignSize = v / 100f;
                     Settings.Current.Save();
                 });
-                newGroup.AddSlider("Speed signals drop when a road is this full (%), for gantries with that switched on", 10f, 100f, 5f, s.HeavyTraffic, v =>
+                newGroup.AddSlider("Heavy traffic: cars this far under the limit (%)", 10f, 90f, 5f, s.SlowTraffic, v =>
                 {
-                    s.HeavyTraffic = (int)v;
+                    s.SlowTraffic = (int)v;
                     Settings.Current.Save();
                 });
                 AddCheckbox(newGroup, "Fill in road names on new guide signs", s.AutoFillSigns,
-                    "New guide signs start with the name of the road below them, or of the road the next exit leads to. You can change any of it.",
+                    "New guide signs start with the nearby road names.",
                     v => s.AutoFillSigns = v);
                 AddCheckbox(newGroup, "Keep guide signs up to date when a road is renamed", s.LiveRoadNames,
-                    "Road names on guide signs follow the map, except any words you've changed yourself. Fill in from the road makes a sign follow it again.",
+                    "Road names on signs follow the map, except words you've changed.",
                     v => s.LiveRoadNames = v);
                 List<string> countries = GantryTool.Guide.GuideAssets.Ids();
                 var countryNames = new string[countries.Count + 1];
@@ -148,7 +148,7 @@ namespace GantryTool
 
                 UIHelperBase allGroup = helper.AddGroup("All gantries");
                 AddSlider(allGroup, "Signal size", 0.6f, 2f, 0.05f, s.SignalSize, " m",
-                    "Edge length of the LED face. Shrunk automatically if the truss is too shallow.",
+                    "Edge length of the LED face.",
                     v => s.SignalSize = v, true);
                 AddSlider(allGroup, "Steel brightness", 0.15f, 1f, 0.01f, s.TrussBrightness, "",
                     "Grey level of the truss and posts.", v =>
