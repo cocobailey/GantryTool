@@ -34,9 +34,9 @@ namespace GantryTool.Data
         public bool SignLights;                  // lamps on its guide signs, which show up better at night
         public bool LiveSpeed;                   // speed limits on its signals drop in heavy traffic
         public readonly List<FaceMessages> Messages = new List<FaceMessages>();
-        public readonly Dictionary<ushort, int> LiveSteps = new Dictionary<ushort, int>(); // not saved: how heavy traffic is, by road
-        public int LiveSlow;                     // not saved: how far under the limit the slowest road under it is going, 0-100
-        public readonly Dictionary<ushort, float> LiveSlowAvg = new Dictionary<ushort, float>(); // not saved: smoothed, by road
+        public readonly Dictionary<int, int> LiveSteps = new Dictionary<int, int>(); // not saved: how heavy traffic is, by road and direction (TrafficMeter.Key)
+        public readonly int[] LiveSlow = new int[2];  // not saved: how far under the limit (0-100) the slowest traffic facing its -side [0] and +side [1] is going
+        public readonly Dictionary<int, float> LiveSlowAvg = new Dictionary<int, float>(); // not saved: smoothed, by road and direction
         public int LiveStamp;                    // not saved: what its live signs last showed
         public float PostAlong = float.NaN;      // a median T's post, from the start; NaN = found from the lanes
         public byte Style;

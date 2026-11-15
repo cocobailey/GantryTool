@@ -99,6 +99,9 @@
       <DeployFiles Include="$(TargetDir)UnifiedUILib.dll" />
       <!-- Workshop thumbnail: the game uploads PreviewImage.png from the mod folder when sharing -->
       <DeployFiles Include="$(ProjectDir)PreviewImage.png" Condition="Exists('$(ProjectDir)PreviewImage.png')" />
+      <!-- Licences travel with the mod: the fonts, shields and templates it embeds require their notices -->
+      <DeployFiles Include="$(ProjectDir)LICENSE" />
+      <DeployFiles Include="$(ProjectDir)THIRD-PARTY-NOTICES.md" />
     </ItemGroup>
     <MakeDir Directories="$(ModDeployDir)" />
     <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(ModDeployDir)" />

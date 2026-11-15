@@ -20,6 +20,9 @@ namespace GantryTool.Tests
         private static int Main()
         {
             Run("v1 save (no overrides) loads", V1Loads);
+            Run("the mod DLL: FPS Booster can rewrite it without TM:PE", DllRewrites);
+            Run("the mod DLL: panels leave the UI's Update alone", DllLeavesUiUpdateAlone);
+            Run("the mod DLL: everything it uses is in the Windows and Mac game", DllMatchesBothGames);
             Run("guide signs: dropping a part above a picture", GuideDropAbovePicture);
             Run("guide signs: imported pictures", GuideImportedPictures);
             Run("undo and redo", UndoAndRedo);
@@ -3357,6 +3360,37 @@ namespace GantryTool.Tests
         }
 
         private static string _current;
+
+        private static void DllRewrites()
+        {
+            string problem = DllChecks.RewriteAlone();
+            Check(problem == null, "rewriting the DLL on its own failed: " + problem);
+        }
+
+        private static void DllLeavesUiUpdateAlone()
+        {
+            List<string> uses = DllChecks.UiUpdateUses();
+            Check(uses.Count == 0, "use FrameTicker instead: " + string.Join("; ", uses.ToArray()));
+        }
+
+        private static void DllMatchesBothGames()
+        {
+            // reference/ is at the repository root: copies of each platform's game DLLs (not in git).
+            string root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Path.Combine("..", Path.Combine("..", Path.Combine("..", Path.Combine("..", ".."))))));
+            foreach (string platform in new[] { "windows", "mac" })
+            {
+                int looked;
+                List<string> missing = DllChecks.MissingFromGame(Path.Combine(Path.Combine(root, "reference"), platform + "-managed"), out looked);
+                if (missing == null)
+                {
+                    Console.WriteLine("  note: no " + platform + " game DLLs in reference/" + platform + "-managed, so that side wasn't checked");
+                    continue;
+                }
+
+                Check(looked > 500, "only " + looked + " game references found for " + platform + ": the check isn't looking properly");
+                Check(missing.Count == 0, "missing from the " + platform + " game: " + string.Join("; ", missing.ToArray()));
+            }
+        }
 
         private static void Run(string name, Action test)
         {

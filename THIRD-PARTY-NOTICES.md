@@ -39,6 +39,17 @@ SOFTWARE.
 `tools/guide/fonts/RG2014*.ttf`, baked into `Resources/Guide/us/*.gbf`. MIT License, see
 `tools/guide/fonts/LICENSE-roadgeek.txt`.
 
+## Canadian shields
+
+`tools/guide/ca/ontario.svg`, `quebec.svg` and `tch.svg`, baked into `Resources/Guide/ca/*.gim`, come from Sign Builder's
+Canadian theme, where they were drawn for Sign Builder and released under CC0.
+
+## British Columbia HOV and bus lane pictograms
+
+`tools/guide/ca/hov-bus.png`, `hov-car.png`, `hov-diamond.png` and `hov-van.png`, baked into `Resources/Guide/ca/`, are
+taken from the British Columbia Ministry of Transportation and Infrastructure's regulatory sign catalogue, so that the
+B.C. signs match the official designs. Copyright Province of British Columbia.
+
 ## OpenStreetMap Americana shield icons
 
 `tools/guide/interstate.svg` and `us_route.svg`, baked into `Resources/Guide/us/*.gim`. CC0 1.0.
@@ -54,3 +65,8 @@ Crown Copyright. These fonts contain public sector information licensed under th
 
 The Europe (German style) guide signs use "Alte DIN 1451 Mittelschrift" by Peter Wiegel, under the SIL Open Font License 1.1
 (`tools/guide/de/fonts/OFL-AlteDIN1451.txt`). DIN 1451 itself is in the public domain.
+
+## Everything else
+
+The other shields, symbols and pictures in `tools/guide/` (including the US and Ontario HOV and bus pictures, the B.C.,
+New Zealand, German and UK symbols, and the lane ends arrows) were drawn for this mod and are under its MIT License.

@@ -20,9 +20,11 @@ namespace GantryTool.Integration
     internal static class TmpeImpl
     {
         // Anything that drives on the road surface. Trams count: a car-banned lane with trams still has traffic.
-        private const ExtVehicleType RoadTraffic = ExtVehicleType.RoadVehicle | ExtVehicleType.Trolleybus | ExtVehicleType.Tram;
-        private const ExtVehicleType GeneralTraffic = ExtVehicleType.PassengerCar | ExtVehicleType.CargoTruck;
-        private const ExtVehicleType Buses = ExtVehicleType.Bus | ExtVehicleType.Trolleybus;
+        // Not const: a constant of a TM:PE type makes tools that rewrite this DLL (FPS Booster does, with Mono.Cecil)
+        // open TMPE.API to save it, and fail when they can't find it. Then the mod is loaded unpatched.
+        private static readonly ExtVehicleType RoadTraffic = ExtVehicleType.RoadVehicle | ExtVehicleType.Trolleybus | ExtVehicleType.Tram;
+        private static readonly ExtVehicleType GeneralTraffic = ExtVehicleType.PassengerCar | ExtVehicleType.CargoTruck;
+        private static readonly ExtVehicleType Buses = ExtVehicleType.Bus | ExtVehicleType.Trolleybus;
 
         private static Action<ushort> _callback;
 

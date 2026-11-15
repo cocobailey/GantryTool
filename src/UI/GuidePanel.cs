@@ -867,7 +867,7 @@ namespace GantryTool.UI
                     _doc[GuidePages.BusyAtKey] = (double)v;
                     Commit(g, "message traffic");
                 });
-                UIUtils.CreateLabel(heavy, "Right now: " + g.LiveSlow + "% under", 0.75f).relativePosition = new Vector3(_content.width * 0.6f + 12f, 14f);
+                UIUtils.CreateLabel(heavy, "Right now: " + LiveSigns.SlowFacing(g, _shown.Side) + "% under", 0.75f).relativePosition = new Vector3(_content.width * 0.6f + 12f, 14f);
             }
         }
 

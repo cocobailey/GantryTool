@@ -593,7 +593,7 @@ namespace GantryTool.Render
         /// <summary>What a sign on a gantry shows right now: a message sign changes by itself.</summary>
         private static string Shown(Gantry g, GuideHead h, string design)
         {
-            return GuidePages.Shown(design, LiveSigns.PageClock, g.LiveSlow, LiveSigns.IsEditing(g.Id, h.Id));
+            return GuidePages.Shown(design, LiveSigns.PageClock, LiveSigns.SlowFacing(g, h.Side), LiveSigns.IsEditing(g.Id, h.Id));
         }
 
         public static bool Ready(Gantry g)

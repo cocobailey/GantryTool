@@ -13,7 +13,7 @@ namespace GantryTool.UI
     public sealed class UpdateNotesPanel : UIPanel
     {
         /// <summary>The feature release these notes describe; bump it with new notes.</summary>
-        public const string NotesVersion = "1.2";
+        public const string NotesVersion = "2.0";
 
         private const string ChangeNotesUrl = "https://steamcommunity.com/sharedfiles/filedetails/changelog/3814479293";
         private const float PanelWidth = 460f;
@@ -21,9 +21,10 @@ namespace GantryTool.UI
 
         private static readonly string[][] Notes =
         {
-            new[] { "Add signs anywhere", "add up to 8 extra signs to a gantry and drag them anywhere on the beam, or link one to a lane so it follows that lane. Find it in the gantry's panel." },
-            new[] { "Longer custom text", "up to 3 lines of 10 letters." },
-            new[] { "Exit arrows", "green up-left and up-right arrows." }
+            new[] { "Guide signs", "direction, exit, HOV and message signs for six countries. Click a gantry, then Add guide sign; click any part of the sign to change it." },
+            new[] { "New gantries", "cantilevers, median T, gantries hung from a bridge, six looks, paint colours, catwalks and sign lamps." },
+            new[] { "Live signals", "speed signals that drop when traffic slows, and signals that change between your own LED messages." },
+            new[] { "Your gantries are safe", "everything you already built stays as it was. New gantries now start empty, so you choose signals or a guide sign." }
         };
 
         /// <summary>Shows the notes if this player hasn't seen them yet. Call after the city has loaded.</summary>

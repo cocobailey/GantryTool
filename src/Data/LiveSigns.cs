@@ -61,7 +61,7 @@ namespace GantryTool.Data
         public static readonly byte[] SecondsChoices = { 5, 10, 20, 60 };
 
         private static float _next, _nextTraffic;
-        private static readonly Dictionary<ushort, int> Measured = new Dictionary<ushort, int>();
+        private static readonly Dictionary<int, int> Measured = new Dictionary<int, int>();
         private static int _editGantry, _editSign;
         private static float _editUntil;
 
@@ -157,7 +157,7 @@ namespace GantryTool.Data
             int step;
             if (lane >= 0 && lane < g.Lanes.Count)
             {
-                return g.LiveSteps.TryGetValue(g.Lanes[lane].Segment, out step) ? step : 0;
+                return g.LiveSteps.TryGetValue(TrafficMeter.Key(g.Lanes[lane].Segment, g.Lanes[lane].TravelSign), out step) ? step : 0;
             }
 
             // Not over a lane in particular: the busiest under it.
@@ -230,13 +230,19 @@ namespace GantryTool.Data
             }
         }
 
+        /// <summary>How slow (0-100) the traffic that reads a sign facing <paramref name="side"/> is going.</summary>
+        public static int SlowFacing(Gantry g, sbyte side)
+        {
+            return g.LiveSlow[side < 0 ? 0 : 1];
+        }
+
         private static void ReadTraffic(Gantry g)
         {
             g.LiveSteps.Clear();
-            g.LiveSlow = 0;
+            g.LiveSlow[0] = g.LiveSlow[1] = 0;
             int heavy = Mathf.Clamp(Settings.Current.SlowTraffic, 5, 95);
             TrafficMeter.Measure(g.Lanes, Measured);
-            foreach (KeyValuePair<ushort, int> kv in Measured)
+            foreach (KeyValuePair<int, int> kv in Measured)
             {
                 // Smoothed, so a car or two braking doesn't flick the signs: drops come in faster than recoveries, as on real roads.
                 float was;
@@ -244,14 +250,25 @@ namespace GantryTool.Data
                 g.LiveSlowAvg[kv.Key] = avg;
                 int slow = Mathf.RoundToInt(avg);
                 g.LiveSteps[kv.Key] = StepFor(slow, heavy);
-                g.LiveSlow = Mathf.Max(g.LiveSlow, slow);
+
+                // Traffic going towards one side of the gantry reads the signs facing the other.
+                int travel = TrafficMeter.TravelSign(kv.Key);
+                if (travel >= 0)
+                {
+                    g.LiveSlow[0] = Mathf.Max(g.LiveSlow[0], slow);
+                }
+
+                if (travel <= 0)
+                {
+                    g.LiveSlow[1] = Mathf.Max(g.LiveSlow[1], slow);
+                }
             }
         }
 
         private static int Stamp(Gantry g, float now)
         {
             int stamp = 17;
-            foreach (KeyValuePair<ushort, int> kv in g.LiveSteps)
+            foreach (KeyValuePair<int, int> kv in g.LiveSteps)
             {
                 stamp = stamp * 31 + kv.Key * 7 + kv.Value;
             }
@@ -265,7 +282,7 @@ namespace GantryTool.Data
             {
                 if (GantryTool.Guide.GuidePages.Changes(h.Design))
                 {
-                    stamp = stamp * 31 + GantryTool.Guide.GuidePages.Shown(h.Design, now, g.LiveSlow, IsEditing(g.Id, h.Id)).GetHashCode();
+                    stamp = stamp * 31 + GantryTool.Guide.GuidePages.Shown(h.Design, now, SlowFacing(g, h.Side), IsEditing(g.Id, h.Id)).GetHashCode();
                 }
             }
 
